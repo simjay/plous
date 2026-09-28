@@ -2,29 +2,60 @@
 
 Plous `0.0.1` is an early development build, not ready to ship.
 
-The executable opens a full-screen terminal with three panels: a narrow list on the left, the main view in the center, and an AI assistant chat placeholder on the right. These are empty sections for now; AI is not connected.
+Plous opens a full-screen workspace manager with a collapsible workspace tree, four main-panel modes, and local chat drafts. It saves configuration and history under `~/.plous/`.
 
 ## Build and run
 
 Requires Go 1.26 or newer and Make.
 
 ```sh
-make build
-./bin/plous
+make run
 ```
 
-Use Tab / Shift+Tab to switch panel focus and `q` or Ctrl+C to quit. The layout follows terminal resizing and restores your previous terminal screen on exit. A terminal of at least 80 columns by 12 rows is required; smaller windows show a resize message.
+Or use `make build` followed by `./bin/plous`. The terminal must be at least 80 columns by 16 rows; smaller windows show a resize message and disable hidden actions. Exiting restores the previous terminal screen.
 
-`./bin/plous --version` prints `0.0.1` without opening the UI. `make check` checks formatting, runs Go vet and layout/navigation tests, builds the executable, and verifies the embedded version. Terminal rendering uses [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lip Gloss](https://github.com/charmbracelet/lipgloss).
+On first launch, press Enter to create a workspace. Enter a name, then select Save. Choose **Add tool → Kubernetes** to discover local kubecontexts. Leave the kubeconfig path blank to use `KUBECONFIG` or `~/.kube/config`, or enter another file. Space selects multiple contexts; Enter adds the selected contexts (or the highlighted one). You can also start with an empty workspace.
+
+Kubeconfig is read locally without changing its active context, contacting clusters, copying credentials, or running authentication plugins. Helm, Kustomize, Terraform, Argo, and Kargo entries save their relevant context, directory, or source references. They are saved configuration, not live connections.
+
+## Navigation and settings
+
+- **Tab / Shift+Tab:** move between tree, main, and chat panels. The highlighted border identifies focus.
+- **Tree:** Up/Down selects rows; Left/Right collapses or expands groups; Enter opens a workspace, tool, connection, or settings. Changing the selected tool keeps the current main-panel mode. The tree has no numeric mode shortcuts.
+- **Main navigation:** type a command and press Enter: `:1` Overview, `:2` Resources, `:3` Deployment, `:4` Activity, `:new`, `:settings`, `:help`, or `:quit`.
+- **Forms:** Enter advances to the next field or activates Save/Cancel. Up/Down moves between fields and actions. Esc cancels. Tab still moves between panels and preserves unfinished form input.
+- **Text entry:** letters and punctuation remain text. Paste never executes commands. Esc leaves chat editing or cancels a form/command. Ctrl+C cancels main input; use `:quit` from main navigation to exit.
+
+Workspace settings lets you rename a workspace and add, edit, or remove tool connections. Removing a connection only removes its saved Plous entry. Each save creates a revision with exact before/after values. **Activity** lists those revisions; Enter opens a change and arrows/PageUp/PageDown scroll its details.
+
+**Overview** shows saved configuration. **Resources** shows selected connection details; live resource browsing is not implemented. **Deployment** is an empty state; it does not execute deployments. There is no shared resource-action keymap.
+
+The chat panel keeps a separate draft for each workspace. Type directly; Enter adds a newline while editing. `:` and `/` remain literal text. Drafts autosave every half second when changed and flush on normal exit. AI is not connected and nothing is sent. Form edits survive panel switches but only enter configuration history after Save.
+
+## Local state and checks
+
+`~/.plous/workspaces/<id>/revisions/` contains chronological revision directories, each with a structured `change.json` holding the before/after configuration. These committed records are authoritative; interrupted temporary writes are ignored. `~/.plous/session.json` stores selection, view positions, tree expansion, and drafts. Stable IDs preserve history across renames. Files are private to the local user; one Plous process owns a data directory at a time. Corrupt committed data is reported and preserved rather than silently reset.
+
+Use an isolated directory when trying fixtures or keeping a separate local profile:
+
+```sh
+./bin/plous --data-dir /tmp/plous-demo
+./bin/plous --version
+make check
+```
+
+The application version remains `0.0.1`. `make check` checks formatting, runs Go vet and tests, builds the executable, and verifies its embedded version. Tests use temporary storage. Terminal rendering uses [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lip Gloss](https://github.com/charmbracelet/lipgloss).
 
 ## Repository
 
 ```text
 cmd/plous/main.go          Entry point
-cmd/plous/ui.go            Full-screen three-panel layout
+cmd/plous/                Terminal UI, forms, input routing, and rendering
+internal/workspace/       Persistent revisions and session storage
+internal/kubeconfig/      Local kubecontext discovery
 cmd/plous/VERSION          Single source of the application version
 go.mod                    Go module
-Makefile                  Build, check, package, clean
+Makefile                  Build, run, check, package, clean
 scripts/dist.sh           Cross-platform release packaging
 .github/workflows/ci.yml   Checks on branches and pull requests
 .github/workflows/release.yml  Tagged release distribution
@@ -70,6 +101,6 @@ Workflow references: [GitHub's Go guide](https://docs.github.com/en/actions/tuto
 
 ## Current scope
 
-The current scope is the version `0.0.1` terminal shell and existing build/distribution pipeline. Panel contents, deployment features, and AI behavior will be developed one step at a time.
+The current scope is the version `0.0.1` workspace, configuration history, navigation, and input layer. Live resource browsers, deployment execution, and AI behavior will be developed one step at a time.
 
 Licensed under [Apache-2.0](LICENSE), preserving the license already present in the connected GitHub repository.

@@ -4,7 +4,9 @@ Jae Sim governs product, design, and technical decisions. Record material choice
 
 Directories whose names start with `.` are local internals and must never be committed or pushed. The owner explicitly permits only the root `.github/` directory for CI and release workflows. Preserve local internal files, including `.decisions/`, but keep them untracked. Before pushing, check the proposed commits as well as the current tree for prohibited paths; do not push old local history containing internals.
 
-Current scope is the full-screen three-panel shell in `.decisions/0011-three-panel-shell.md`: a narrow left list, a center main view, and a right AI assistant chat placeholder. Keep the code and repository small. Do not add integrations, real chat, or agent execution ahead of the next owner request.
+Current scope is the working workspace layer in `.decisions/0021-workspace-layer-implementation-plan.md`, authorized by the owner's "build" request. It includes workspace creation/settings, local kubecontext discovery, per-tool configuration references, the workspace tree, four main modes, configuration Activity, and local chat drafts. Keep the code and repository small. Live resource browsers, deployment execution, model calls, and agent execution await a later request.
+
+Commands belong to the focused panel. Main-panel :1–:4 select modes; the tree has no numeric mode shortcuts and resource bindings must be designed per tool. Text and paste in forms/chat never execute navigation commands. Tab/Shift+Tab switch panels, including during forms. Test with temporary storage or --data-dir; do not alter the owner's ~/.plous or kubeconfig during verification.
 
 Plous is version `0.0.1`, an early development build, not ready to ship. The single version source is `cmd/plous/VERSION`. Do not change the major or minor version without explicit owner direction. Do not automatically bump versions or create release tags. Dependency and Go toolchain versions are independent of the Plous version.
 
