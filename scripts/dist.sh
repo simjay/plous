@@ -3,10 +3,11 @@
 set -eu
 cd "$(dirname "$0")/.."
 
-version=${VERSION:-dev}
+source_version=$(cat cmd/plous/VERSION)
+version=${VERSION:-v$source_version}
 go_command=${GO:-go}
-if ! printf '%s\n' "$version" | LC_ALL=C grep -Eq '^(dev|v[0-9]+\.[0-9]+\.[0-9]+)$'; then
-    echo 'VERSION must be dev or vMAJOR.MINOR.PATCH' >&2
+if ! printf '%s\n' "$source_version" | LC_ALL=C grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || [ "$version" != "v$source_version" ]; then
+    echo 'VERSION must match v plus the version in cmd/plous/VERSION' >&2
     exit 1
 fi
 
@@ -38,7 +39,7 @@ native_archive="plous_${version}_${native_os}_${native_arch}.tar.gz"
 if [ -f "$native_archive" ]; then
     mkdir -p "$stage/smoke"
     tar -xzf "$native_archive" -C "$stage/smoke"
-    "$stage/smoke/plous" > "$stage/actual-output.txt"
-    printf 'welcome to plous\n' | cmp - "$stage/actual-output.txt"
+    "$stage/smoke/plous" --version > "$stage/actual-output.txt"
+    printf '%s\n' "$source_version" | cmp - "$stage/actual-output.txt"
     printf 'Packaged executable: OK (%s/%s)\n' "$native_os" "$native_arch"
 fi

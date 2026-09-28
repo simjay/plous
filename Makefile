@@ -1,5 +1,5 @@
 GO ?= go
-VERSION ?= dev
+VERSION ?= v$(shell cat cmd/plous/VERSION)
 export GO VERSION
 
 .PHONY: build check dist clean
@@ -12,8 +12,8 @@ check: build
 	@test -z "$$(gofmt -l cmd)" || { echo "Run gofmt on cmd/"; exit 1; }
 	$(GO) vet ./...
 	$(GO) test ./...
-	@bin/plous > bin/actual-output.txt
-	@printf 'welcome to plous\n' | cmp - bin/actual-output.txt
+	@bin/plous --version > bin/actual-output.txt
+	@cmp cmd/plous/VERSION bin/actual-output.txt
 	@rm bin/actual-output.txt
 
 dist:
