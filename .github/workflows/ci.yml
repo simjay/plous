@@ -27,8 +27,13 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
-      - name: Check formatting, code, build, and executable output
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - name: Check formatting, code, unit tests, and terminal journeys
         run: make check
+      - name: Check for Go data races
+        run: make test-race
       - name: Build all distribution archives and verify checksums
         if: runner.os == 'Linux'
         run: make dist

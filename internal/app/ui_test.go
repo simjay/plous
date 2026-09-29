@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"encoding/json"
@@ -22,7 +22,7 @@ func testModel(t *testing.T) (*model, string) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { store.Close() })
-	m, err := newModel(store)
+	m, err := newModel(store, "test-version")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -260,7 +260,7 @@ func TestFocusedInputKeepsTextAndPasteLiteral(t *testing.T) {
 	if m.command != nil || m.mode != 0 {
 		t.Fatal("pasted navigation text must not execute")
 	}
-	if cmd := press(t, m, "ctrl+c"); cmd != nil {
+	if cmd := press(t, m, "esc"); cmd != nil {
 		t.Fatal("cancel must not unexpectedly quit")
 	}
 	cmd := mainCommand(t, m, "quit")
@@ -437,7 +437,7 @@ func TestRestartRestoresScopeModeAndSeparateDrafts(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	restored, err := newModel(store)
+	restored, err := newModel(store, "test-version")
 	if err != nil {
 		t.Fatal(err)
 	}

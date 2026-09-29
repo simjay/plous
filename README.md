@@ -1,4 +1,9 @@
-# Plous
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo/lockup-dark.svg">
+    <img src="assets/logo/lockup.svg" alt="Plous" width="320">
+  </picture>
+</h1>
 
 A terminal workspace for infrastructure and deployment tools.
 
@@ -31,6 +36,8 @@ Use a terminal at least **80 columns × 16 rows**. On first launch, press **Ente
 
 **Tab / Shift+Tab** move between panels. With the main panel focused and no form open, typing `:` opens a command box at the bottom. Type `:1`, `:2`, `:3`, or `:4` and press **Enter** to switch views. Every command has a full name and a short alias: for example, `:overview` or `:o` opens Overview, `:help` or `:h` opens help, and `:quit` or `:q` saves the session and exits.
 
+**Ctrl+C** saves the session and chat drafts, then exits from any panel. Unsaved form edits are not applied. Use **Esc** to cancel a form or command without exiting.
+
 See the [user guide](docs/README.md) for workspace setup and the [keymap](docs/keymap.md) for all current bindings.
 
 ## Local data
@@ -50,11 +57,18 @@ make build
 | --- | --- |
 | `make run` | Build and open Plous. |
 | `make build` | Build `bin/plous`. |
-| `make check` | Check formatting, run vet and tests, build, and verify the version. |
+| `make test` | Run all Go unit tests and executable/terminal tests. |
+| `make test-unit` | Run Go package tests. |
+| `make test-e2e` | Build and test the actual executable in isolated terminals. |
+| `make test-race` | Run Go tests with the race detector. |
+| `make test-coverage` | Write Go coverage reports to `.cache/tests/`. |
+| `make check` | Check formatting, run vet, and run all tests. |
 | `make dist` | Package macOS and Linux binaries for amd64 and arm64, with checksums. |
 | `make clean` | Remove generated binaries and archives. |
 
-The application version comes from `cmd/plous/VERSION`. Packaging uses that version; it does not publish a release. CI runs checks on Linux and macOS and verifies distribution archives on Linux.
+The application version comes from `VERSION`. Packaging uses that version; it does not publish a release. CI runs checks on Linux and macOS and verifies distribution archives on Linux.
+
+`main.go` at the repository root is the executable entry point. Application code lives under `internal/`, with Go unit tests beside the code they test. `tests/e2e/` contains tests of the built executable. Terminal tests require Python 3.9+ and use only its standard library; Python is not needed to build or run Plous. See the [development and testing guide](docs/development.md) for the repository layout and test coverage.
 
 The terminal interface uses [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lip Gloss](https://github.com/charmbracelet/lipgloss).
 

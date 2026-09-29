@@ -32,6 +32,7 @@ go.work.sum
 # .vscode/
 
 # Local build outputs
+/plous
 /bin/
 /dist/
 /.cache/

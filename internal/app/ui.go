@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"bytes"
@@ -37,6 +37,7 @@ type session struct {
 type autosaveMsg struct{}
 
 type model struct {
+	version                    string
 	dirty                      bool
 	lastSession                []byte
 	width, height, focus, mode int
@@ -60,8 +61,8 @@ type model struct {
 	chatEditing                bool
 }
 
-func newModel(store *workspace.Store) (*model, error) {
-	m := &model{store: store, focus: 1, expanded: map[string]bool{}, drafts: map[string]*editor{}, positions: map[string]int{}}
+func newModel(store *workspace.Store, version string) (*model, error) {
+	m := &model{version: version, store: store, focus: 1, expanded: map[string]bool{}, drafts: map[string]*editor{}, positions: map[string]int{}}
 	var err error
 	m.workspaces, err = store.List()
 	if err != nil {
@@ -269,6 +270,13 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyPressMsg:
 		key := msg.String()
+		// Exit is global, including editors and the resize fallback.
+		if key == "ctrl+c" {
+			if m.execute("quit") {
+				return m, tea.Quit
+			}
+			return m, nil
+		}
 		if m.tooSmall() {
 			return m, m.updateSmall(msg)
 		}
@@ -279,18 +287,6 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.focus = (m.focus + step) % 3
 			m.persist()
-			return m, nil
-		}
-		// Ctrl+C cancels the current input; exit is explicit and main-panel scoped.
-		if key == "ctrl+c" {
-			if m.focus == 1 {
-				m.command = nil
-				if m.form != nil {
-					m.form = nil
-					m.page = "settings"
-				}
-				m.status = "Input canceled. In main navigation, use :quit to exit."
-			}
 			return m, nil
 		}
 		if m.focus == 0 {
@@ -425,7 +421,7 @@ func (m *model) updateSmall(k tea.KeyPressMsg) tea.Cmd {
 	if m.focus != 1 {
 		return nil
 	}
-	if key == "esc" || key == "ctrl+c" {
+	if key == "esc" {
 		m.command = nil
 		return nil
 	}

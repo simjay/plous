@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	tea "charm.land/bubbletea/v2"

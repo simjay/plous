@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Plous">
-  <g fill="none" stroke="#0F766E" stroke-width="8" stroke-linecap="round">
-    <path d="M12 14 H52"/>
-    <path d="M23 14 V34"/>
-    <path d="M43 14 V34"/>
-  </g>
-  <path d="M5 42 H59 L48 57 H16 Z" fill="#0F766E"/>
-</svg>

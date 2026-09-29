@@ -1,4 +1,4 @@
-package main
+package app
 
 type treeRow struct {
 	key, kind, label, workspace, tool, connection, parent string

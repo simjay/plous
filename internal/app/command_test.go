@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"encoding/json"
@@ -107,11 +107,9 @@ func TestCommandDraftSurvivesFocusChangesAndCancels(t *testing.T) {
 	if m.mode != 1 || m.command != nil {
 		t.Fatal("returning to main should resume and execute its command draft")
 	}
-	for _, cancel := range []string{"esc", "ctrl+c"} {
-		typeText(m, ":q")
-		if cmd := press(t, m, cancel); cmd != nil || m.command != nil || m.mode != 1 {
-			t.Fatalf("%s must close the command box without executing the command", cancel)
-		}
+	typeText(m, ":q")
+	if cmd := press(t, m, "esc"); cmd != nil || m.command != nil || m.mode != 1 {
+		t.Fatal("Esc must close the command box without executing the command")
 	}
 	mainCommand(t, m, "n")
 	typeText(m, ":q :a :settings")

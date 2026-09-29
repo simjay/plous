@@ -2,6 +2,8 @@
 
 This guide describes the working workspace layer in **Plous 0.0.1**. Start with the [keymap](keymap.md) for keyboard controls or the [project README](../README.md) to build and run Plous.
 
+Contributors can use the [development and testing guide](development.md) for the repository layout and test commands.
+
 ## Create a workspace
 
 1. On the first launch, press **Enter** in the main panel.
@@ -49,4 +51,4 @@ A single footer shows contextual controls or a status message. Controls depend o
 
 By default, all persistent Plous data lives under `~/.plous/`. Workspace configuration changes have chronological records. Renaming a workspace or connection preserves its history. The session also remembers navigation state and chat drafts.
 
-Use `plous --data-dir PATH` for a separate profile or a disposable test directory. Only one Plous process can use a data directory at a time. Use `:quit` or `:q` from main-panel navigation for a normal exit that saves the session and restores the terminal.
+Use `plous --data-dir PATH` for a separate profile or a disposable test directory. Only one Plous process can use a data directory at a time. Press **Ctrl+C** from any panel, or use `:quit` / `:q` from main-panel navigation, to save the session and chat drafts, exit, and restore the terminal. Unsaved form edits are not applied on exit; use **Esc** to cancel a form or command and stay in Plous.

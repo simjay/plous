@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"encoding/json"
@@ -25,7 +25,7 @@ func (m *model) render() string {
 		return ""
 	}
 	if m.width < minWidth || m.height < minHeight {
-		text := "Plous " + version() + "\nResize terminal to at least 80 x 16.\nTab to main; :quit Enter to exit.\nFocus: " + []string{"tree", "main", "chat"}[m.focus]
+		text := "Plous " + m.version + "\nResize terminal to at least 80 x 16.\nCtrl+C to exit.\nFocus: " + []string{"tree", "main", "chat"}[m.focus]
 		if m.command != nil {
 			text += "\n:" + m.command.display(m.focus == 1)
 		}
@@ -39,7 +39,7 @@ func (m *model) render() string {
 	center := m.width - left - right
 	height := m.height - 2
 	header := selected.Render(" plous")
-	label := muted.Render("v" + version() + " ")
+	label := muted.Render("v" + m.version + " ")
 	header += strings.Repeat(" ", m.width-lipgloss.Width(header)-lipgloss.Width(label)) + label
 	bodyHeight := height - 4
 	panels := lipgloss.JoinHorizontal(lipgloss.Top,
@@ -50,7 +50,7 @@ func (m *model) render() string {
 	if m.status != "" {
 		message = oneLine(m.status)
 	}
-	footer := muted.Width(m.width).Render(clipped(" Tab / Shift+Tab panels · "+message, m.width))
+	footer := muted.Width(m.width).Render(clipped(" Tab / Shift+Tab panels · Ctrl+C quit · "+message, m.width))
 	return lipgloss.JoinVertical(lipgloss.Left, header, panels, footer)
 }
 func panel(title, content string, width, height int, focused bool) string {
@@ -258,7 +258,7 @@ func (m *model) mainBody(width, height int) string {
 		}
 		body = "Remove " + name + "?\n" + listView([]string{"Cancel", "Remove from workspace"}, m.cursor, width, available-1)
 	case m.page == "help":
-		body = textView("Main commands (Enter to run)\n:1 / :o / :overview\n:2 / :r / :resources\n:3 / :d / :deployment\n:4 / :a / :activity\n:n / :new — Create workspace\n:s / :settings — Workspace settings\n:h / :help — This help\n:q / :quit — Save session and exit\n\nType : to open the command box at the bottom of this panel. Esc cancels.\nTab / Shift+Tab switch panels.\nArrows navigate. Enter activates.\nForms: Enter advances; arrows select fields or Save/Cancel. Esc cancels.\nText and pasted text stay literal in forms and chat.\nChat drafts save locally; Enter inserts a newline while editing. Esc leaves editing.\nNo resource action keys are assigned yet.", width, available, m.cursor)
+		body = textView("Main commands (Enter to run)\n:1 / :o / :overview\n:2 / :r / :resources\n:3 / :d / :deployment\n:4 / :a / :activity\n:n / :new — Create workspace\n:s / :settings — Workspace settings\n:h / :help — This help\n:q / :quit — Save session and exit\n\nType : to open the command box at the bottom of this panel. Esc cancels.\nCtrl+C saves the session and exits from any panel. Unsaved form edits are not applied.\nTab / Shift+Tab switch panels.\nArrows navigate. Enter activates.\nForms: Enter advances; arrows select fields or Save/Cancel. Esc cancels.\nText and pasted text stay literal in forms and chat.\nChat drafts save locally; Enter inserts a newline while editing. Esc leaves editing.\nNo resource action keys are assigned yet.", width, available, m.cursor)
 	case m.current() == nil:
 		body = "welcome to plous\n\nCreate your first workspace.\n\n[ Enter: Create workspace ]\nYou can add tools now or later."
 	case m.detail != "":

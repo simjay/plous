@@ -105,6 +105,8 @@ Terminal paste is accepted in forms and chat, where its content stays text. Past
 
 ## Cancel and exit
 
-**Ctrl+C does not quit Plous.** In the main panel, it cancels an open form or command. In the tree and chat panels, it has no action. To exit, focus the main panel, cancel any form with **Esc**, then type `:quit` or `:q` and press **Enter**.
+**Ctrl+C saves the session and chat drafts, then exits Plous from any panel.** It also works while editing a form or command. Unsaved form edits are not applied.
 
-If the terminal is smaller than 80 columns × 16 rows, Plous shows a resize message and disables hidden actions. Panel focus and the exit commands `:quit` / `:q` remain available. Other commands are unavailable until the terminal is large enough.
+Use **Esc** to cancel a form or command without exiting. You can also exit with `:quit` or `:q`: focus the main panel, cancel any open form with **Esc**, enter the command, and press **Enter**.
+
+If the terminal is smaller than 80 columns × 16 rows, Plous shows a resize message and disables hidden actions. **Ctrl+C**, panel focus, and the exit commands `:quit` / `:q` remain available. Other commands are unavailable until the terminal is large enough.
