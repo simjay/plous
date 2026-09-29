@@ -8,11 +8,11 @@ This guide describes the working workspace layer in **Plous 0.0.1**. Start with 
 2. Enter a workspace name. Press **Enter** to select **Save**, then **Enter** again to create it.
 3. Choose **Add tool**, or choose **Back** to start with an empty workspace.
 
-To create another workspace, select **+ New workspace** in the left tree, or run `:new` in the main panel.
+To create another workspace, select **+ New workspace** in the left tree, or run `:new` (`:n`) in the main panel.
 
 ## Add Kubernetes contexts
 
-1. Open **Workspace settings** from the left tree, or run `:settings` in the main panel.
+1. Open **Workspace settings** from the left tree, or run `:settings` (`:s`) in the main panel.
 2. Choose **Add tool → Kubernetes**.
 3. Leave the kubeconfig path blank to use `KUBECONFIG`, falling back to `~/.kube/config`. You can also enter a specific file path.
 4. Select **Find contexts**. Use **Up / Down** to move and **Space** to select one or more contexts.
@@ -32,7 +32,7 @@ Form edits survive switching panels. Select **Save** to persist them; **Esc** ca
 
 The **left tree** lists all workspaces and groups their connections by tool. Expanding a group only changes the tree. Press **Enter** on a workspace, tool, or connection to select it. Selecting a different tool preserves the current main view.
 
-The **main panel** has four tabs across the top, with each name on the left and its command on the right. In narrow terminals, names shorten while commands remain visible.
+The **main panel** has four tabs across the top, with each name on the left and its command on the right. In narrow terminals, names shorten while commands remain visible. With this panel focused and no form open, typing `:` opens a bordered command box at the bottom, below the current content. Press **Enter** to run the command or **Esc** to cancel it. Every command accepts a full name and a short alias; the four tabs also accept `:1`–`:4`.
 
 | Tab | Current behavior |
 | --- | --- |
@@ -49,4 +49,4 @@ A single footer shows contextual controls or a status message. Controls depend o
 
 By default, all persistent Plous data lives under `~/.plous/`. Workspace configuration changes have chronological records. Renaming a workspace or connection preserves its history. The session also remembers navigation state and chat drafts.
 
-Use `plous --data-dir PATH` for a separate profile or a disposable test directory. Only one Plous process can use a data directory at a time. Use `:quit` from main-panel navigation for a normal exit that saves the session and restores the terminal.
+Use `plous --data-dir PATH` for a separate profile or a disposable test directory. Only one Plous process can use a data directory at a time. Use `:quit` or `:q` from main-panel navigation for a normal exit that saves the session and restores the terminal.

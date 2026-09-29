@@ -28,18 +28,18 @@ There are no numeric mode shortcuts in the tree. `:` does not open a command pro
 
 ## Main-panel commands
 
-With the main panel focused and no form being edited, type **:**, enter a command, then press **Enter**. The tab labels show the mode commands.
+With the main panel focused and no form being edited, type **:** to open a bordered command box at the bottom of the panel. The current content stays above it. Enter a command, then press **Enter** to run it. Every command accepts a full name and a short alias; the tab labels also show numeric mode shortcuts.
 
-| Command | Action |
-| --- | --- |
-| `:1` | Open Overview. |
-| `:2` | Open Resources. |
-| `:3` | Open Deployment. |
-| `:4` | Open Activity. |
-| `:new` | Create a workspace. |
-| `:settings` | Open settings for the active workspace. |
-| `:help` | Open in-app help. |
-| `:quit` | Save the session and exit Plous. |
+| Full command | Short alias | Numeric shortcut | Action |
+| --- | --- | --- | --- |
+| `:overview` | `:o` | `:1` | Open Overview. |
+| `:resources` | `:r` | `:2` | Open Resources. |
+| `:deployment` | `:d` | `:3` | Open Deployment. |
+| `:activity` | `:a` | `:4` | Open Activity. |
+| `:new` | `:n` | — | Create a workspace. |
+| `:settings` | `:s` | — | Open settings for the active workspace. |
+| `:help` | `:h` | — | Open in-app help. |
+| `:quit` | `:q` | — | Save the session and exit Plous. |
 
 Switching modes preserves the selected workspace and tool. **Esc** cancels a command without running it. Commands are not available while a form field is being edited; `:` is ordinary text there.
 
@@ -105,6 +105,6 @@ Terminal paste is accepted in forms and chat, where its content stays text. Past
 
 ## Cancel and exit
 
-**Ctrl+C does not quit Plous.** In the main panel, it cancels an open form or command. In the tree and chat panels, it has no action. To exit, focus the main panel, cancel any form with **Esc**, then type `:quit` and press **Enter**.
+**Ctrl+C does not quit Plous.** In the main panel, it cancels an open form or command. In the tree and chat panels, it has no action. To exit, focus the main panel, cancel any form with **Esc**, then type `:quit` or `:q` and press **Enter**.
 
-If the terminal is smaller than 80 columns × 16 rows, Plous shows a resize message and disables hidden actions. Panel focus and `:quit` remain available.
+If the terminal is smaller than 80 columns × 16 rows, Plous shows a resize message and disables hidden actions. Panel focus and the exit commands `:quit` / `:q` remain available. Other commands are unavailable until the terminal is large enough.

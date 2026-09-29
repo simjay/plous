@@ -346,7 +346,32 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	return m, nil
 }
+
+// Aliases are explicit so new commands cannot change the meaning of a prefix.
+func canonicalCommand(command string) string {
+	switch command {
+	case "o", "overview":
+		return "1"
+	case "r", "resources":
+		return "2"
+	case "d", "deployment":
+		return "3"
+	case "a", "activity":
+		return "4"
+	case "n":
+		return "new"
+	case "s":
+		return "settings"
+	case "h":
+		return "help"
+	case "q":
+		return "quit"
+	}
+	return command
+}
+
 func (m *model) execute(command string) bool {
+	command = canonicalCommand(command)
 	switch command {
 	case "1", "2", "3", "4":
 		m.mode = int(command[0] - '1')
@@ -412,7 +437,7 @@ func (m *model) updateSmall(k tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	if key == "enter" {
-		cmd := strings.TrimSpace(m.command.text)
+		cmd := canonicalCommand(strings.TrimSpace(m.command.text))
 		m.command = nil
 		if cmd == "quit" && m.execute(cmd) {
 			return tea.Quit

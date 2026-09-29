@@ -29,7 +29,7 @@ make run
 
 Use a terminal at least **80 columns × 16 rows**. On first launch, press **Enter** to create a workspace, enter a name, then select **Save**. Choose **Add tool → Kubernetes** to select local kubecontexts, or start with an empty workspace.
 
-**Tab / Shift+Tab** move between panels. With the main panel focused, type `:1`, `:2`, `:3`, or `:4` and press **Enter** to switch views. Type `:help` for help or `:quit` to save the session and exit.
+**Tab / Shift+Tab** move between panels. With the main panel focused and no form open, typing `:` opens a command box at the bottom. Type `:1`, `:2`, `:3`, or `:4` and press **Enter** to switch views. Every command has a full name and a short alias: for example, `:overview` or `:o` opens Overview, `:help` or `:h` opens help, and `:quit` or `:q` saves the session and exits.
 
 See the [user guide](docs/README.md) for workspace setup and the [keymap](docs/keymap.md) for all current bindings.
 

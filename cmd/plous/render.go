@@ -154,7 +154,18 @@ func (m *model) mainPanel(width, height int) string {
 		rules = append(rules, rule)
 	}
 	lines = append(lines, frame.Render("│")+strings.Join(rules, frame.Render("┴"))+frame.Render("│"))
-	content := strings.Split(m.mainBody(width-4, height-4), "\n")
+	bodyHeight := height - 4
+	if m.command != nil {
+		bodyHeight -= 3
+	}
+	content := strings.Split(m.mainBody(width-4, bodyHeight), "\n")
+	content = content[:min(len(content), bodyHeight)]
+	for len(content) < bodyHeight {
+		content = append(content, "")
+	}
+	if m.command != nil {
+		content = append(content, strings.Split(m.commandBox(width-4), "\n")...)
+	}
 	for i := 0; i < height-4; i++ {
 		text := ""
 		if i < len(content) {
@@ -165,6 +176,17 @@ func (m *model) mainPanel(width, height int) string {
 	lines = append(lines, frame.Render("└"+strings.Repeat("─", width-2)+"┘"))
 	return strings.Join(lines, "\n")
 }
+
+func (m *model) commandBox(width int) string {
+	color := lipgloss.Color("#444C56")
+	if m.focus == 1 {
+		color = accent
+	}
+	text := ":" + editorLine(*m.command, width-5, m.focus == 1)
+	return lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(color).
+		Padding(0, 1).Width(width).Height(3).MaxWidth(width).MaxHeight(3).Render(text)
+}
+
 func (m *model) mainBody(width, height int) string {
 	scope := "No workspace"
 	if w := m.current(); w != nil {
@@ -207,8 +229,6 @@ func (m *model) mainBody(width, height int) string {
 			selection = f.index*2 + 1
 		}
 		body = clipped(f.title, width) + "\n" + listView(items, selection, width, available-1)
-	case m.command != nil:
-		body = ": " + m.command.display(m.focus == 1) + "\n\n1 Overview · 2 Resources\n3 Deployment · 4 Activity\nnew · settings · help · quit"
 	case m.page == "settings":
 		body = "Workspace settings\n" + listView(m.settingsItems(), m.cursor, width, available-1)
 	case m.page == "tools":
@@ -238,7 +258,7 @@ func (m *model) mainBody(width, height int) string {
 		}
 		body = "Remove " + name + "?\n" + listView([]string{"Cancel", "Remove from workspace"}, m.cursor, width, available-1)
 	case m.page == "help":
-		body = textView("Main commands (Enter to run)\n:1 Overview\n:2 Resources\n:3 Deployment\n:4 Activity\n:new Create workspace\n:settings Workspace settings\n:help This help\n:quit Save session and exit\n\nTab / Shift+Tab switch panels.\nArrows navigate. Enter activates.\nForms: Enter advances; arrows select fields or Save/Cancel. Esc cancels.\nText and pasted text stay literal in forms and chat.\nChat drafts save locally; Enter inserts a newline while editing. Esc leaves editing.\nNo resource action keys are assigned yet.", width, available, m.cursor)
+		body = textView("Main commands (Enter to run)\n:1 / :o / :overview\n:2 / :r / :resources\n:3 / :d / :deployment\n:4 / :a / :activity\n:n / :new — Create workspace\n:s / :settings — Workspace settings\n:h / :help — This help\n:q / :quit — Save session and exit\n\nType : to open the command box at the bottom of this panel. Esc cancels.\nTab / Shift+Tab switch panels.\nArrows navigate. Enter activates.\nForms: Enter advances; arrows select fields or Save/Cancel. Esc cancels.\nText and pasted text stay literal in forms and chat.\nChat drafts save locally; Enter inserts a newline while editing. Esc leaves editing.\nNo resource action keys are assigned yet.", width, available, m.cursor)
 	case m.current() == nil:
 		body = "welcome to plous\n\nCreate your first workspace.\n\n[ Enter: Create workspace ]\nYou can add tools now or later."
 	case m.detail != "":
