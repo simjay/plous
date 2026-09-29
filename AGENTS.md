@@ -2,6 +2,8 @@
 
 Jae Sim governs product, design, and technical decisions. Record material choices and changed direction in `.decisions/`; distinguish explicit owner decisions from proposals.
 
+Work directly on `main` unless the owner requests another branch. The owner handles pushes; keep changes local and do not push unless explicitly asked.
+
 Directories whose names start with `.` are local internals and must never be committed or pushed. The owner explicitly permits only the root `.github/` directory for CI and release workflows. Preserve local internal files, including `.decisions/`, but keep them untracked. Before pushing, check the proposed commits as well as the current tree for prohibited paths; do not push old local history containing internals.
 
 Current scope is the working workspace layer in `.decisions/0021-workspace-layer-implementation-plan.md`, authorized by the owner's "build" request. It includes workspace creation/settings, local kubecontext discovery, per-tool configuration references, the workspace tree, four main modes, configuration Activity, and local chat drafts. Keep the code and repository small. Live resource browsers, deployment execution, model calls, and agent execution await a later request.
