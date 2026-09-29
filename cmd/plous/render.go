@@ -37,21 +37,21 @@ func (m *model) render() string {
 	left := min(28, max(18, m.width/5))
 	right := min(48, max(24, m.width*3/10))
 	center := m.width - left - right
-	height := m.height - 3
+	height := m.height - 2
 	header := selected.Render(" plous")
 	label := muted.Render("v" + version() + " ")
 	header += strings.Repeat(" ", m.width-lipgloss.Width(header)-lipgloss.Width(label)) + label
 	bodyHeight := height - 4
 	panels := lipgloss.JoinHorizontal(lipgloss.Top,
 		panel("Workspaces", m.treeBody(left-4, bodyHeight), left, height, m.focus == 0),
-		panel("Main", m.mainBody(center-4, bodyHeight), center, height, m.focus == 1),
+		m.mainPanel(center, height),
 		panel("AI assistant", m.chatBody(right-4, bodyHeight), right, height, m.focus == 2))
-	footer := muted.Width(m.width).Render(clipped(" Tab / Shift+Tab panels · "+m.hint(), m.width))
-	status := m.status
-	if status == "" {
-		status = "Local workspace layer · AI and live tool operations are not connected"
+	message := m.hint()
+	if m.status != "" {
+		message = oneLine(m.status)
 	}
-	return lipgloss.JoinVertical(lipgloss.Left, header, panels, footer, muted.Width(m.width).Render(clipped(" "+oneLine(status), m.width)))
+	footer := muted.Width(m.width).Render(clipped(" Tab / Shift+Tab panels · "+message, m.width))
+	return lipgloss.JoinVertical(lipgloss.Left, header, panels, footer)
 }
 func panel(title, content string, width, height int, focused bool) string {
 	color := lipgloss.Color("#444C56")
@@ -111,17 +111,59 @@ func (m *model) treeBody(width, height int) string {
 	}
 	return listView(items, m.treeCursor, width, height)
 }
-func (m *model) tabs(width int) string {
-	labels := make([]string, 4)
-	for i, name := range modes {
-		labels[i] = fmt.Sprintf(":%d %s", i+1, name)
-		if m.mode == i {
-			labels[i] = selected.Render(labels[i])
-		} else {
-			labels[i] = muted.Render(labels[i])
+
+// The tab cells share the full panel width; only names shorten on narrow screens.
+func tabWidths(width int) []int {
+	available := width - 3 // Three separators between four tabs.
+	widths := make([]int, len(modes))
+	for i := range widths {
+		widths[i] = available / len(modes)
+		if i < available%len(modes) {
+			widths[i]++
 		}
 	}
-	return clipped(labels[0]+"  "+labels[1], width) + "\n" + clipped(labels[2]+"  "+labels[3], width)
+	return widths
+}
+func (m *model) tabs(width int) string {
+	labels := make([]string, len(modes))
+	for i, cellWidth := range tabWidths(width) {
+		shortcut := fmt.Sprintf(":%d", i+1)
+		name := clipped(modes[i], cellWidth-3)
+		label := name + strings.Repeat(" ", max(1, cellWidth-ansi.StringWidth(name)-len(shortcut))) + shortcut
+		if m.mode == i {
+			labels[i] = selected.Render(label)
+		} else {
+			labels[i] = muted.Render(label)
+		}
+	}
+	return strings.Join(labels, muted.Render("│"))
+}
+func (m *model) mainPanel(width, height int) string {
+	color := lipgloss.Color("#444C56")
+	if m.focus == 1 {
+		color = accent
+	}
+	frame := lipgloss.NewStyle().Foreground(color)
+	lines := []string{frame.Render("┌" + strings.Repeat("─", width-2) + "┐"), frame.Render("│") + m.tabs(width-2) + frame.Render("│")}
+	rules := []string{}
+	for i, cellWidth := range tabWidths(width - 2) {
+		rule := frame.Render(strings.Repeat("─", cellWidth))
+		if m.mode == i {
+			rule = selected.Render(strings.Repeat("━", cellWidth))
+		}
+		rules = append(rules, rule)
+	}
+	lines = append(lines, frame.Render("│")+strings.Join(rules, frame.Render("┴"))+frame.Render("│"))
+	content := strings.Split(m.mainBody(width-4, height-4), "\n")
+	for i := 0; i < height-4; i++ {
+		text := ""
+		if i < len(content) {
+			text = clipped(content[i], width-4)
+		}
+		lines = append(lines, frame.Render("│")+" "+text+strings.Repeat(" ", max(0, width-4-ansi.StringWidth(text)))+" "+frame.Render("│"))
+	}
+	lines = append(lines, frame.Render("└"+strings.Repeat("─", width-2)+"┘"))
+	return strings.Join(lines, "\n")
 }
 func (m *model) mainBody(width, height int) string {
 	scope := "No workspace"
@@ -134,8 +176,8 @@ func (m *model) mainBody(width, height int) string {
 			scope += " / " + c.Name
 		}
 	}
-	heading := m.tabs(width) + "\n" + muted.Render(clipped(oneLine(scope), width)) + "\n\n"
-	available := max(1, height-4)
+	heading := muted.Render(clipped(oneLine(scope), width)) + "\n\n"
+	available := max(1, height-2)
 	var body string
 	switch {
 	case m.form != nil:
@@ -280,25 +322,39 @@ func (m *model) changeDetail(c workspace.Change) string {
 	return fmt.Sprintf("Revision %d · %s\n%s\nActor: %s\n\nBEFORE\n%s\n\nAFTER\n%s\n\nEsc: back", c.Revision, changeSummary(c), c.Time.Local().Format("2006-01-02 15:04:05 MST"), c.Actor, before, after)
 }
 func (m *model) chatBody(width, height int) string {
-	if m.current() == nil {
-		return textView("Create or select a workspace to keep a draft here.\n\nAI is not connected.", width, height, 0)
+	boxHeight := min(8, max(5, height/3))
+	inputWidth, inputHeight := max(1, width-4), max(1, boxHeight-3)
+	text := "Create a workspace first."
+	active := m.focus == 2 && m.chatEditing && m.current() != nil
+	if m.current() != nil {
+		e := m.draft()
+		text = e.display(active)
+		if e.text == "" {
+			text = "Type a draft…"
+			if active {
+				text = "▏" + text
+			}
+		}
+		lines := strings.Split(ansi.Wrap(text, inputWidth, ""), "\n")
+		offset := max(0, len(lines)-inputHeight)
+		if active {
+			prefix := string([]rune(e.text)[:min(e.cursor, len([]rune(e.text)))]) + "▏"
+			cursorLine := len(strings.Split(ansi.Wrap(prefix, inputWidth, ""), "\n")) - 1
+			offset = max(0, cursorLine-inputHeight+1)
+		}
+		text = textView(text, inputWidth, inputHeight, offset)
 	}
-	e := m.draft()
-	label := "Draft · saved locally\nAI not connected\n\n"
-	text := e.display(m.focus == 2 && m.chatEditing)
-	if text == "" {
-		text = "Type a draft here.\nNothing will be sent."
+	editorContent := lipgloss.NewStyle().Width(inputWidth).Height(inputHeight).MaxWidth(inputWidth).MaxHeight(inputHeight).Render(text)
+	border := lipgloss.Color("#444C56")
+	if active {
+		border = accent
 	}
-	lines := strings.Split(ansi.Wrap(text, max(1, width), ""), "\n")
-	offset := 0
-	if m.focus == 2 && m.chatEditing {
-		prefix := string([]rune(e.text)[:min(e.cursor, len([]rune(e.text)))])
-		cursorLine := len(strings.Split(ansi.Wrap(prefix+"▏", max(1, width), ""), "\n")) - 1
-		offset = max(0, cursorLine-max(1, height-4)+1)
-	} else {
-		offset = max(0, len(lines)-max(1, height-4))
-	}
-	return label + textView(text, width, max(1, height-4), offset)
+	box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(border).Padding(0, 1).Width(width).Height(boxHeight).MaxWidth(width).MaxHeight(boxHeight).
+		Render(editorContent + "\n" + muted.Render(clipped("Draft only", inputWidth)))
+	transcriptHeight := max(0, height-boxHeight)
+	transcript := textView("No conversation yet.\nAI is not connected.", width, transcriptHeight, 0)
+	transcript = lipgloss.NewStyle().Width(width).Height(transcriptHeight).MaxWidth(width).MaxHeight(transcriptHeight).Render(transcript)
+	return transcript + "\n" + box
 }
 func (m *model) hint() string {
 	if m.focus == 0 {

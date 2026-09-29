@@ -24,7 +24,7 @@ for target in darwin/amd64 darwin/arm64 linux/amd64 linux/arm64; do
     mkdir -p "$target_dir"
     CGO_ENABLED=0 GOOS="$target_os" GOARCH="$target_arch" "$go_command" build \
         -trimpath -buildvcs=false -o "$target_dir/plous" ./cmd/plous
-    tar -czf "dist/$archive" -C "$target_dir" plous -C "$PWD" README.md LICENSE
+    COPYFILE_DISABLE=1 tar -czf "dist/$archive" -C "$target_dir" plous -C "$PWD" README.md LICENSE docs
     printf 'Built %s\n' "$archive"
 done
 

@@ -497,12 +497,12 @@ func TestLayoutFitsTerminalAcrossWorkspaceViews(t *testing.T) {
 					}
 					// Adjacent borders must stay adjacent; their outside edges must
 					// meet the terminal edges even with wide Unicode draft text.
-					for _, line := range lines[2 : size[1]-3] {
+					for _, line := range lines[2 : size[1]-2] {
 						if !strings.HasPrefix(line, "│") || !strings.HasSuffix(line, "│") || strings.Count(line, "││") != 2 {
 							t.Errorf("panel borders lost alignment: %q", line)
 						}
 					}
-					for _, title := range []string{"Workspaces", "Main", "AI assistant"} {
+					for _, title := range []string{"Workspaces", "AI assistant"} {
 						if !strings.Contains(text, title) {
 							t.Errorf("missing panel title %q", title)
 						}

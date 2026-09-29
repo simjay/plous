@@ -8,6 +8,8 @@ Current scope is the working workspace layer in `.decisions/0021-workspace-layer
 
 Commands belong to the focused panel. Main-panel :1–:4 select modes; the tree has no numeric mode shortcuts and resource bindings must be designed per tool. Text and paste in forms/chat never execute navigation commands. Tab/Shift+Tab switch panels, including during forms. Test with temporary storage or --data-dir; do not alter the owner's ~/.plous or kubeconfig during verification.
 
+Keep README.md and docs/ user-facing and aligned with implemented behavior. The main panel uses four evenly distributed tabs with right-aligned shortcuts, the assistant composer stays at the bottom, and the application has one footer line. Do not restore a Main heading or add extra footer/status rows.
+
 Plous is version `0.0.1`, an early development build, not ready to ship. The single version source is `cmd/plous/VERSION`. Do not change the major or minor version without explicit owner direction. Do not automatically bump versions or create release tags. Dependency and Go toolchain versions are independent of the Plous version.
 
 The initial TUI concepts were removed at the owner's request. Earlier PRD and technical documents describe deferred future ideas, not implementation instructions. Discuss future functionality and design one step at a time.
