@@ -7,24 +7,27 @@
 
 A terminal workspace for infrastructure and deployment tools.
 
-Plous brings multiple workspaces, Kubernetes contexts, and tool configurations into a full-screen interface. A workspace tree sits beside four main views—Overview, Resources, Deployment, and Activity—with an AI assistant panel on the right.
+Plous brings tool connections, configuration history, and AI conversations into one terminal workspace. Its main views are **Overview**, **Explore**, and **Activity**. Each workspace can group several tools, contexts, and repositories.
 
-**Status: `0.0.1` · early development · not ready to ship.** The workspace and configuration layer works today. Live resource browsing, deployment execution, and AI integration are not implemented yet.
+**Status: `0.0.1` · early development · not ready to ship.**
 
-[Documentation](docs/README.md) · [Keymap](docs/keymap.md) · [Issues](https://github.com/simjay/plous/issues)
+[Get started](docs/getting-started.md) · [Documentation](docs/README.md) · [Keymap](docs/keymap.md) · [Troubleshooting](docs/troubleshooting.md) · [Development](docs/development.md)
 
 ## What works today
 
-- Create multiple workspaces and manage their tool connections.
-- Discover local Kubernetes contexts and add several to one workspace.
-- Save configuration references for Helm, Kustomize, Terraform, Argo, and Kargo.
-- Browse a collapsible workspace tree and switch between four main views.
-- Inspect configuration changes in Activity, including before/after values.
-- Keep a local chat draft for each workspace. Nothing is sent to an AI service.
+- Local workspaces with multiple tool connections and configuration history.
+- Kubernetes resource lists, Describe, YAML, Events, grouped relationships, and Pod or merged workload logs.
+- Plous Editor for YAML and read-only values, Diff Reviewer for validated changes and configuration history, and Log Viewer for logs and terminal review.
+- Supported Kubernetes actions from object details, including editing, scaling, rollout restart, deletion, and container Exec.
+- Saved configuration references for Helm, Kustomize, Terraform, Argo, and Kargo.
+- OpenAI and Anthropic assistant with read-only Kubernetes investigation, searchable conversation records, automatic context compaction, and saved drafts.
+- Panel search, keyboard commands, and adjustable panel visibility.
 
-## Quick start
+Deployment pipelines, remote workspaces, sharing, and assistant write operations are not available in this version. See the [documentation overview](docs/README.md#what-this-version-supports) for current scope.
 
-Requires Go 1.26 or newer, Git, Make, and an interactive terminal on macOS or Linux.
+## Build and start
+
+Requires macOS or Linux, Go **1.26.4+**, Git, Make, and an interactive terminal at least **80 columns by 16 rows**.
 
 ```sh
 git clone https://github.com/simjay/plous.git
@@ -32,52 +35,32 @@ cd plous
 make run
 ```
 
-Use a terminal at least **80 columns × 16 rows**. On first launch, press **Enter** to create a workspace, enter a name, then select **Save**. Choose **Add tool → Kubernetes** to select local kubecontexts, or start with an empty workspace.
+On the first launch, press **Enter** to create a workspace. Enter a name and choose **Save**, then select a tool or press **Esc** to start empty.
 
-**Tab / Shift+Tab** move between panels. With the main panel focused and no form open, typing `:` opens a command box at the bottom. Type `:1`, `:2`, `:3`, or `:4` and press **Enter** to switch views. Every command has a full name and a short alias: for example, `:overview` or `:o` opens Overview, `:help` or `:h` opens help, and `:quit` or `:q` saves the session and exits.
+The [getting started guide](docs/getting-started.md) walks through creating a workspace and choosing your tools. No cluster or AI account is required. See [Tool integrations](docs/integrations.md) for each tool's setup and current capabilities.
 
-**Ctrl+C** saves the session and chat drafts, then exits from any panel. Unsaved form edits are not applied. Use **Esc** to cancel a form or command without exiting.
+## Learn the interface
 
-See the [user guide](docs/README.md) for workspace setup and the [keymap](docs/keymap.md) for all current bindings.
+Use **Tab / Shift+Tab** to change panels, arrows and **Enter** to select items, **/** to search, and **Esc** to go back. **hh** opens Help while navigating. Type **:q** and press Enter to save and exit, or use **Ctrl+C** from anywhere.
 
-## Local data
+- [Navigation](docs/navigation.md): panels, commands, search, and typing.
+- [Workspaces](docs/workspaces.md): connections and settings across tools.
+- [Activity](docs/activity.md): configuration history and revision comparisons.
+- [AI chat](docs/ai-chat.md): connect a vendor, choose a model, and manage conversations.
+- [Tool integrations](docs/integrations.md): capabilities, connection setup, and tool-specific workflows.
 
-Plous saves workspace configuration, change history, navigation state, and chat drafts under `~/.plous/`. Kubernetes discovery reads your kubeconfig locally; it does not change the active context, contact clusters, or copy credentials into Plous.
+Plous stores data under `~/.plous/` by default. Use `--data-dir PATH` for another profile. API keys are kept in a separate plaintext file with owner-only permissions. [Data and privacy](docs/data-and-privacy.md) explains storage, backups, and what is sent to AI vendors.
 
-To use a separate data directory:
+## Development and contributing
 
-```sh
-make build
-./bin/plous --data-dir /tmp/plous-demo
-```
+Run `make check` for formatting, vet, Go tests, and executable/terminal tests. Terminal tests also need Python 3.9+. `make dist` builds local macOS and Linux archives without publishing them. See [Contributing](docs/contributing.md) and [Development](docs/development.md) for the contributor workflow and repository layout.
 
-## Development
+The documentation website builds from `docs/` with Astro Starlight. Use `make docs-install` and `make docs-dev` to preview it, or `make docs-check` to validate the production build. See [documentation maintenance](docs/documentation.md) for GitHub Pages setup.
 
-| Command | Purpose |
-| --- | --- |
-| `make run` | Build and open Plous. |
-| `make build` | Build `bin/plous`. |
-| `make test` | Run all Go unit tests and executable/terminal tests. |
-| `make test-unit` | Run Go package tests. |
-| `make test-e2e` | Build and test the actual executable in isolated terminals. |
-| `make test-race` | Run Go tests with the race detector. |
-| `make test-coverage` | Write Go coverage reports to `.cache/tests/`. |
-| `make check` | Check formatting, run vet, and run all tests. |
-| `make dist` | Package macOS and Linux binaries for amd64 and arm64, with checksums. |
-| `make clean` | Remove generated binaries and archives. |
+The interface uses [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lip Gloss](https://github.com/charmbracelet/lipgloss). AI execution uses [Eino](https://github.com/cloudwego/eino), with embedded [Starlark](https://github.com/google/starlark-go) for recursive investigation.
 
-The application version comes from `VERSION`. Packaging uses that version; it does not publish a release. CI runs checks on Linux and macOS and verifies distribution archives on Linux.
-
-`main.go` at the repository root is the executable entry point. Application code lives under `internal/`, with Go unit tests beside the code they test. `tests/e2e/` contains tests of the built executable. Terminal tests require Python 3.9+ and use only its standard library; Python is not needed to build or run Plous. See the [development and testing guide](docs/development.md) for the repository layout and test coverage.
-
-The terminal interface uses [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lip Gloss](https://github.com/charmbracelet/lipgloss).
-
-## Contributing
-
-Bug reports and focused improvements are welcome. [Open an issue](https://github.com/simjay/plous/issues) to describe a problem or discuss a feature before starting a larger change. Include your operating system, terminal, Plous version (`./bin/plous --version`), and steps to reproduce bugs.
-
-For a pull request, keep changes small, update relevant documentation, and run `make check`. Run `make dist` when changing packaging. Use a temporary `--data-dir` for manual checks. Avoid including credentials or private configuration in reports or commits.
+[Report a bug](https://github.com/simjay/plous/issues) with the version, OS, terminal, and reproduction steps. The [troubleshooting guide](docs/troubleshooting.md#report-a-bug) describes what to include.
 
 ## License
 
-Plous is licensed under [Apache-2.0](LICENSE).
+[Apache-2.0](LICENSE).

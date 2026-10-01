@@ -8,7 +8,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/term"
+	"github.com/go-logr/logr"
 	"github.com/simjay/plous/internal/workspace"
+	"k8s.io/klog/v2"
 )
 
 // Run starts the Plous executable and returns its process exit code.
@@ -48,7 +50,12 @@ func Run(version string) int {
 		fmt.Fprintln(os.Stderr, "Plous:", err)
 		return 1
 	}
+	// client-go diagnostics bypass the renderer and move the terminal cursor.
+	// Explore renders request failures inside its panel instead.
+	klog.SetLoggerWithOptions(logr.Discard(), klog.ContextualLogger(true))
 	_, runErr := tea.NewProgram(app).Run()
+	app.stopExplore()
+	app.stopChat()
 	saveErr := app.saveSession()
 	closeErr := store.Close()
 	if err := firstError(runErr, saveErr, closeErr); err != nil {

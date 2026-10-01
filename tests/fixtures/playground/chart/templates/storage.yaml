@@ -1,0 +1,70 @@
+{{- if eq .Values.profile "healthy" }}
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: {{ $.Release.Namespace }}
+  name: store
+  labels:
+    {{- include "playground.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  selector: {app: store}
+  ports:
+    - {name: http, port: 8080, targetPort: http}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  namespace: {{ $.Release.Namespace }}
+  name: store
+  labels:
+    {{- include "playground.labels" . | nindent 4 }}
+spec:
+  serviceName: store
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels: {app: store}
+  template:
+    metadata:
+      labels:
+        app: store
+        {{- include "playground.labels" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: store
+          image: {{ .Values.images.busybox | quote }}
+          command:
+            - sh
+            - -c
+            - |
+              httpd -p 8080 -h /data
+              n=$(cat /data/count 2>/dev/null || echo 0)
+              while true; do
+                n=$((n + 1)); echo "$n" > /data/count
+                echo "Stored counter=$n"; sleep 10
+              done
+          ports:
+            - {name: http, containerPort: 8080}
+          readinessProbe:
+            httpGet: {path: /count, port: http}
+            periodSeconds: 5
+          volumeMounts:
+            - {name: data, mountPath: /data}
+          resources:
+            {{- include "playground.resources" . | nindent 12 }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          {{- include "playground.labels" . | nindent 10 }}
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- if .Values.storageClass }}
+        storageClassName: {{ .Values.storageClass | quote }}
+        {{- end }}
+        resources:
+          requests: {storage: 128Mi}
+{{- end }}

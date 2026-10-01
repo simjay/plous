@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/simjay/plous/internal/kubeconfig"
+	"github.com/simjay/plous/internal/ai"
 	"github.com/simjay/plous/internal/workspace"
 )
 
@@ -13,20 +13,28 @@ type field struct {
 	key, label string
 	required   bool
 	value      editor
+	options    []string
+	secret     bool
 }
 type form struct {
 	kind, title, tool, connection string
+	profile                       string
 	fields                        []field
 	index                         int
 	remove                        bool
+	advanced                      bool
+	agent                         ai.Config
+	apiKey                        string
 }
 
 func (f *form) paste(s string) {
-	if f.index < len(f.fields) {
+	if f.index < len(f.fields) && len(f.fields[f.index].options) == 0 {
 		f.fields[f.index].value.insert(s, false)
 	}
 }
 func (m *model) beginWorkspace() {
+	m.toolSetup = nil
+	m.beginSettingsOverlay()
 	m.status = ""
 	m.form = &form{kind: "workspace", title: "Create workspace", fields: []field{{key: "name", label: "Workspace name", required: true, value: newEditor("")}}}
 }
@@ -36,10 +44,6 @@ func (m *model) beginRename() {
 		return
 	}
 	m.form = &form{kind: "rename", title: "Rename workspace", fields: []field{{key: "name", label: "Workspace name", required: true, value: newEditor(w.Name)}}}
-	m.status = ""
-}
-func (m *model) beginKube() {
-	m.form = &form{kind: "kube", title: "Add Kubernetes", fields: []field{{key: "kubeconfig", label: "Kubeconfig path (blank = default)", value: newEditor("")}}}
 	m.status = ""
 }
 func (m *model) beginConnection(tool string, c *workspace.Connection) {
@@ -71,17 +75,15 @@ func (m *model) beginConnection(tool string, c *workspace.Connection) {
 }
 func (m *model) updateForm(k tea.KeyPressMsg) {
 	f := m.form
-	n := len(f.fields)
-	maxIndex := n + 1
-	if f.remove {
-		maxIndex++
+	if f.kind == "kube" {
+		m.updateContextPicker(k)
+		return
 	}
+	n := len(f.fields)
+	maxIndex := n + len(f.actions()) - 1
 	switch k.String() {
 	case "esc":
-		m.form = nil
-		m.page = "settings"
-		m.cursor = 0
-		m.status = "Edits canceled"
+		m.cancelForm()
 	case "up":
 		f.index = max(0, f.index-1)
 	case "down":
@@ -100,20 +102,49 @@ func (m *model) updateForm(k tea.KeyPressMsg) {
 			return
 		}
 		if f.index == n+1 {
-			m.form = nil
-			m.page = "settings"
-			m.cursor = 0
-			m.status = "Edits canceled"
+			m.cancelForm()
+			return
+		}
+		if f.kind == "appsettings" && f.index == n+2 {
+			m.captureAIFields()
+			f.advanced = !f.advanced
+			m.buildAIFields()
+			f.index = len(f.fields)
+			if f.advanced {
+				f.index = 2
+			}
 			return
 		}
 		m.removeID = f.connection
+		m.removeProfile = f.profile
 		m.form = nil
 		m.page = "remove"
+		if f.kind == "appsettings" {
+			m.page = "removeprovider"
+		}
 		m.cursor = 0
 		m.status = ""
 	default:
 		if f.index < n {
-			f.fields[f.index].value.key(k, false)
+			field := &f.fields[f.index]
+			if len(field.options) == 0 {
+				field.value.key(k, false)
+			} else if len(field.options) > 0 && (k.String() == "left" || k.String() == "right" || k.String() == "space") {
+				i := -1
+				for index, value := range field.options {
+					if value == field.value.text {
+						i = index
+					}
+				}
+				delta := 1
+				if k.String() == "left" {
+					delta = len(field.options) - 1
+				}
+				field.value = newEditor(field.options[max(0, (i+delta)%len(field.options))])
+				if field.key == "provider" {
+					m.changeAIProvider()
+				}
+			}
 		}
 	}
 }
@@ -130,14 +161,17 @@ func (m *model) submitForm() {
 		values[v.key] = value
 	}
 	switch f.kind {
+	case "appsettings":
+		m.saveAppSettings(values)
 	case "workspace":
 		if m.saveWorkspace(workspace.Workspace{Name: values["name"]}) {
 			m.connection = ""
 			m.tool = ""
 			m.form = nil
-			m.page = "settings"
-			m.cursor = 1
-			m.status = "Workspace created. Choose Add tool, or Back to start empty."
+			m.closeSettings()
+			m.page, m.detail, m.focus = "", "", 1
+			m.beginToolSetup(false)
+			m.status = "Workspace created. Choose a tool, or Esc to start empty."
 		}
 	case "rename":
 		w := m.current()
@@ -150,18 +184,6 @@ func (m *model) submitForm() {
 				m.cursor = 0
 			}
 		}
-	case "kube":
-		contexts, err := kubeconfig.Discover(values["kubeconfig"])
-		if err != nil {
-			m.status = "Could not load kubecontexts. Check the path. " + err.Error()
-			return
-		}
-		m.contexts = contexts
-		m.chosen = map[int]bool{}
-		m.cursor = 0
-		m.form = nil
-		m.page = "contexts"
-		m.status = "Space selects contexts; Enter adds selected (or highlighted) context."
 	case "connection":
 		w := m.current()
 		if w == nil {
@@ -189,24 +211,37 @@ func (m *model) submitForm() {
 		if m.saveWorkspace(copy) {
 			m.expanded[m.active+"/"+f.tool] = true
 			m.form = nil
-			m.page = "settings"
-			m.cursor = 0
+			if m.toolSetup != nil {
+				m.finishToolSetup(f.tool)
+			} else {
+				m.page = "settings"
+				m.cursor = 0
+			}
 		}
 	}
-}
-func (m *model) settingsItems() []string {
-	items := []string{"Rename workspace", "Add tool"}
-	if w := m.current(); w != nil {
-		for _, c := range w.Connections {
-			items = append(items, "Edit "+toolNames[c.Tool]+" / "+c.Name)
-		}
-	}
-	return append(items, "Back")
 }
 func (m *model) updateMain(key string) {
+	if m.exploreVisible() {
+		m.updateExplore(key)
+		return
+	}
 	if key == "esc" {
-		if m.detail != "" {
+		if m.page == "" && m.detail == "" {
+			m.focusRootSidebar()
+			return
+		}
+		if m.toolSetup != nil {
+			m.backFromToolSetup()
+			return
+		}
+		if m.page == "settings" && m.settingsOverlay != nil {
+			m.closeSettings()
+			m.status = ""
+			return
+		} else if m.detail != "" {
 			m.detail = ""
+		} else if m.page == "tools" || m.page == "contexts" || m.page == "remove" || m.page == "removeprovider" {
+			m.openSettings()
 		} else {
 			m.page = ""
 		}
@@ -216,32 +251,16 @@ func (m *model) updateMain(key string) {
 	}
 	switch m.page {
 	case "settings":
-		if m.current() == nil {
-			m.page = ""
-			return
-		}
-		items := m.settingsItems()
-		m.cursor = max(0, min(m.cursor, len(items)-1))
-		if key == "up" {
-			m.cursor = max(0, m.cursor-1)
-		}
-		if key == "down" {
-			m.cursor = min(len(items)-1, m.cursor+1)
+		m.updateSettings(key)
+	case "removeprovider":
+		if key == "up" || key == "down" {
+			m.cursor = 1 - m.cursor
 		}
 		if key == "enter" {
-			switch m.cursor {
-			case 0:
-				m.beginRename()
-			case 1:
-				m.page = "tools"
-				m.cursor = 0
-			default:
-				if m.cursor == len(items)-1 {
-					m.page = ""
-				} else {
-					c := m.current().Connections[m.cursor-2]
-					m.beginConnection(c.Tool, &c)
-				}
+			if m.cursor == 0 {
+				m.openSettings()
+			} else {
+				m.removeAIConnection()
 			}
 		}
 	case "tools":
@@ -257,19 +276,6 @@ func (m *model) updateMain(key string) {
 			} else {
 				m.beginConnection(toolTypes[m.cursor], nil)
 			}
-		}
-	case "contexts":
-		if key == "up" {
-			m.cursor = max(0, m.cursor-1)
-		}
-		if key == "down" {
-			m.cursor = min(len(m.contexts)-1, m.cursor+1)
-		}
-		if key == "space" {
-			m.chosen[m.cursor] = !m.chosen[m.cursor]
-		}
-		if key == "enter" && len(m.contexts) > 0 {
-			m.addContexts()
 		}
 	case "remove":
 		if key == "up" || key == "down" {
@@ -305,16 +311,20 @@ func (m *model) updateMain(key string) {
 			return
 		}
 		pos := max(0, m.positions[m.viewKey()])
-		if m.mode == 3 && m.page == "" && m.detail == "" {
+		if key == "enter" && m.mode == 0 && m.page == "" && len(m.current().Connections) == 0 {
+			m.beginToolSetup(false)
+			return
+		}
+		if m.mode == 2 && m.page == "" && m.detail == "" {
+			changes := m.filteredChanges()
 			if key == "up" {
 				pos = max(0, pos-1)
 			}
 			if key == "down" {
-				pos = min(max(0, len(m.changes)-1), pos+1)
+				pos = min(max(0, len(changes)-1), pos+1)
 			}
-			if key == "enter" && len(m.changes) > 0 {
-				m.detail = m.changeDetail(m.changes[min(pos, len(m.changes)-1)])
-				m.cursor = 0
+			if key == "enter" && len(changes) > 0 {
+				m.setActivityDetail(changes[min(pos, len(changes)-1)])
 			}
 		} else {
 			step := 1
@@ -322,7 +332,7 @@ func (m *model) updateMain(key string) {
 				step = max(1, m.height-12)
 			}
 			offset := pos
-			if m.detail != "" || m.page == "help" {
+			if m.detail != "" {
 				offset = m.cursor
 			}
 			if key == "up" || key == "pgup" {
@@ -331,7 +341,7 @@ func (m *model) updateMain(key string) {
 			if key == "down" || key == "pgdown" {
 				offset += step
 			}
-			if m.detail != "" || m.page == "help" {
+			if m.detail != "" {
 				m.cursor = offset
 			} else {
 				pos = offset
@@ -341,6 +351,10 @@ func (m *model) updateMain(key string) {
 	}
 }
 func (m *model) addContexts() {
+	if !m.contextsReady() {
+		m.status = "Refresh contexts before adding."
+		return
+	}
 	w := m.current()
 	if w == nil {
 		return
@@ -352,7 +366,8 @@ func (m *model) addContexts() {
 		chosen = chosen || yes
 	}
 	if !chosen {
-		m.chosen[m.cursor] = true
+		m.status = "Select at least one context with Space."
+		return
 	}
 	added := 0
 	for i, c := range m.contexts {
@@ -377,9 +392,90 @@ func (m *model) addContexts() {
 		return
 	}
 	if m.saveWorkspace(copy) {
-		m.expanded[m.active+"/kubernetes"] = true
-		m.page = "settings"
-		m.cursor = 1
+		m.finishToolSetup("kubernetes")
 		m.status = fmt.Sprintf("Added %d Kubernetes connection(s)", added)
 	}
+}
+
+func (m *model) formBody(width, height int) string {
+	f := m.form
+	lines := []string{}
+	if f.kind == "workspace" {
+		lines = append(lines, workspaceLocation(width)...)
+		if height >= 10 {
+			lines = append(lines, "")
+		}
+	}
+	selectedRow := 0
+	for i, field := range f.fields {
+		label := field.label
+		if field.required {
+			label += " *"
+		}
+		active := m.focus == 1 && f.index == i
+		value := editorLine(field.value, width-4, active)
+		if field.secret {
+			masked := newEditor(strings.Repeat("•", len([]rune(field.value.text))))
+			masked.cursor = field.value.cursor
+			value = editorLine(masked, width-4, active)
+		}
+		if len(field.options) > 0 {
+			value = "‹ " + field.value.text + " ›"
+			if field.key == "provider" {
+				value = "‹ " + providerLabel(field.value.text) + " ›"
+			}
+		}
+		if value == "" {
+			value = "(empty)"
+		}
+		style := canvasStyle.Width(width).Padding(0, 1)
+		labelStyle := muted
+		if f.index == i {
+			selectedRow = len(lines)
+			style = style.Background(highlight)
+			labelStyle = shortcutStyle
+		}
+		lines = append(lines, labelStyle.Render(clipped(label, width)), style.Render(value))
+		if height >= 10 {
+			lines = append(lines, "")
+		}
+	}
+	if f.kind == "appsettings" {
+		lines = append(lines, muted.Render(clipped(m.aiCredentialHint(), width)), "")
+	}
+	actions := f.actions()
+	for i, action := range actions {
+		if f.index == len(f.fields)+i {
+			selectedRow = len(lines)
+		}
+		lines = append(lines, formAction(action, i == 0, f.index == len(f.fields)+i, width))
+	}
+	available := max(1, height-2)
+	// Keep the current field label and input together when scrolling.
+	start := max(0, selectedRow-available+2)
+	if f.index < len(f.fields) {
+		start = min(start, selectedRow)
+	}
+	end := min(len(lines), start+available)
+	return sectionHeadingStyle.Render(clipped(f.title, width)) + "\n\n" + strings.Join(lines[start:end], "\n")
+}
+
+func (f *form) actions() []string {
+	action := "Save"
+	actions := []string{action, "Cancel"}
+	if f.kind == "appsettings" {
+		label := "Advanced…"
+		if f.advanced {
+			label = "Hide advanced"
+		}
+		actions = append(actions, label)
+	}
+	if f.remove {
+		label := "Remove connection"
+		if f.kind == "appsettings" {
+			label = "Remove AI connection"
+		}
+		actions = append(actions, label)
+	}
+	return actions
 }

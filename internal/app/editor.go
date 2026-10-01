@@ -7,8 +7,10 @@ import (
 )
 
 type editor struct {
-	text   string
-	cursor int
+	text    string
+	cursor  int
+	literal bool
+	limit   int
 }
 
 func newEditor(text string) editor { return editor{text: text, cursor: len([]rune(text))} }
@@ -31,13 +33,22 @@ func (e *editor) insert(s string, multiline bool) {
 	r := []rune(e.text)
 	e.cursor = max(0, min(e.cursor, len(r)))
 	add := []rune(s)
-	if len(r)+len(add) > 16384 {
-		add = add[:max(0, 16384-len(r))]
+	limit := e.limit
+	if limit == 0 {
+		limit = 16384
+	}
+	if len(r)+len(add) > limit {
+		add = add[:max(0, limit-len(r))]
 	}
 	e.text = string(r[:e.cursor]) + string(add) + string(r[e.cursor:])
 	e.cursor += len(add)
 }
 func (e *editor) key(k tea.KeyPressMsg, multiline bool) {
+	defer func() {
+		if e.text == "" {
+			e.literal = false
+		}
+	}()
 	r := []rune(e.text)
 	e.cursor = max(0, min(e.cursor, len(r)))
 	switch k.String() {

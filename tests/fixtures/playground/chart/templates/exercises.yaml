@@ -1,0 +1,103 @@
+{{- if and (eq .Values.profile "healthy") .Values.rollout }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: {{ .Release.Namespace }}
+  name: rollout-lab
+  labels:
+    {{- include "playground.labels" . | nindent 4 }}
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  progressDeadlineSeconds: 45
+  strategy:
+    rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+  selector:
+    matchLabels: {app: rollout-lab}
+  template:
+    metadata:
+      labels:
+        app: rollout-lab
+        {{- include "playground.labels" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: web
+          image: {{ .Values.images.busybox | quote }}
+          command: [sh, -c, "mkdir -p /www; echo 'Rollout example ready' > /www/index.html; exec httpd -f -p 8080 -h /www"]
+          ports: [{name: http, containerPort: 8080}]
+          readinessProbe:
+            httpGet: {path: /, port: http}
+            periodSeconds: 3
+          resources:
+            {{- include "playground.resources" . | nindent 12 }}
+{{- end }}
+{{- if eq .Values.profile "lists" }}
+{{- range $i := until (int .Values.listCount) }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: {{ $.Release.Namespace }}
+  name: {{ printf "catalog-%03d-long-resource-name-for-testing-table-truncation-and-search" $i }}
+  labels:
+    {{- include "playground.labels" $ | nindent 4 }}
+    plous.dev/batch: {{ printf "%d" (mod $i 10) | quote }}
+data:
+  namespace: {{ $.Release.Namespace | quote }}
+  sequence: {{ $i | quote }}
+  description: "Searchable example with Unicode: café 界"
+{{- end }}
+{{- end }}
+{{- if eq .Values.profile "load" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  namespace: {{ .Release.Namespace }}
+  generateName: hpa-load-
+  labels:
+    app.kubernetes.io/part-of: plous-playground
+    app.kubernetes.io/managed-by: plous-playground-script
+    plous.dev/scenario: load
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: {{ add .Values.loadSeconds 30 }}
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: plous-playground
+        app.kubernetes.io/managed-by: plous-playground-script
+        plous.dev/scenario: load
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 2
+      containers:
+        - name: requests
+          image: {{ .Values.images.busybox | quote }}
+          command:
+            - sh
+            - -c
+            - |
+              end=$(( $(date +%s) + {{ .Values.loadSeconds }} ))
+              worker() {
+                count=0
+                while [ "$(date +%s)" -lt "$end" ]; do
+                  if wget -T 3 -q -O /dev/null --post-data=playground http://frontend-podinfo:9898/token; then
+                    count=$((count + 1))
+                  fi
+                done
+                echo "Worker completed $count requests"
+                [ "$count" -gt 0 ]
+              }
+              pids=""
+              for i in 1 2 3 4 5 6 7 8; do worker & pids="$pids $!"; done
+              result=0
+              for pid in $pids; do wait "$pid" || result=1; done
+              exit "$result"
+          resources:
+            requests: {cpu: 50m, memory: 16Mi}
+            limits: {cpu: 500m, memory: 64Mi}
+{{- end }}

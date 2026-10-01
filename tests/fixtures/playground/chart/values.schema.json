@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "profile": {"enum": ["healthy", "failures", "lists", "load"]},
+    "rollout": {"type": "boolean"},
+    "listCount": {"type": "integer", "minimum": 0, "maximum": 500},
+    "loadSeconds": {"type": "integer", "minimum": 30, "maximum": 600},
+    "failures": {"type": "array", "uniqueItems": true, "items": {"enum": ["crash", "image", "readiness", "scheduling", "config", "storage", "init", "job"]}},
+    "storageClass": {"type": "string"},
+    "certificates": {"type": "boolean"},
+    "ingressClass": {"type": "string"},
+    "images": {"type": "object", "required": ["busybox", "bash", "pause"], "additionalProperties": {"type": "string", "minLength": 1}}
+  },
+  "additionalProperties": false
+}

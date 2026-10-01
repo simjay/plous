@@ -1,4 +1,4 @@
-"""Executable-level CLI contracts; no terminal or user configuration required."""
+"""CLI tests with isolated configuration."""
 
 import subprocess
 import tempfile
@@ -15,7 +15,7 @@ class CommandLineTests(unittest.TestCase):
     def test_version_matches_single_source(self):
         result = self.run_cli("--version")
         self.assertEqual(result.returncode, 0)
-        self.assertEqual(result.stdout, (ROOT / "VERSION").read_text())
+        self.assertEqual(result.stdout, (ROOT / "cmd/plous/VERSION").read_text())
         self.assertEqual(result.stderr, "")
 
     def test_help_lists_supported_options(self):

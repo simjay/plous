@@ -1,0 +1,117 @@
+{{- if eq .Values.profile "failures" }}
+{{- range $scenario := .Values.failures }}
+{{- if eq $scenario "storage" }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  namespace: {{ $.Release.Namespace }}
+  name: broken-storage
+  labels:
+    {{- include "playground.labels" $ | nindent 4 }}
+spec:
+  storageClassName: plous-intentionally-missing
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests: {storage: 16Mi}
+{{- end }}
+{{- if eq $scenario "job" }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  namespace: {{ $.Release.Namespace }}
+  name: broken-job
+  labels:
+    {{- include "playground.labels" $ | nindent 4 }}
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        {{- include "playground.labels" $ | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      containers:
+        - name: failed
+          image: {{ $.Values.images.busybox | quote }}
+          command: [sh, -c, "echo 'ERROR deliberate job failure'; exit 1"]
+          resources:
+            {{- include "playground.resources" $ | nindent 12 }}
+{{- else }}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  namespace: {{ $.Release.Namespace }}
+  name: broken-{{ $scenario }}
+  labels:
+    app: broken-{{ $scenario }}
+    {{- include "playground.labels" $ | nindent 4 }}
+spec:
+  automountServiceAccountToken: false
+  terminationGracePeriodSeconds: 1
+  {{- if eq $scenario "scheduling" }}
+  nodeSelector:
+    plous.dev/intentionally-missing: "true"
+  {{- end }}
+  {{- if eq $scenario "init" }}
+  initContainers:
+    - name: prepare
+      image: {{ $.Values.images.busybox | quote }}
+      command: [sh, -c, "echo 'ERROR deliberate initialization failure'; exit 1"]
+      resources:
+        {{- include "playground.resources" $ | nindent 8 }}
+  {{- end }}
+  containers:
+    - name: example
+      {{- if eq $scenario "image" }}
+      image: docker.io/library/busybox:plous-intentionally-missing
+      {{- else }}
+      image: {{ $.Values.images.busybox | quote }}
+      {{- end }}
+      {{- if eq $scenario "crash" }}
+      command: [sh, -c, "echo 'ERROR deliberate crash; previous logs should retain this'; sleep 3; exit 1"]
+      {{- else }}
+      command: [sh, -c, "while true; do echo 'Playground container alive'; sleep 10; done"]
+      {{- end }}
+      {{- if eq $scenario "readiness" }}
+      readinessProbe:
+        exec: {command: [sh, -c, "exit 1"]}
+        periodSeconds: 5
+      {{- end }}
+      {{- if eq $scenario "config" }}
+      env:
+        - name: REQUIRED_SETTING
+          valueFrom:
+            configMapKeyRef: {name: plous-intentionally-missing, key: value}
+      {{- end }}
+      {{- if eq $scenario "storage" }}
+      volumeMounts:
+        - {name: data, mountPath: /data}
+      {{- end }}
+      resources:
+        {{- include "playground.resources" $ | nindent 8 }}
+  {{- if eq $scenario "storage" }}
+  volumes:
+    - name: data
+      persistentVolumeClaim: {claimName: broken-storage}
+  {{- end }}
+{{- end }}
+{{- if eq $scenario "readiness" }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: {{ $.Release.Namespace }}
+  name: broken-readiness
+  labels:
+    {{- include "playground.labels" $ | nindent 4 }}
+spec:
+  selector: {app: broken-readiness}
+  ports:
+    - {port: 8080, targetPort: 8080}
+{{- end }}
+{{- end }}
+{{- end }}

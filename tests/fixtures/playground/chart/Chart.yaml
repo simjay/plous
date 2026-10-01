@@ -1,0 +1,6 @@
+apiVersion: v2
+name: plous-playground
+description: Disposable resources for exploring Plous
+type: application
+version: 0.1.0
+kubeVersion: ">=1.26.0-0"

@@ -18,16 +18,16 @@ func TestCtrlCQuitsFromEveryPanelAndSavesSession(t *testing.T) {
 			t.Run(fmt.Sprintf("focus=%d/small=%t", focus, small), func(t *testing.T) {
 				m, _ := testModel(t)
 				id := createWorkspace(t, m, "Payments")
-				focusPanel(t, m, 2)
+				startChat(t, m)
 				typeText(m, "latest draft\n:q is literal")
-				mainCommand(t, m, "activity")
+				mainCommand(t, m, "3")
 				focusPanel(t, m, focus)
 				if small {
 					m.Update(tea.WindowSizeMsg{Width: 60, Height: 10})
 				}
 				assertCtrlCQuit(t, m)
 				saved := readExitSession(t, m)
-				if saved.Workspace != id || saved.Mode != 3 || saved.Focus != focus || saved.Drafts[id] != "latest draft\n:q is literal" {
+				if saved.Workspace != id || saved.Mode != 2 || saved.Focus != focus || saved.Drafts[id] != "latest draft\n:q is literal" {
 					t.Fatalf("Ctrl+C must save the latest session before exit: %#v", saved)
 				}
 			})
@@ -38,10 +38,10 @@ func TestCtrlCQuitsFromEveryPanelAndSavesSession(t *testing.T) {
 func TestCtrlCQuitsWithUnfinishedCommand(t *testing.T) {
 	m, _ := testModel(t)
 	createWorkspace(t, m, "Payments")
-	mainCommand(t, m, "activity")
+	mainCommand(t, m, "3")
 	typeText(m, ":new")
 	assertCtrlCQuit(t, m)
-	if m.form != nil || readExitSession(t, m).Mode != 3 {
+	if m.form != nil || readExitSession(t, m).Mode != 2 {
 		t.Fatal("Ctrl+C must exit without executing the unfinished command")
 	}
 }
@@ -52,7 +52,8 @@ func TestCtrlCDoesNotApplyUnfinishedForm(t *testing.T) {
 	m.beginRename()
 	press(t, m, "ctrl+u")
 	typeText(m, "Unsubmitted name")
-	focusPanel(t, m, 2)
+	press(t, m, "enter")
+	startChat(t, m)
 	typeText(m, "keep this chat draft")
 	focusPanel(t, m, 1)
 	assertCtrlCQuit(t, m)
@@ -93,7 +94,7 @@ func TestCtrlCSaveFailureKeepsAppOpenAndDraftRecoverable(t *testing.T) {
 		t.Run(fmt.Sprintf("small=%t", small), func(t *testing.T) {
 			m, root := testModel(t)
 			id := createWorkspace(t, m, "Payments")
-			focusPanel(t, m, 2)
+			startChat(t, m)
 			typeText(m, "draft survives storage failure")
 			if small {
 				m.Update(tea.WindowSizeMsg{Width: 60, Height: 10})

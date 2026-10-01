@@ -1,4 +1,4 @@
-"""Helpers for testing the real executable with isolated storage and a PTY."""
+"""Run the executable with temporary storage and a pseudo-terminal."""
 
 import errno
 import fcntl
@@ -28,7 +28,12 @@ class Terminal:
         self.closed = False
         fcntl.ioctl(self.slave, termios.TIOCSWINSZ, struct.pack("HHHH", height, width, 0, 0))
         self.initial_flags = termios.tcgetattr(self.slave)[3]
-        env = dict(os.environ, TERM="xterm-256color", KUBECONFIG=str(kubeconfig))
+        home = Path(data_dir).parent / "home"
+        default_config = home / ".kube" / "config"
+        default_config.parent.mkdir(parents=True, exist_ok=True)
+        if not default_config.exists():
+            default_config.symlink_to(Path(kubeconfig).resolve())
+        env = dict(os.environ, TERM="xterm-256color", HOME=str(home), KUBECONFIG=str(kubeconfig))
         try:
             self.process = subprocess.Popen(
                 [str(BINARY), "--data-dir", str(data_dir)],
@@ -56,7 +61,12 @@ class Terminal:
             self.output.extend(data)
 
     def send(self, text):
-        os.write(self.master, text.encode("utf-8"))
+        data = text.encode("utf-8")
+        # Drain output so a large paste cannot fill both PTY directions.
+        while data:
+            written = os.write(self.master, data[:512])
+            data = data[written:]
+            self.read(0.01)
         self.read(0.08)
 
     def text(self, start=0):

@@ -1,0 +1,12 @@
+profile: healthy
+failures: []
+storageClass: ""
+certificates: false
+ingressClass: ""
+rollout: false
+listCount: 0
+loadSeconds: 180
+images:
+  busybox: docker.io/library/busybox:1.37.0
+  bash: docker.io/library/bash:5.2.37
+  pause: registry.k8s.io/pause:3.10

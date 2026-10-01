@@ -1,0 +1,136 @@
+{{- if eq .Values.profile "healthy" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: {{ $.Release.Namespace }}
+  name: log-lab
+  labels:
+    {{- include "playground.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels: {app: log-lab}
+  template:
+    metadata:
+      labels:
+        app: log-lab
+        {{- include "playground.labels" . | nindent 8 }}
+    spec:
+      serviceAccountName: playground-observer
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 5
+      initContainers:
+        - name: prepare
+          image: {{ .Values.images.busybox | quote }}
+          command: [sh, -c, "echo 'Init complete: ready for testing'"]
+          resources:
+            {{- include "playground.resources" . | nindent 12 }}
+      containers:
+        - name: sh
+          image: {{ .Values.images.busybox | quote }}
+          command: [sh, /config/log.sh]
+          env:
+            - name: DEMO_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: playground-credentials, key: password}
+          volumeMounts:
+            - {name: config, mountPath: /config, readOnly: true}
+          resources:
+            {{- include "playground.resources" . | nindent 12 }}
+        - name: bash
+          image: {{ .Values.images.bash | quote }}
+          command: [/usr/local/bin/bash, -c, "while true; do echo 'Bash container ready'; sleep 30; done"]
+          resources:
+            {{- include "playground.resources" . | nindent 12 }}
+        - name: no-shell
+          image: {{ .Values.images.pause | quote }}
+          resources:
+            {{- include "playground.resources" . | nindent 12 }}
+      volumes:
+        - name: config
+          configMap: {name: playground-config}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  namespace: {{ $.Release.Namespace }}
+  name: node-reporter
+  labels:
+    {{- include "playground.labels" . | nindent 4 }}
+spec:
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels: {app: node-reporter}
+  template:
+    metadata:
+      labels:
+        app: node-reporter
+        {{- include "playground.labels" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: reporter
+          image: {{ .Values.images.busybox | quote }}
+          command: [sh, -c, 'while true; do echo "node=$NODE_NAME status=ready"; sleep 30; done']
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef: {fieldPath: spec.nodeName}
+          resources:
+            {{- include "playground.resources" . | nindent 12 }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  namespace: {{ $.Release.Namespace }}
+  name: completed-example
+  labels:
+    {{- include "playground.labels" . | nindent 4 }}
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        {{- include "playground.labels" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      containers:
+        - name: job
+          image: {{ .Values.images.busybox | quote }}
+          command: [sh, -c, "echo 'Completed example: 10 records processed'"]
+          resources:
+            {{- include "playground.resources" . | nindent 12 }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  namespace: {{ $.Release.Namespace }}
+  name: periodic-report
+  labels:
+    {{- include "playground.labels" . | nindent 4 }}
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 60
+      template:
+        metadata:
+          labels:
+            {{- include "playground.labels" . | nindent 12 }}
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          containers:
+            - name: report
+              image: {{ .Values.images.busybox | quote }}
+              command: [sh, -c, "date; echo 'Scheduled report complete'"]
+              resources:
+                {{- include "playground.resources" . | nindent 16 }}
+{{- end }}

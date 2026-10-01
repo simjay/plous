@@ -1,0 +1,58 @@
+{{- if eq .Values.profile "healthy" }}
+{{- if .Values.certificates }}
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  namespace: {{ $.Release.Namespace }}
+  name: playground-selfsigned
+  labels:
+    {{- include "playground.labels" . | nindent 4 }}
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  namespace: {{ $.Release.Namespace }}
+  name: playground-tls
+  labels:
+    {{- include "playground.labels" . | nindent 4 }}
+spec:
+  secretName: playground-tls
+  duration: 24h
+  renewBefore: 8h
+  subject:
+    organizations: [Plous playground]
+  dnsNames: [plous.local]
+  issuerRef:
+    name: playground-selfsigned
+    kind: Issuer
+---
+{{- end }}
+{{- if .Values.ingressClass }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: {{ $.Release.Namespace }}
+  name: frontend
+  labels:
+    {{- include "playground.labels" . | nindent 4 }}
+spec:
+  ingressClassName: {{ .Values.ingressClass | quote }}
+  {{- if .Values.certificates }}
+  tls:
+    - hosts: [plous.local]
+      secretName: playground-tls
+  {{- end }}
+  rules:
+    - host: plous.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend-podinfo
+                port: {number: 9898}
+{{- end }}
+{{- end }}

@@ -1,0 +1,133 @@
+{{- if eq .Values.profile "healthy" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: {{ $.Release.Namespace }}
+  name: playground-config
+  labels:
+    {{- include "playground.labels" . | nindent 4 }}
+data:
+  application.yaml: |
+    environment: playground
+    logging:
+      level: info
+      format: json
+    features:
+      checkout: true
+      payments: false
+    examples:
+    {{- range $i := until 100 }}
+      entry-{{ printf "%03d" $i }}: "Searchable example {{ $i }}: café 界"
+    {{- end }}
+  log.sh: |
+    #!/bin/sh
+    n=0
+    while true; do
+      n=$((n + 1))
+      printf '{"level":"info","sequence":%s,"message":"checkout accepted","unicode":"café 界"}\n' "$n"
+      if [ $((n % 10)) -eq 0 ]; then
+        printf 'WARN simulated retry sequence=%s\n' "$n"
+        printf 'ERROR example stack trace\n  at checkout\n  at payment\n'
+        printf 'long-line '
+        printf '%0600d\n' "$n"
+      fi
+      sleep 1
+    done
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  namespace: {{ $.Release.Namespace }}
+  name: playground-credentials
+  labels:
+    {{- include "playground.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  username: demo
+  password: not-a-real-password
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  namespace: {{ $.Release.Namespace }}
+  name: playground-observer
+  labels:
+    {{- include "playground.labels" . | nindent 4 }}
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: {{ $.Release.Namespace }}
+  name: playground-observer
+  labels:
+    {{- include "playground.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [pods, pods/log, services, configmaps, events]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  namespace: {{ $.Release.Namespace }}
+  name: playground-observer
+  labels:
+    {{- include "playground.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: playground-observer
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: playground-observer
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  namespace: {{ $.Release.Namespace }}
+  name: playground-limits
+  labels:
+    {{- include "playground.labels" . | nindent 4 }}
+spec:
+  limits:
+    - type: Container
+      default: {cpu: 500m, memory: 128Mi}
+      defaultRequest: {cpu: 10m, memory: 16Mi}
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  namespace: {{ $.Release.Namespace }}
+  name: playground-budget
+  labels:
+    {{- include "playground.labels" . | nindent 4 }}
+spec:
+  hard:
+    pods: "40"
+    requests.cpu: "2"
+    requests.memory: 2Gi
+    limits.cpu: "8"
+    limits.memory: 4Gi
+    persistentvolumeclaims: "6"
+    requests.storage: 2Gi
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  namespace: {{ $.Release.Namespace }}
+  name: playground-allow
+  labels:
+    {{- include "playground.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: plous-playground
+  policyTypes: [Ingress, Egress]
+  ingress: [{}]
+  egress: [{}]
+{{- end }}

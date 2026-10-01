@@ -1,36 +1,17 @@
-"""Generates the Plous logo set. Run: python3 gen.py
+"""Generate logo SVGs from shared geometry and the outlined wordmark.
 
-The mark is pi built from three blocks: a bar, and two tall blocks beneath it.
-It reads as the letter and, for a deployment tool, as workloads sitting under a
-control plane. Form, proportions, corner radii and palette are settled; this
-script is the single source for every file in this directory.
-
-Surface treatment ("depth"): continuous-curvature block corners, a soft drop
-shadow lifting the blocks off the tile, a tinted rather than flat tile, and a
-sheen across the top of each block.
-
-Colour. Light: white-to-lavender tile, blocks #3B82F6 -> #7C3AED. Dark: near-black
-tile, blocks lifted to #4F8DF7 -> #9066F0 so they keep the same hue identity while
-holding contrast against the dark ground. The block gradient is declared in user
-space across the glyph's bounding box, so all three blocks share one continuous
-ramp; an objectBoundingBox gradient would restart it in each block.
-
-Geometry: the blocks come from five numbers (glyph width, bar height, the gap
-under the bar, block height, the gap between blocks) plus two corner radii, so a
-change is a number rather than a redrawn path. Block height sits near 1.4x block
-width, which gives the mark its vertical stance and keeps it from reading as a
-dashboard grid.
+Run python3 gen.py from this directory. See README.md for variants and exports.
 """
 import math
 
 import wordmark
 
 S  = 256
-N  = 5.2       # superellipse exponent — the tile
-NB = 7.5       # superellipse exponent — the blocks
+N  = 5.2       # tile superellipse exponent
+NB = 7.5       # block superellipse exponent
 
 W, BH, GAP, KH, SPLIT = 168, 40, 11, 108, 14
-RXB, RXK = 10, 13                        # approved corner radii
+RXB, RXK = 10, 13                        # corner radii for flat variants
 MARK_SCALE = 0.80                        # mark size in the lockup, relative to the icon
 H   = BH + GAP + KH
 TOP = 128 - H/2
@@ -101,14 +82,7 @@ def mark(theme):
                 defs(th, tile=False))
 
 def lockup(theme):
-    """Mark + wordmark, on a tight canvas.
-
-    The mark is scaled to MARK_SCALE so it sits at about 1.1x the wordmark's
-    height. At full size it is 1.37x, which reads as the mark shouting over the
-    word. Everything below is derived — the gap scales with the mark, the
-    wordmark is optically centred on the mark's axis, and the margins match — so
-    changing MARK_SCALE or the typeface re-lays the lockup out correctly.
-    """
+    """Size and center the mark and wordmark using their bounds and MARK_SCALE."""
     th = THEMES[theme]
     x0, y0, x1, y1 = wordmark.BOUNDS
     s        = MARK_SCALE
@@ -116,13 +90,11 @@ def lockup(theme):
     mark_h   = (KY + KH - TOP) * s
     word_w   = x1 - x0
     content  = max(mark_h, y1 - y0)
-    # margin also has to clear the drop shadow, which reaches ~19 units below the
-    # blocks at full size (dy 4 plus three standard deviations of a 5px blur).
+    # Allow 19 units for the shadow: offset 4 plus three times the blur sigma 5.
     margin   = max(0.12 * content, 19 * s + 4)
     height   = content + 2 * margin
     cy       = height / 2
     gap      = 0.22 * mark_w
-    # scale the mark about its own centre, then set its left edge on the margin
     dx = margin - (128 - (W / 2) * s)
     tf = ('translate(%.2f,%.2f) translate(128,128) scale(%.4f) translate(-128,-128)'
           % (dx, cy - 128, s))
@@ -142,8 +114,7 @@ open("mark-dark.svg", "w").write(mark("dark"))
 open("lockup.svg", "w").write(lockup("light"))
 open("lockup-dark.svg", "w").write(lockup("dark"))
 
-# Flat, untreated forms. No filters or gradients, so they survive print, embroidery,
-# and the 16px favicon, where a drop shadow and a tint only turn to mud.
+# Flat variants omit filters and gradients for small icons and print.
 def plain(tile_fill, block_fill):
     return ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" '
             'role="img" aria-label="Plous">\n  <path d="%s" fill="%s"/>%s\n</svg>\n'

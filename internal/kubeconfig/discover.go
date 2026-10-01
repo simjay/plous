@@ -17,10 +17,9 @@ import (
 
 const maxFileSize = 16 << 20
 
-// Context is the nonsecret metadata needed to select a context. Source is the
-// absolute path of the kubeconfig file that defined this context. Kubeconfig is
-// the full effective path list; referenced clusters and users may be defined in
-// another member of that list.
+// Context contains the metadata for selecting a kubecontext. Source is the
+// absolute path of its defining file. Kubeconfig is the full path list, which
+// may include other files defining the referenced cluster and user.
 type Context struct {
 	Name       string
 	Namespace  string
@@ -143,7 +142,7 @@ func readContexts(path string) ([]Context, error) {
 	if len(data) > maxFileSize {
 		return nil, fmt.Errorf("kubeconfig %q exceeds the 16 MiB input limit", path)
 	}
-	// Deliberately omit users, certificates, tokens, and exec configuration.
+	// Exclude credentials and authentication plugins from discovery results.
 	var config struct {
 		Contexts []struct {
 			Name    string `yaml:"name"`

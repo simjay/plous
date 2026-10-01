@@ -1,0 +1,102 @@
+package app
+
+import (
+	"strings"
+	"testing"
+
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/simjay/plous/internal/kubernetes"
+)
+
+func TestDetailActionKeysPreserveSectionsAndGlobalPrefixes(t *testing.T) {
+	for key, operation := range map[string]string{"x": "exec", "S": "scale", "R": "restart", "E": "edit", "D": "delete"} {
+		t.Run(key, func(t *testing.T) {
+			m := exploreModel(t)
+			m.openExploreSelection(0)
+			m.explore.resource = kubernetes.Resource{Name: "deployments", Group: "apps"}
+			m.explore.detailValid = true
+			m.Update(tea.KeyPressMsg{Code: rune(key[0]), Text: key})
+			a := m.explore.action
+			if a == nil || !a.requested || a.items[a.cursor].id != operation {
+				t.Fatalf("%s did not open %s", key, operation)
+			}
+		})
+	}
+	m := exploreModel(t)
+	m.openExploreSelection(0)
+	for key, tab := range map[string]int{"d": 0, "y": 1, "e": 2, "r": 3} {
+		typeText(m, key)
+		if m.explore.tab != tab || m.explore.action != nil {
+			t.Fatalf("%s lost its detail-section binding", key)
+		}
+	}
+	typeText(m, "s")
+	if m.shortcutPrefix != "s" || m.explore.action != nil {
+		t.Fatal("resource actions consumed the Settings prefix")
+	}
+}
+
+func TestSingleLetterActionCommandsKeepOnlyCurrentAliases(t *testing.T) {
+	for _, item := range resourceActionDefinitions {
+		if actionCommand(item.alias) != item.id || actionCommand(item.command) != item.id || len(item.alias) != 1 {
+			t.Fatalf("invalid short action binding: %#v", item)
+		}
+		if global, _ := navigationShortcut(item.alias); global != "" || canonicalCommand(item.alias) != item.alias {
+			t.Fatalf("action alias collides with global: %s", item.alias)
+		}
+	}
+	for _, old := range []string{"ac", "lg", "ex", "sl", "rr", "ed", "dl", "ci", "cv", "xy", "un"} {
+		if actionCommand(old) != "" {
+			t.Fatalf("retired command %s is still active", old)
+		}
+	}
+}
+
+func TestDirectActionEscapeReturnsToOriginWithoutAnExtraMenu(t *testing.T) {
+	for _, stage := range []string{"scale", "export", "pods", "confirm"} {
+		t.Run(stage, func(t *testing.T) {
+			m := exploreModel(t)
+			m.openExploreSelection(1)
+			m.explore.detailValid = true
+			m.explore.scroll = 12
+			m.openResourceActions("delete")
+			a := m.explore.action
+			a.pending, a.stage, a.operation = "", stage, "delete"
+			m.updateResourceActionKey(tea.KeyPressMsg{Code: tea.KeyEscape})
+			if m.explore.action != nil || m.explore.detail == nil || m.explore.tab != 1 || m.explore.scroll != 12 {
+				t.Fatal("direct action Escape lost the originating detail")
+			}
+		})
+	}
+}
+
+func TestDetailActionBarShowsCommonOperationsAndFitsNarrowViews(t *testing.T) {
+	m := exploreModel(t)
+	m.openExploreSelection(0)
+	m.explore.resource = kubernetes.Resource{Name: "deployments", Group: "apps"}
+	text := ansi.Strip(m.resourceActionBar(110))
+	for _, label := range []string{"l Logs", "x Exec", "S Scale", "R Restart", "E Edit", "D Delete", "a More"} {
+		if !strings.Contains(text, label) {
+			t.Fatalf("common action hidden: %s in %s", label, text)
+		}
+	}
+	for _, width := range []int{20, 32, 52, 80, 110} {
+		text := m.resourceActionBar(width)
+		if len(strings.Split(text, "\n")) > 2 || !strings.Contains(ansi.Strip(text), "More") {
+			t.Fatalf("invalid narrow action bar %d: %s", width, text)
+		}
+		for _, line := range strings.Split(text, "\n") {
+			if ansi.StringWidth(line) > width {
+				t.Fatalf("action bar overflows %d columns", width)
+			}
+		}
+	}
+	m.explore.resource = kubernetes.Resource{Name: "services"}
+	text = ansi.Strip(m.resourceActionBar(110))
+	for _, label := range []string{"Logs", "Exec", "Scale", "Restart"} {
+		if strings.Contains(text, label) {
+			t.Fatalf("Service gained unsupported %s", label)
+		}
+	}
+}

@@ -1,4 +1,4 @@
-// Package workspace stores local configuration as immutable, audited revisions.
+// Package workspace stores local configuration and its revision history.
 package workspace
 
 import (
@@ -36,8 +36,8 @@ type Workspace struct {
 	Connections []Connection `json:"connections"`
 }
 
-// Change contains both sides of a save. After is also the authoritative current
-// state, so publishing a configuration never leaves its audit record behind.
+// Change stores the before and after values of a save. After is the saved
+// configuration, so configuration and change history are published together.
 type Change struct {
 	ID          string     `json:"id"`
 	WorkspaceID string     `json:"workspace_id"`
@@ -266,7 +266,7 @@ func (s *Store) history(id string) ([]Change, error) {
 	var previous *Workspace
 	for _, entry := range entries {
 		if strings.HasPrefix(entry.Name(), ".pending-") {
-			continue // Only a fully published revision is authoritative.
+			continue // Ignore revisions whose publication did not finish.
 		}
 		if !entry.IsDir() {
 			return nil, fmt.Errorf("unexpected revision entry %s", filepath.Join(dir, entry.Name()))
