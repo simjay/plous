@@ -22,6 +22,8 @@ The name comes from Greek **πλοῦς**, meaning voyage. Kubernetes is the hel
 
 > **Early development: `0.0.1`.** Plous is not ready to ship.
 
+![Plous showing workspace navigation, Kubernetes cluster health, and the Codex assistant side by side](docs/assets/plous-overview.png)
+
 ## Features
 
 - **Cluster operations:** health, resource usage, YAML editing, events, logs, and container terminals.
