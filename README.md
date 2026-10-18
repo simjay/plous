@@ -1,6 +1,7 @@
 <h1 align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/logo/lockup-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="assets/logo/lockup.svg">
     <img src="assets/logo/lockup.svg" alt="Plous" width="320">
   </picture>
 </h1>
