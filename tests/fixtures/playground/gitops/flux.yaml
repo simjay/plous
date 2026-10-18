@@ -1,0 +1,111 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: flux-example
+  namespace: plous-flux
+  labels:
+    plous.dev/gitops-playground: v1
+spec:
+  interval: 10m
+  url: https://github.com/fluxcd/flux2-kustomize-helm-example
+  ref:
+    commit: 4f1a5b1051b469108d1bdf0ebec6c814427e3834
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: podinfo
+  namespace: plous-flux
+  labels:
+    plous.dev/gitops-playground: v1
+spec:
+  interval: 1m
+  retryInterval: 30s
+  timeout: 2m
+  path: ./apps/staging
+  targetNamespace: plous-flux-demo
+  prune: true
+  wait: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-example
+  commonMetadata:
+    labels:
+      plous.dev/gitops-playground: v1
+  patches:
+    - target:
+        kind: HelmRelease
+        name: podinfo
+      patch: |
+        apiVersion: helm.toolkit.fluxcd.io/v2
+        kind: HelmRelease
+        metadata:
+          name: podinfo
+        spec:
+          interval: 1m
+          chart:
+            spec:
+              version: 6.11.2
+          test:
+            enable: false
+          values:
+            replicaCount: 1
+            redis:
+              enabled: false
+            httpRoute:
+              enabled: false
+            resources:
+              requests: {cpu: 25m, memory: 32Mi}
+              limits: {memory: 128Mi}
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: broken-path
+  namespace: plous-flux
+  labels:
+    plous.dev/gitops-playground: v1
+spec:
+  interval: 1m
+  retryInterval: 30s
+  path: ./plous-deliberately-missing
+  targetNamespace: plous-flux-demo
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-example
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: waiting-on-dependency
+  namespace: plous-flux
+  labels:
+    plous.dev/gitops-playground: v1
+spec:
+  interval: 1m
+  dependsOn:
+    - name: broken-path
+  path: ./plous-deliberately-missing
+  targetNamespace: plous-flux-demo
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-example
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: paused-example
+  namespace: plous-flux
+  labels:
+    plous.dev/gitops-playground: v1
+spec:
+  suspend: true
+  interval: 1m
+  path: ./plous-deliberately-missing
+  targetNamespace: plous-flux-demo
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-example

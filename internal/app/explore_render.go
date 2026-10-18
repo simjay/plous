@@ -2,25 +2,14 @@ package app
 
 import (
 	"strings"
-	"time"
 
-	"charm.land/lipgloss/v2"
+	lipgloss "charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/simjay/plous/internal/kubernetes"
+	"github.com/simjay/plous/internal/app/monitor"
+	kubernetes "github.com/simjay/plous/internal/integrations/kubernetes/monitor"
+	"github.com/simjay/plous/internal/ui"
+	textview "github.com/simjay/plous/internal/ui/text"
 )
-
-var exploreTabs = []string{"Describe", "YAML", "Events", "Related", "Logs"}
-
-var logRanges = []struct {
-	label   string
-	seconds int64
-}{
-	{"Latest 200 lines", 0}, {"Last minute", 60}, {"Last 5 minutes", 300}, {"Last 15 minutes", 900}, {"Last hour", 3600}, {"Last 6 hours", 21600}, {"Last 24 hours", 86400},
-}
-
-func resourceTitle(resource kubernetes.Resource) string {
-	return kubernetes.ResourceTitle(resource)
-}
 
 func (m *model) exploreHeader(width int) string {
 	e := m.explorer()
@@ -28,45 +17,38 @@ func (m *model) exploreHeader(width int) string {
 	if c == nil {
 		return ""
 	}
-	ns := e.preference.Namespace
+	ns := e.Preference.Namespace
 	if ns == "" {
 		ns = "all namespaces"
 	}
-	if e.resource.Name != "" && !e.resource.Namespaced {
+	if e.Resource.Name != "" && !e.Resource.Namespaced {
 		ns = "cluster-scoped"
 	}
-	contextLabel := muted.Render("ctx ") + titleStyle.Render(oneLine(c.Settings["context"]))
-	namespace := selected.Render("[ " + oneLine(ns) + " ▾ ]")
-	namespaceHint := muted.Render(" n")
-	if e.resource.Name != "" && !e.resource.Namespaced {
-		namespace = muted.Render("cluster-scoped")
-		namespaceHint = ""
-	}
-	header := clipped(contextLabel+"  "+namespace+namespaceHint, width)
-	if ansi.StringWidth(contextLabel+"  "+namespace+namespaceHint) > width {
-		header = clipped(contextLabel, width) + "\n" + clipped(namespace, max(1, width-ansi.StringWidth(namespaceHint))) + namespaceHint
-	}
-	title := kubernetes.Category(e.resource) + " / " + resourceTitle(e.resource)
-	if e.resource.Name == "" {
+	header := ui.ScopeHeader(c.Settings["context"], ns, e.Resource.Name == "" || e.Resource.Namespaced, width)
+	title := kubernetes.Category(e.Resource) + " / " + monitor.ResourceTitle(e.Resource)
+	if e.Resource.Name == "" {
 		title = "Kubernetes Explore"
 	}
-	state := e.status
-	if e.connecting || (!e.listed && e.err == "") {
+	state := e.Status
+	if e.Connecting || (!e.Listed && e.Err == "") {
 		state = ""
 	}
-	if e.err != "" {
+	if e.Err != "" {
 		state = "Unavailable"
-		if len(e.collection.Objects) > 0 {
+		if len(e.Collection.Objects) > 0 {
 			state = "Stale"
 		}
 	}
-	state = clipped(oneLine(state), max(1, min(24, width/3)))
+	state = ui.Clipped(ui.OneLine(state), max(1, min(24, width/3)))
 	if ansi.StringWidth(title)+ansi.StringWidth(state)+4 > width {
-		title = resourceTitle(e.resource)
+		title = monitor.ResourceTitle(e.Resource)
 	}
-	heading := gradientHeading(clipped(title, max(1, width-ansi.StringWidth(state)-3)))
-	heading += strings.Repeat(" ", max(1, width-ansi.StringWidth(heading)-ansi.StringWidth(state))) + resourceStatusStyle(state).Render(oneLine(state))
-	header += "\n" + clipped(heading, width)
+	heading := ui.Heading(ui.Clipped(title, max(1, width-ansi.StringWidth(state)-3)))
+	if e.Detail == nil && e.Input == nil && e.Picker == "" {
+		heading = ui.MouseTarget(heading, "resource-types/")
+	}
+	heading += strings.Repeat(" ", max(1, width-ansi.StringWidth(heading)-ansi.StringWidth(state))) + ui.ResourceStatusStyle(state).Render(ui.OneLine(state))
+	header += "\n" + ui.Clipped(heading, width)
 	return header
 }
 
@@ -78,10 +60,10 @@ func (m *model) exploreBody(width, height int) string {
 	if m.documentActive() {
 		return m.documentBody(width, height)
 	}
-	if e.terminal != nil {
+	if e.Terminal != nil {
 		return m.terminalBody(width, height)
 	}
-	if e.picker == "connections" {
+	if e.Picker == "connections" {
 		return m.explorePickerBody(width, height)
 	}
 	c := m.currentConnection()
@@ -89,34 +71,37 @@ func (m *model) exploreBody(width, height int) string {
 		return "Choose a Kubernetes connection with :K."
 	}
 	header := m.exploreHeader(width)
-	available := max(0, height-lipgloss.Height(header)-2)
+	gap := "\n\n"
+	if height < 14 {
+		gap = "\n"
+	}
+	available := m.exploreContentHeight(width, height)
 	var body string
-	if e.input != nil && e.picker == "" {
-		label := map[string]string{"namespace": "Namespace (* = all)", "filter": "Filter", "selector": "Label selector"}[e.inputKind]
-		body = titleStyle.Render(label) + "\n" + selected.Render(editorLine(*e.input, width, m.focus == 1)) + "\n" + muted.Render("Enter apply · Esc cancel")
-		if e.inputKind == "filter" {
-			body = searchField(*e.input, width, m.focus == 1, "Filter resources", "Type to filter…", "") + "\n" + muted.Render("Enter apply · Esc cancel")
+	if e.Input != nil && e.Picker == "" {
+		label := map[string]string{"namespace": "Namespace (* = all)", "filter": "Filter", "selector": "Label selector"}[e.InputKind]
+		body = ui.TitleStyle.Render(label) + "\n" + ui.Selected.Render(ui.EditorLine(*e.Input, width, m.focus == 1)) + "\n" + ui.Muted.Render("Enter apply · Esc cancel")
+		if e.InputKind == "filter" {
+			body = ui.SearchField(*e.Input, width, m.focus == 1, "Filter resources", "Type to filter…", "") + "\n" + ui.Muted.Render("Enter apply · Esc cancel")
 		}
 		inputHeight := lipgloss.Height(body)
 		if available > inputHeight+2 {
 			body += "\n\n" + m.exploreTableBody(width, available-inputHeight-2)
 		}
-	} else if e.detail != nil {
+	} else if m.chartsActive() {
+		body = m.chartsBody(width, available)
+	} else if e.Detail != nil {
 		body = m.exploreDetailBody(width, available)
-	} else if e.connecting {
+	} else if e.Connecting {
 		body = m.loading("Discovering Kubernetes APIs…")
-	} else if e.err != "" && len(e.collection.Objects) == 0 {
-		body = textView(e.err+"\n\ng Retry · n Namespace · :kinds Resource types", width, available, 0)
+	} else if e.Err != "" && len(e.Collection.Objects) == 0 {
+		body = ui.TextView(e.Err+"\n\ng Retry · n Namespace · Esc Browse resources", width, available, 0)
 	} else {
 		body = m.exploreTableBody(width, available)
 	}
-	base := styledView(header+"\n\n"+body, width, height)
-	if e.picker != "" {
-		base = lipgloss.NewStyle().Width(width).Height(height).MaxHeight(height).Render(base)
-		pickerWidth := max(12, min(width, 70))
-		pickerHeight := max(3, min(height, 18))
-		window := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(accent).Background(surface).Padding(0, 1).Width(pickerWidth).Height(pickerHeight).MaxWidth(pickerWidth).MaxHeight(pickerHeight).Render(m.explorePickerBody(pickerWidth-4, pickerHeight-2))
-		return centeredOverlay(base, window)
+	base := ui.StyledView(header+gap+body, width, height)
+	if e.Picker != "" {
+		pickerWidth, pickerHeight := ui.PickerSize(width, height)
+		return ui.PickerOverlay(base, m.explorePickerBody(pickerWidth-4, pickerHeight-2), width, height)
 	}
 	return base
 }
@@ -126,118 +111,133 @@ func (m *model) exploreTableBody(width, height int) string {
 		return ""
 	}
 	e := m.explorer()
-	if !e.listed && e.err == "" {
-		return styledTextView(m.loading("Loading "+resourceTitle(e.resource)+"…"), width, height, 0)
+	if !e.Listed && e.Err == "" {
+		return ui.StyledTextView(m.loading("Loading "+monitor.ResourceTitle(e.Resource)+"…"), width, height, 0)
 	}
 	columns, rows := m.exploreRows()
 	var before []string
-	if e.input == nil || e.inputKind != "filter" {
-		if e.preference.Filter == "" {
-			before = append(before, muted.Render(clipped("/ Filter resources", width)))
-		} else {
-			filter := searchField(newEditor(e.preference.Filter), width, false, "Filter resources", "", "Backspace clear")
+	if e.Input == nil || e.InputKind != "filter" {
+		if e.Preference.Filter == "" && len(rows) > 0 {
+			hint := ui.MouseTarget(ui.Muted.Render("/ Filter resources"), "search")
+			if m.chartsAvailable() {
+				hint += ui.MouseTarget(ui.Muted.Render(" · I Top consumers"), "action/I")
+			}
+			before = append(before, ui.Clipped(hint, width))
+		} else if e.Preference.Filter != "" {
+			filter := ui.SearchField(textview.NewField(e.Preference.Filter), width, false, "Filter resources", "", "Backspace clear")
 			before = append(before, strings.Split(filter, "\n")...)
 		}
 	}
-	if e.preference.Selector != "" {
-		before = append(before, muted.Render(clipped("Labels: "+oneLine(e.preference.Selector), width)))
+	if e.Preference.Selector != "" {
+		before = append(before, ui.Muted.Render(ui.Clipped("Labels: "+ui.OneLine(e.Preference.Selector), width)))
 	}
-	if e.warning != "" {
-		before = append(before, changedStyle.Render(clipped(e.warning, width)))
+	if e.Warning != "" {
+		before = append(before, ui.ChangedStyle.Render(ui.Clipped(e.Warning, width)))
 	}
-	if e.err != "" {
-		before = append(before, changedStyle.Render(clipped(e.err, width)))
+	if e.Err != "" {
+		before = append(before, ui.ChangedStyle.Render(ui.Clipped(e.Err, width)))
 	}
-	if e.collection.Truncated {
-		before = append(before, changedStyle.Render("First 10,000 objects. Narrow the namespace or labels."))
+	if e.Collection.Truncated {
+		before = append(before, ui.ChangedStyle.Render("First 10,000 objects. Narrow the namespace or labels."))
+	}
+	if len(rows) > 0 && e.Usage != nil && e.Usage.Err != "" {
+		before = append(before, ui.Muted.Render(ui.Clipped("Usage N/A: "+e.Usage.Err, width)))
 	}
 	if len(rows) == 0 {
-		message := "No " + resourceTitle(e.resource) + " found."
-		if e.resource.Namespaced {
-			message = "No " + resourceTitle(e.resource) + " across all namespaces."
-			if e.preference.Namespace != "" {
-				message = "No " + resourceTitle(e.resource) + " in namespace " + e.preference.Namespace + "."
-			}
+		body := m.exploreEmptyBody(width, max(0, height-len(before)))
+		if len(before) > 0 {
+			body = strings.Join(before, "\n") + "\n" + body
 		}
-		if e.preference.Filter != "" || e.preference.Selector != "" {
-			message = "No resources match this filter."
-		}
-		before = append(before, oneLine(message), "")
-		if e.resource.Namespaced && e.preference.Namespace != "" {
-			before = append(before, selected.Render(":N *  Show all namespaces"))
-		}
-		before = append(before, muted.Render(":k Resource types · n Namespace · / Filter"))
-		return styledTextView(strings.Join(before, "\n"), width, height, 0)
+		return ui.StyledView(body, width, height)
 	}
-	indices := []int{}
-	for i, column := range columns {
-		if column == "Namespace" && e.preference.Namespace != "" {
-			continue
-		}
-		indices = append(indices, i)
-	}
-	indices, widths, compact := resourceTableColumns(columns, rows, indices, width, e.resource.Key() == "pods")
+	indices, widths, compact := e.TableColumns(width)
 	if compact {
 		return m.compactResourceList(columns, rows, before, width, height)
 	}
 	line := func(cells []string, heading, active bool) string {
-		parts := make([]string, len(indices))
-		for i, index := range indices {
-			text := clipped(oneLine(cells[index]), widths[i])
-			style := lipgloss.NewStyle()
-			if heading {
-				style = muted
-			} else if columns[index] == "Status" || (e.resource.Name == "events" && columns[index] == "Type") {
-				style = resourceStatusStyle(cells[index])
-			} else if columns[index] == "Age" {
-				style = muted
-			} else if active && index == 0 {
-				style = titleStyle
+		return ui.CollectionTableRow(columns, cells, indices, widths, width, heading, active, func(column, value string) lipgloss.Style {
+			if column == "Status" || e.Resource.Name == "events" && column == "Type" {
+				return ui.ResourceStatusStyle(value)
 			}
-			if active {
-				style = style.Background(highlight)
+			if column == "Age" {
+				return ui.Muted
 			}
-			parts[i] = style.Render(text + strings.Repeat(" ", max(0, widths[i]-ansi.StringWidth(text))))
-		}
-		separator := "  "
-		if active {
-			separator = lipgloss.NewStyle().Background(highlight).Render(separator)
-		}
-		text := clipped(strings.Join(parts, separator), width)
-		if active {
-			text = lipgloss.NewStyle().Foreground(foreground).Background(highlight).Width(width).Render(text)
-		}
-		return text
+			return lipgloss.NewStyle()
+		})
 	}
 	headings := append([]string(nil), columns...)
-	if e.preference.Sort < len(headings) && e.preference.Sort >= 0 {
+	if e.Preference.Sort < len(headings) && e.Preference.Sort >= 0 {
 		mark := " ↑"
-		if e.preference.Descending {
+		if e.Preference.Descending {
 			mark = " ↓"
 		}
-		headings[e.preference.Sort] += mark
+		headings[e.Preference.Sort] += mark
 	}
-	before = append(before, line(headings, true, false), muted.Render(strings.Repeat("─", width)))
-	items := make([]string, 0, len(rows))
+	before = append(before, line(headings, true, false), ui.Muted.Render(strings.Repeat("─", width)))
 	cursor := 0
 	for i, row := range rows {
-		active := kubernetes.Identity(row.Object) == e.selected
-		if active {
+		if kubernetes.Identity(row.Object) == e.Selected {
 			cursor = i
+			break
 		}
-		items = append(items, line(row.Cells, false, active))
 	}
 	available := max(0, height-len(before)-1)
-	return strings.Join(before, "\n") + "\n" + scrollSelection(items, cursor, available) + "\n" + muted.Render(clipped(m.resourceCountSummary(rows), width))
+	start, end := ui.SelectionWindow(len(rows), cursor, available)
+	items := make([]string, 0, end-start)
+	for i := start; i < end; i++ {
+		items = append(items, ui.MouseTarget(line(rows[i].Cells, false, kubernetes.Identity(rows[i].Object) == e.Selected), "resource/"+mouseResourceID(rows[i].Object)))
+	}
+	return strings.Join(before, "\n") + "\n" + strings.Join(items, "\n") + "\n" + ui.Muted.Render(ui.Clipped(m.resourceCountSummary(rows), width))
+}
+
+func (m *model) exploreEmptyBody(width, height int) string {
+	title, description, actions := m.exploreEmptyState()
+	return ui.EmptyCollection(title, description, actions, width, height)
+}
+
+func (m *model) exploreEmptyState() (string, string, []textview.Action) {
+	e := m.explorer()
+	title := "No " + monitor.ResourceTitle(e.Resource) + " found."
+	description := "Choose another resource in the sidebar, or refresh to check again."
+	actions := []textview.Action{{Key: "g", Label: "Refresh"}}
+	if e.Resource.Namespaced {
+		title = "No " + monitor.ResourceTitle(e.Resource) + " across all namespaces."
+		if e.Preference.Namespace != "" {
+			title = "No " + monitor.ResourceTitle(e.Resource) + " in namespace " + e.Preference.Namespace + "."
+			description = "Try another namespace, or choose All namespaces in the namespace picker."
+			actions = append([]textview.Action{{Key: "n", Label: "Choose namespace"}}, actions...)
+		}
+	}
+	if e.Preference.Filter != "" || e.Preference.Selector != "" {
+		title = "No matching " + monitor.ResourceTitle(e.Resource) + "."
+		description = "Try clearing the text filter."
+		actions = nil
+		if e.Preference.Filter != "" {
+			actions = append(actions, textview.Action{Key: "Backspace", Label: "Clear text filter", Mouse: "action/backspace"})
+		}
+		if e.Preference.Selector != "" {
+			description = "Try changing or removing the label selector."
+			if e.Preference.Filter != "" {
+				description = "Try clearing the text filter or changing the label selector."
+			}
+			actions = append(actions, textview.Action{Key: "L", Label: "Edit label selector"})
+		}
+	} else if m.leftHidden && len(actions) == 1 {
+		actions = append(actions, textview.Action{Key: "bb", Label: "Show sidebar"})
+	}
+	if e.Input != nil {
+		actions = nil
+	}
+	return title, description, actions
 }
 
 func (m *model) resourceBackLabel() string {
 	e := m.explorer()
-	if e.tab == 1 {
-		if e.yamlOrigin != nil {
-			return "Esc " + exploreTabs[e.yamlOrigin.tab]
+	if e.Tab == 1 {
+		if e.YamlOrigin != nil {
+			return "Esc " + monitor.ExploreTabs[e.YamlOrigin.Tab]
 		}
-		if len(e.trail) == 0 {
+		if len(e.Trail) == 0 {
 			return "Esc list"
 		}
 	}
@@ -246,133 +246,122 @@ func (m *model) resourceBackLabel() string {
 
 func (m *model) resourceSectionTabs(width int) string {
 	e := m.explorer()
-	tabs := exploreTabs
-	if e.tab != 4 {
+	tabs := monitor.ExploreTabs
+	if e.Tab != 4 {
 		tabs = tabs[:4]
 	}
-	if e.tab < 0 || e.tab >= len(tabs) {
+	if e.Tab < 0 || e.Tab >= len(tabs) {
 		return ""
 	}
 	labels := make([]string, len(tabs))
 	keys := []string{"d", "y", "e", "r", "l"}
-	if e.tab == 1 {
+	if e.Tab == 1 {
 		keys[1] = ":y" // The YAML reader owns y for copying.
 	}
 	for i, tab := range tabs {
 		label := keys[i] + " " + tab
-		labels[i] = muted.Render(label)
-		if e.tab == i {
-			labels[i] = selected.Render("[" + label + "]")
+		labels[i] = ui.Muted.Render(label)
+		if e.Tab == i {
+			labels[i] = ui.Selected.Render("[" + label + "]")
 		}
+		labels[i] = ui.MouseTarget(labels[i], "section/"+[]string{"d", "y", "e", "r", "l"}[i])
 	}
 	tabLine := strings.Join(labels, "   ")
 	if ansi.StringWidth(tabLine) > width {
-		tabLine = selected.Render("["+keys[e.tab]+" "+tabs[e.tab]+"]") + muted.Render(" · [ ] sections")
+		tabLine = ui.Selected.Render("["+keys[e.Tab]+" "+tabs[e.Tab]+"]") + ui.Muted.Render(" · [ ] sections")
 	}
-	return clipped(tabLine, width)
+	return ui.Clipped(tabLine, width)
 }
 
 func (m *model) exploreDetailBody(width, height int) string {
 	e := m.explorer()
-	if e.detail == nil || height <= 0 {
+	if e.Detail == nil || height <= 0 {
 		return ""
 	}
-	if e.tab == 4 {
+	if e.Tab == 4 {
 		return m.exploreLogBody(width, height)
 	}
-	object := e.detail
-	tabLine := m.resourceSectionTabs(width)
-	back := m.resourceBackLabel()
-	identity := titleStyle.Render(clipped(oneLine(object.GetName()), max(1, width-ansi.StringWidth(back)-5))) + muted.Render("  ‹ "+back)
-	if e.detailRun != nil {
-		identity = clipped(identity+muted.Render(" · Refreshing…"), width)
-	}
-	heading := identity + "\n" + clipped(tabLine, width)
-	if e.tab == 4 {
-		heading = identity + "\n" + selected.Render("Logs")
-	} else {
-		heading += "\n\n" + m.resourceActionBar(width)
-		if e.tab == 0 && e.resource.Key() == "pods" {
-			heading += "\n" + clipped(selected.Render("o Choose container")+muted.Render(" · "+oneLine(e.container)), width)
-		}
-	}
-	heading += "\n"
+	heading, text := m.exploreDetailContent(width, height)
 	available := max(0, height-lipgloss.Height(heading))
-	if !e.detailValid && e.detailRun == nil && (e.detailText != "" || e.detailError != "") {
-		if m.searches[1] != nil {
-			return heading + "\n" + m.findText(1, plain(strings.TrimSpace(e.detailError+"\n"+e.detailText)), width, available, e.scroll)
-		}
-		return heading + "\n" + textView(strings.TrimSpace(e.detailError+"\n"+e.detailText), width, available, e.scroll)
-	}
-	var text string
-	switch e.tab {
-	case 0:
-		text = m.resourceSummary(width)
-	case 1:
+	failed := !e.DetailValid && e.DetailRun == nil && (e.DetailError != "" || e.DetailText != "")
+	if e.Tab == 1 && !failed {
 		return heading + "\n" + m.yamlDocumentBody(width, available)
-	case 2:
-		text = e.detailText
-		if e.detailRun != nil && !e.detailLoaded {
-			text = m.loading("Loading events…")
-		}
-	case 3:
+	}
+	if e.Tab == 3 && !failed {
 		text = m.relatedBody(width, available)
 	}
-	if e.detailError != "" {
-		text = e.detailError + "\n\n" + text
-	}
-	if m.searches[1] != nil {
-		if e.tab != 0 {
-			text = plain(text)
+	if m.activePanelSearch(1) != nil {
+		if e.Tab != 0 {
+			text = ui.Plain(text)
 		}
-		return heading + "\n" + m.findText(1, text, width, available, e.scroll)
+		return heading + "\n" + m.findText(1, text, width, available, e.Scroll)
 	}
-	if e.tab == 3 {
-		return heading + "\n" + styledView(text, width, available)
+	layout := ui.MeasureScroll(heading, text, width, height)
+	if e.Tab == 3 && !failed {
+		return layout.View(0)
 	}
-	if e.tab == 0 {
-		return heading + "\n" + styledTextView(text, width, available, e.scroll)
+	return layout.View(e.Scroll)
+}
+
+func (m *model) exploreDetailContent(width, height int) (string, string) {
+	e := m.explore
+	heading := m.exploreDetailHeading(width, height)
+	var text string
+	if !e.DetailValid && e.DetailRun == nil && (e.DetailText != "" || e.DetailError != "") {
+		text = ui.Plain(strings.TrimSpace(e.DetailError + "\n" + e.DetailText))
+	} else {
+		switch e.Tab {
+		case 0:
+			text = m.resourceSummary(width)
+		case 2:
+			text = ui.Plain(e.DetailText)
+			if e.DetailRun != nil && !e.DetailLoaded {
+				text = m.loading("Loading events…")
+			}
+		}
+		if e.DetailError != "" {
+			text = ui.Plain(e.DetailError) + "\n\n" + text
+		}
 	}
-	return heading + "\n" + textView(text, width, available, e.scroll)
+	return heading, text
+}
+
+func (m *model) exploreDetailLayout(width, height int) ui.ScrollLayout {
+	heading, text := m.exploreDetailContent(width, height)
+	return ui.MeasureScroll(heading, text, width, height)
 }
 
 func (m *model) exploreDetailScrollLimit() int {
 	width := max(1, m.panelWidths()[1]-4)
-	height := max(0, m.height-6-lipgloss.Height(m.exploreHeader(width))-2)
-	if m.command != nil {
-		height = max(0, height-3)
+	height := m.exploreContentHeight(width, m.mainBodyHeight())
+	layout := m.exploreDetailLayout(width, height)
+	if m.explore.Tab == 3 {
+		related, _, _ := m.relatedViewport(width, layout.Height)
+		return related.Limit
 	}
-	// Measure the same wrapped content without clipping it to the visible viewport.
-	content := m.exploreDetailBody(width, 1<<30)
-	return max(0, strings.Count(content, "\n")+1-height)
+	if m.activePanelSearch(1) != nil {
+		return max(0, len(layout.Rows)-max(0, layout.Height-ui.SearchBarHeight))
+	}
+	return layout.Limit
 }
 
 func (m *model) explorePickerBody(width, height int) string {
 	e := m.explorer()
-	if e.picker == "namespace" {
+	if e.Picker == "namespace" {
 		return m.namespacePickerBody(width, height)
 	}
 	var items []string
 	heading := ""
 	hint := "Enter choose · Esc close"
-	switch e.picker {
-	case "kinds":
-		heading = "Resource kinds\n" + muted.Render("← "+m.exploreCategory()+" →")
-		for _, resource := range m.exploreKinds() {
-			label := resourceTitle(resource)
-			if resource.Group != "" {
-				label += " · " + resource.Group
-			}
-			items = append(items, label)
-		}
+	switch e.Picker {
 	case "connections":
 		heading = "Choose Kubernetes connection"
 		for _, choice := range m.exploreConnections() {
-			items = append(items, choice.label)
+			items = append(items, choice.Label)
 		}
 	case "containers":
 		heading = "Choose container"
-		if e.detail != nil {
+		if e.Detail != nil {
 			items = m.logContainers()
 		}
 	case "sort":
@@ -381,37 +370,43 @@ func (m *model) explorePickerBody(width, height int) string {
 		hint = "Enter sort / reverse · Esc close"
 	case "logrange":
 		heading = "Log time range"
-		for _, entry := range logRanges {
-			items = append(items, entry.label)
+		for _, entry := range monitor.LogRanges {
+			items = append(items, entry.Label)
 		}
 	}
-	if e.input != nil {
-		heading += "\n" + searchField(*e.input, width, m.focus == 1, "Search", "Type to search…", "")
+	if e.Input != nil {
+		heading += "\n" + ui.SearchField(*e.Input, width, m.focus == 1, "Search", "Type to search…", "")
 	}
 	headingLines := len(strings.Split(heading, "\n"))
 	if len(items) == 0 {
 		message := "No matching resources."
-		if e.connecting {
+		if e.Connecting {
 			message = m.loading("Discovering APIs…")
 		}
-		if e.picker == "connections" {
+		if e.Picker == "connections" {
 			message = "No Kubernetes connections. Add one in Settings."
 		}
-		return styledView(heading+"\n\n"+message+"\n"+hint, width, height)
+		return ui.StyledView(heading+"\n\n"+message+"\n"+hint, width, height)
 	}
-	return styledView(heading+"\n\n"+listView(items, e.pickerCursor, width, max(1, height-headingLines-3))+"\n\n"+muted.Render(hint), width, height)
+	return ui.StyledView(heading+"\n\n"+ui.ListView(items, e.PickerCursor, width, max(1, height-headingLines-3))+"\n\n"+ui.Muted.Render(hint), width, height)
 }
 
 func (m *model) exploreHint() string {
 	e := m.explorer()
-	if e.picker != "" || e.input != nil {
+	if e.Picker != "" || e.Input != nil {
 		return "↑↓ choose · Enter apply · Esc cancel"
 	}
-	if e.detail != nil {
-		if e.tab == 0 && e.resource.Key() == "pods" {
+	if m.chartsActive() {
+		if e.Detail == nil {
+			return "↑↓ Scroll · I List · / Filter · Esc Back · hh Help"
+		}
+		return "←/→ Inspect · W Range · P Latest · Esc Back · hh Help"
+	}
+	if e.Detail != nil {
+		if e.Tab == 0 && e.Resource.Key() == "pods" {
 			return "o Choose container · / Find · Esc Back · hh Help"
 		}
-		if e.tab == 4 {
+		if e.Tab == 4 {
 			viewer := m.podLogViewer()
 			if viewer.Reader.Searching {
 				return "Enter Finish search · Esc Cancel search"
@@ -422,34 +417,59 @@ func (m *model) exploreHint() string {
 			}
 			return follow + " · / Find · Esc " + viewer.Reader.EscapeLabel("Back") + " · hh Help"
 		}
-		if e.tab == 1 && e.resource.Key() == "secrets" {
+		if e.Tab == 1 && e.Resource.Key() == "secrets" {
 			return "/ find · v reveal/hide values · [ ] sections · Esc back"
 		}
 		return "a More actions · / Find · Esc Back · hh Help"
 	}
 	back := m.sidebarHint()
-	if len(e.trail) > 0 {
+	if m.leftHidden {
+		back = "Esc Browse resources"
+	}
+	if len(e.Trail) > 0 {
 		back = "Esc Back"
 	}
-	if e.err != "" {
+	if e.Err != "" {
 		return "g Retry · n Namespace · " + back + " · hh Help"
+	}
+	if e.Listed && !e.Connecting {
+		if _, rows := m.exploreRows(); len(rows) == 0 {
+			_, _, actions := m.exploreEmptyState()
+			var hints []string
+			for _, action := range actions {
+				if action.Key != "bb" {
+					hints = append(hints, action.Key+" "+action.Label)
+				}
+			}
+			return strings.Join(append(hints, back, "hh Help"), " · ")
+		}
 	}
 	return "Enter Open · / Filter · n Namespace · " + back + " · hh Help"
 }
 
-func displayLogText(text string, timestamps bool) string {
-	if timestamps {
-		return text
+func (m *model) exploreDetailHeading(width, height int) string {
+	e := m.explorer()
+	if e.Detail == nil {
+		return ""
 	}
-	lines := strings.Split(text, "\n")
-	for i, line := range lines {
-		stamp, rest, found := strings.Cut(line, " ")
-		if !found {
-			continue
-		}
-		if _, err := time.Parse(time.RFC3339Nano, stamp); err == nil {
-			lines[i] = rest
+	object := e.Detail
+	tabLine := m.resourceSectionTabs(width)
+	back := m.resourceBackLabel()
+	identity := ui.TitleStyle.Render(ui.Clipped(ui.OneLine(object.GetName()), max(1, width-ansi.StringWidth(back)-5))) + ui.Muted.Render("  ‹ "+back)
+	if e.DetailRun != nil {
+		identity = ui.Clipped(identity+ui.Muted.Render(" · Refreshing…"), width)
+	}
+	heading := identity + "\n" + ui.Clipped(tabLine, width)
+	if e.Tab == 4 {
+		heading = identity + "\n" + ui.Selected.Render("Logs")
+	} else if height >= 10 {
+		heading += "\n\n" + m.resourceActionBar(width)
+		if e.Tab == 0 && e.Resource.Key() == "pods" {
+			heading += "\n" + ui.Clipped(ui.Selected.Render("o Choose container")+ui.Muted.Render(" · "+ui.OneLine(e.Container)), width)
 		}
 	}
-	return strings.Join(lines, "\n")
+	if height >= 10 {
+		heading += "\n"
+	}
+	return heading
 }

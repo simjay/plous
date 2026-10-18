@@ -1,23 +1,23 @@
 package app
 
 import (
+	tea "charm.land/bubbletea/v2"
 	"context"
+	"github.com/charmbracelet/x/vt"
+	"github.com/simjay/plous/internal/app/monitor"
 	"testing"
 	"time"
-
-	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/vt"
 )
 
 func TestAuditTerminalCloseUnblocksPendingTerminalReply(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	tm := &resourceTerminal{emulator: vt.NewSafeEmulator(80, 24), cancel: cancel}
-	t.Cleanup(tm.close)
+	tm := &monitor.ResourceTerminal{Emulator: vt.NewSafeEmulator(80, 24), Cancel: cancel}
+	t.Cleanup(tm.Close)
 	finished := make(chan struct{})
 	go func() {
 		// A cursor query sends a reply through the input pipe. No reader is
 		// attached, which exercises closing while the output writer is blocked.
-		_, _ = tm.emulator.Write([]byte("\x1b[6n"))
+		_, _ = tm.Emulator.Write([]byte("\x1b[6n"))
 		close(finished)
 	}()
 	select {
@@ -25,7 +25,7 @@ func TestAuditTerminalCloseUnblocksPendingTerminalReply(t *testing.T) {
 		t.Fatal("cursor reply unexpectedly had an input consumer")
 	case <-time.After(10 * time.Millisecond):
 	}
-	tm.close()
+	tm.Close()
 	select {
 	case <-finished:
 	case <-time.After(time.Second):
@@ -41,17 +41,17 @@ func TestAuditActionButtonsAcceptHelpAndRestoreTheirState(t *testing.T) {
 		t.Run(stage, func(t *testing.T) {
 			m := exploreModel(t)
 			m.openExploreSelection(0)
-			m.explore.detailValid = true
+			m.explore.DetailValid = true
 			m.openResourceActions("")
-			a := m.explore.action
-			a.pending, a.stage = "", stage
+			a := m.explore.Action
+			a.Pending, a.Stage = "", stage
 			m.Update(tea.KeyPressMsg{Code: 'h', Text: "h"})
 			m.Update(tea.KeyPressMsg{Code: 'h', Text: "h"})
 			if m.help == nil {
 				t.Fatal("Help shortcut was swallowed by a resource action's navigation controls")
 			}
 			press(t, m, "esc")
-			if m.help != nil || m.explore.action != a || a.stage != stage {
+			if m.help != nil || m.explore.Action != a || a.Stage != stage {
 				t.Fatal("Help did not restore the retained action state")
 			}
 		})
@@ -59,7 +59,7 @@ func TestAuditActionButtonsAcceptHelpAndRestoreTheirState(t *testing.T) {
 }
 
 func TestAuditExecDoubleQuotedArgumentPreservesLiteralBackslash(t *testing.T) {
-	args, err := splitExecCommand(`/bin/sh -c "printf '\n'"`)
+	args, err := monitor.SplitExecCommand(`/bin/sh -c "printf '\n'"`)
 	if err != nil || len(args) != 3 || args[2] != `printf '\n'` {
 		t.Fatalf("quoted command was changed: %#v %v", args, err)
 	}

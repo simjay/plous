@@ -11,20 +11,21 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/simjay/plous/internal/kubernetes"
+	"github.com/simjay/plous/internal/app/monitor"
+	kubernetes "github.com/simjay/plous/internal/integrations/kubernetes/monitor"
 )
 
 func TestResourceSectionsShareHeaderAndRefreshWithoutMovingContent(t *testing.T) {
 	m := exploreModel(t)
 	m.openExploreSelection(0)
 	e := m.explore
-	e.detailValid = true
+	e.DetailValid = true
 	for tab := range 4 {
 		m.openExploreSelection(tab)
-		e.detailValid = true
+		e.DetailValid = true
 		before := ansi.Strip(m.exploreBody(100, 40))
 		_, cancel := context.WithCancel(context.Background())
-		e.detailRun = &exploreDetailRun{cancel: cancel}
+		e.DetailRun = &monitor.ExploreDetailRun{Cancel: cancel}
 		after := ansi.Strip(m.exploreBody(100, 40))
 		for _, s := range []string{"ctx test-context", "Workloads / Pods", "checkout", "d Describe", "e Events", "r Related"} {
 			if !strings.Contains(before, s) || !strings.Contains(after, s) {
@@ -42,7 +43,7 @@ func TestResourceSectionsShareHeaderAndRefreshWithoutMovingContent(t *testing.T)
 			}
 		}
 		cancel()
-		e.detailRun = nil
+		e.DetailRun = nil
 	}
 }
 
@@ -52,28 +53,28 @@ func TestDetailSectionCacheRetainsContentAndSeparatesIdentities(t *testing.T) {
 	e := m.explore
 	m.syncExploreDetail()
 	supplement := []kubernetes.DetailSection{{Title: "Supplement", Fields: []kubernetes.DetailField{{Label: "Evidence", Value: "retained"}}}}
-	m.updateExploreMessage(exploreDetailResult{run: e.detailRun, object: e.detail.DeepCopy(), supplement: supplement})
+	m.updateExploreMessage(monitor.ExploreDetailResult{Run: e.DetailRun, Object: e.Detail.DeepCopy(), Supplement: supplement})
 	m.openExploreSelection(2)
 	m.syncExploreDetail()
-	m.updateExploreMessage(exploreDetailResult{run: e.detailRun, object: e.detail.DeepCopy(), text: "cached event"})
+	m.updateExploreMessage(monitor.ExploreDetailResult{Run: e.DetailRun, Object: e.Detail.DeepCopy(), Text: "cached event"})
 	m.openExploreSelection(0)
 	m.syncExploreDetail()
-	if !e.detailLoaded || len(e.supplement) != 1 {
+	if !e.DetailLoaded || len(e.Supplement) != 1 {
 		t.Fatal("Describe discarded cached supplement")
 	}
-	late := e.detailRun
+	late := e.DetailRun
 	m.openExploreSelection(2)
 	m.syncExploreDetail()
 	if !strings.Contains(ansi.Strip(m.exploreBody(100, 40)), "cached event") {
 		t.Fatal("Events flashed a loading placeholder")
 	}
-	m.updateExploreMessage(exploreDetailResult{run: late, text: "late", err: errors.New("late failure")})
-	if e.detailText != "cached event" {
+	m.updateExploreMessage(monitor.ExploreDetailResult{Run: late, Text: "late", Err: errors.New("late failure")})
+	if e.DetailText != "cached event" {
 		t.Fatal("old request replaced active section")
 	}
-	e.detail.SetUID("replacement")
+	e.Detail.SetUID("replacement")
 	m.syncExploreDetail()
-	if e.detailLoaded || e.detailText != "" {
+	if e.DetailLoaded || e.DetailText != "" {
 		t.Fatal("cache crossed object UID")
 	}
 }
@@ -81,48 +82,50 @@ func TestDetailSectionCacheRetainsContentAndSeparatesIdentities(t *testing.T) {
 func TestEditorLocalSaveCommandsValidateWriteAndQuitScoped(t *testing.T) {
 	for _, command := range []string{"w", "wq"} {
 		m, a := documentModel(t)
-		a.document.Paste("# changed\n")
-		if m.execute(command) || a.pending != "validate" || a.closeAfterApply != (command == "wq") {
+		a.Document.Paste("# changed\n")
+		if m.execute(command) || a.Pending != "validate" || a.CloseAfterApply != (command == "wq") {
 			t.Fatalf("%s skipped validation", command)
 		}
-		a.pending = ""
-		m.updateResourceActionResult(resourceActionResult{action: a, serial: a.serial, job: "validate", revision: a.document.Revision, object: a.object.DeepCopy()})
-		if a.pending != "apply" || a.stage != "edit" || !a.saveRequested {
+		a.Pending = ""
+		m.updateResourceActionResult(monitor.ResourceActionResult{Action: a, Serial: a.Serial, Job: "validate", Revision: a.Document.Revision, Object: a.Object.DeepCopy()})
+		if a.Pending != "apply" || a.Stage != "edit" || !a.SaveRequested {
 			t.Fatal("Save did not proceed after validation")
 		}
-		a.busy = true
+		a.Busy = true
 		m.execute("q!")
-		if m.explore.action != a {
+		if m.explore.Action != a {
 			t.Fatal("closed a pending operation")
 		}
-		a.busy = false
-		applied := a.object.DeepCopy()
+		a.Busy = false
+		applied := a.Object.DeepCopy()
 		applied.SetResourceVersion("next")
-		m.updateResourceActionResult(resourceActionResult{action: a, serial: a.serial, job: "apply", object: applied})
+		m.updateResourceActionResult(monitor.ResourceActionResult{Action: a, Serial: a.Serial, Job: "apply", Object: applied})
 		if command == "wq" {
-			if m.explore.action != nil {
+			if m.explore.Action != nil {
 				t.Fatal("wq did not close after apply")
 			}
-		} else if m.explore.action != a || a.stage != "edit" || a.document.Dirty() {
+		} else if m.explore.Action != a || a.Stage != "edit" || a.Document.Dirty() {
 			t.Fatal("w did not keep the saved editor")
 		}
 	}
 	m, a := documentModel(t)
-	a.document.Paste("change")
-	if m.execute("q") || !a.discard {
+	a.Document.Paste("change")
+	if m.execute("q") || !a.Discard {
 		t.Fatal("q did not guard modified text")
 	}
 	m.execute("q!")
-	if m.explore.action != nil {
+	if m.explore.Action != nil {
 		t.Fatal("q! did not discard")
 	}
-	m, a = documentModel(t)
+	m, _ = documentModel(t)
 	m.focus = 2
-	if !m.execute("q") {
+	m.execute("q")
+	if !m.quitting {
 		t.Fatal("editor captured another panel's quit")
 	}
 	m, _ = documentModel(t)
-	if !m.execute("quit") {
+	m.execute("quit")
+	if !m.quitting {
 		t.Fatal("explicit app quit changed")
 	}
 }
@@ -130,40 +133,40 @@ func TestEditorLocalSaveCommandsValidateWriteAndQuitScoped(t *testing.T) {
 func TestAllPodsDefaultPreservesWorkloadAndContainerControls(t *testing.T) {
 	m := exploreModel(t)
 	e := m.explore
-	e.resource = e.resources[1]
-	e.preference.Resource = e.resource.Key()
-	e.detail = e.collection.Objects[0].DeepCopy()
-	e.detail.SetKind("Deployment")
-	e.detail.SetAPIVersion("apps/v1")
-	e.detailValid = true
+	e.Resource = e.Resources[1]
+	e.Preference.Resource = e.Resource.Key()
+	e.Detail = e.Collection.Objects[0].DeepCopy()
+	e.Detail.SetKind("Deployment")
+	e.Detail.SetAPIVersion("apps/v1")
+	e.DetailValid = true
 	m.openResourceActions("logs")
-	a := e.action
-	a.pending = ""
-	a.operation = "logs"
-	m.updateResourceActionResult(resourceActionResult{action: a, serial: a.serial, job: "targets", pods: e.collection.Objects[:1]})
-	if a.stage != "pods" || a.cursor != 0 {
+	a := e.Action
+	a.Pending = ""
+	a.Operation = "logs"
+	m.updateResourceActionResult(monitor.ResourceActionResult{Action: a, Serial: a.Serial, Job: "targets", Pods: e.Collection.Objects[:1]})
+	if a.Stage != "pods" || a.Cursor != 0 {
 		t.Fatal("single-pod workload skipped All Pods choice")
 	}
 	m.updateResourceActionKey(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if !e.mergedLogs || e.tab != 4 || e.resource.Kind != "Deployment" {
+	if !e.MergedLogs || e.Tab != 4 || e.Resource.Kind != "Deployment" {
 		t.Fatal("All Pods lost workload identity")
 	}
 	m.openWorkloadLogs()
-	if e.logOrigin == nil || e.logOrigin.tab != 0 {
+	if e.LogOrigin == nil || e.LogOrigin.Tab != 0 {
 		t.Fatal("reopening All Pods replaced its original return point")
 	}
-	e.workloadLogStatus = kubernetes.WorkloadLogStatus{Containers: []string{"app", "init"}, Pods: 1, Sources: 1, Failed: 1}
+	e.WorkloadLogStatus = kubernetes.WorkloadLogStatus{Containers: []string{"app", "init"}, Pods: 1, Sources: 1, Failed: 1}
 	m.updateExplore("o")
-	if e.picker != "containers" || len(m.logContainers()) != 3 {
+	if e.Picker != "containers" || len(m.logContainers()) != 3 {
 		t.Fatal("aggregate container chooser unavailable")
 	}
 	m.updateExploreInput(tea.KeyPressMsg{Code: tea.KeyDown})
 	m.updateExploreInput(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if e.container != "app" {
+	if e.Container != "app" {
 		t.Fatal("container filter selected wrong source")
 	}
 	m.updateExplore("esc")
-	if e.tab != 0 || e.mergedLogs || e.resource.Kind != "Deployment" {
+	if e.Tab != 0 || e.MergedLogs || e.Resource.Kind != "Deployment" {
 		t.Fatal("aggregate logs did not restore workload")
 	}
 }
@@ -172,11 +175,11 @@ func TestRelatedGroupsKeepSelectorEvidenceSeparate(t *testing.T) {
 	m := exploreModel(t)
 	m.openExploreSelection(3)
 	e := m.explore
-	e.references = sortedReferences([]kubernetes.Reference{
-		{Resource: e.resources[0], Name: "selected", Namespace: "shop", Relation: "Selector match"},
-		{Resource: e.resources[1], Name: "parent", Namespace: "shop", Relation: "Owner"},
-		{Resource: e.resources[0], Name: "child", Namespace: "shop", Relation: "Owned Pod"},
-		{Resource: e.resources[3], Name: "worker", Relation: "Owned Pod assigned node"},
+	e.References = monitor.SortedReferences([]kubernetes.Reference{
+		{Resource: e.Resources[0], Name: "selected", Namespace: "shop", Relation: "Selector match"},
+		{Resource: e.Resources[1], Name: "parent", Namespace: "shop", Relation: "Owner"},
+		{Resource: e.Resources[0], Name: "child", Namespace: "shop", Relation: "Owned Pod"},
+		{Resource: e.Resources[3], Name: "worker", Relation: "Owned Pod assigned node"},
 	})
 	view := ansi.Strip(m.relatedBody(110, 40))
 	for _, s := range []string{"Owner", "Managed resources", "Referenced resources", "Selector matches", "Relationship", "Label matches do not establish ownership."} {
@@ -184,7 +187,7 @@ func TestRelatedGroupsKeepSelectorEvidenceSeparate(t *testing.T) {
 			t.Fatalf("missing %s: %s", s, view)
 		}
 	}
-	if e.references[0].Name != "parent" || e.references[2].Name != "worker" {
+	if e.References[0].Name != "parent" || e.References[2].Name != "worker" {
 		t.Fatal("misclassified ownership")
 	}
 }
@@ -197,35 +200,35 @@ func TestDetailUpdateFramesFitAcrossTerminalSizes(t *testing.T) {
 				m.width, m.height = size[0], size[1]
 				m.openExploreSelection(0)
 				e := m.explore
-				e.detailValid = true
+				e.DetailValid = true
 				switch scene {
 				case "yaml":
 					m.openExploreSelection(1)
 				case "events":
 					m.openExploreSelection(2)
-					e.detailText = "Warning BackOff · Retrying container start"
-					e.detailLoaded = true
+					e.DetailText = "Warning BackOff · Retrying container start"
+					e.DetailLoaded = true
 				case "related":
 					m.openExploreSelection(3)
-					e.references = sortedReferences([]kubernetes.Reference{
-						{Resource: e.resources[1], Namespace: "shop", Name: "checkout", Relation: "Owner"},
-						{Resource: e.resources[3], Name: "worker-1", Relation: "Assigned node"},
-						{Resource: e.resources[2], Name: "checkout-service", Namespace: "shop", Relation: "Service selector match"},
+					e.References = monitor.SortedReferences([]kubernetes.Reference{
+						{Resource: e.Resources[1], Namespace: "shop", Name: "checkout", Relation: "Owner"},
+						{Resource: e.Resources[3], Name: "worker-1", Relation: "Assigned node"},
+						{Resource: e.Resources[2], Name: "checkout-service", Namespace: "shop", Relation: "Service selector match"},
 					})
 				case "editor":
 					m.openResourceActions("edit")
-					a := e.action
-					a.pending = ""
-					a.stage = "edit"
-					a.initDocument()
-					a.document.Paste("# new configuration\n")
+					a := e.Action
+					a.Pending = ""
+					a.Stage = "edit"
+					a.InitDocument()
+					a.Document.Paste("# new configuration\n")
 				case "merged-logs":
-					e.resource = e.resources[1]
-					e.detail.SetKind("Deployment")
-					e.tab = 4
-					e.mergedLogs = true
-					e.logKey = "fixture"
-					e.workloadLogStatus = kubernetes.WorkloadLogStatus{Pods: 4, Sources: 35, Active: 30, Failed: 1, Finished: 1, Skipped: 3}
+					e.Resource = e.Resources[1]
+					e.Detail.SetKind("Deployment")
+					e.Tab = 4
+					e.MergedLogs = true
+					e.LogKey = "fixture"
+					e.WorkloadLogStatus = kubernetes.WorkloadLogStatus{Pods: 4, Sources: 35, Active: 30, Failed: 1, Finished: 1, Skipped: 3}
 					m.podLogViewer().Append("[checkout-blue/app] 2026-09-30T12:00:00Z INFO request completed\n[checkout-green/app] 2026-09-30T12:00:01Z WARN retrying database\n")
 				}
 				m.status = ""
@@ -261,36 +264,36 @@ func TestRelatedEndReachesUnavailableNotes(t *testing.T) {
 	m.width, m.height = 120, 30
 	m.openExploreSelection(3)
 	e := m.explore
-	e.detailValid = true
+	e.DetailValid = true
 	for i := range 15 {
-		e.references = append(e.references, kubernetes.Reference{Resource: e.resources[0], Name: fmt.Sprint("pod-", i), Relation: "Owned Pod"})
+		e.References = append(e.References, kubernetes.Reference{Resource: e.Resources[0], Name: fmt.Sprint("pod-", i), Relation: "Owned Pod"})
 	}
-	e.detailText = strings.Repeat("Permission unavailable for a related API.\n", 20) + "Last diagnostic"
+	e.DetailText = strings.Repeat("Permission unavailable for a related API.\n", 20) + "Last diagnostic"
 	m.updateExplore("end")
 	if !strings.Contains(ansi.Strip(m.render()), "Last diagnostic") {
 		t.Fatal("End cannot reach relationship diagnostics")
 	}
 	m.updateExplore("up")
-	if e.scroll != 0 {
+	if e.Scroll != 0 {
 		t.Fatal("row navigation did not resume selection tracking")
 	}
 }
 
 func TestEditorReviewExitClearsCloseAfterApplyIntent(t *testing.T) {
 	m, a := documentModel(t)
-	a.document.Paste("# draft\n")
+	a.Document.Paste("# draft\n")
 	m.execute("wq")
-	if !a.closeAfterApply {
+	if !a.CloseAfterApply {
 		t.Fatal("wq did not set close intent")
 	}
-	a.pending = ""
-	m.updateResourceActionResult(resourceActionResult{action: a, serial: a.serial, job: "validate", err: errors.New("invalid")})
-	if a.closeAfterApply {
+	a.Pending = ""
+	m.updateResourceActionResult(monitor.ResourceActionResult{Action: a, Serial: a.Serial, Job: "validate", Err: errors.New("invalid")})
+	if a.CloseAfterApply {
 		t.Fatal("failed validation kept an earlier close intent")
 	}
-	a.closeAfterApply = true
+	a.CloseAfterApply = true
 	m.validateDocument()
-	if a.closeAfterApply || a.saveRequested {
+	if a.CloseAfterApply || a.SaveRequested {
 		t.Fatal("normal validation did not keep the document open")
 	}
 }

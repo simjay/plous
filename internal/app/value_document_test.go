@@ -6,32 +6,33 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-	docedit "github.com/simjay/plous/internal/editor"
-	"github.com/simjay/plous/internal/kubernetes"
+	"github.com/simjay/plous/internal/app/monitor"
+	kubecommon "github.com/simjay/plous/internal/integrations/kubernetes/common"
+	docedit "github.com/simjay/plous/internal/ui/editor"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-func valueModel(t *testing.T) (*model, *resourceActionState) {
+func valueModel(t *testing.T) (*model, *monitor.ResourceActionState) {
 	t.Helper()
 	m := exploreModel(t)
 	m.openExploreSelection(0)
-	m.explore.detailValid = true
+	m.explore.DetailValid = true
 	m.openResourceActions("")
-	a := m.explore.action
-	a.pending = ""
-	a.resource = kubernetes.Resource{Name: "secrets", Kind: "Secret"}
-	a.object = &unstructured.Unstructured{Object: map[string]any{
+	a := m.explore.Action
+	a.Pending = ""
+	a.Resource = kubecommon.Resource{Name: "secrets", Kind: "Secret"}
+	a.Object = &unstructured.Unstructured{Object: map[string]any{
 		"metadata":   map[string]any{"name": "fixture", "namespace": "default"},
 		"stringData": map[string]any{"config.yaml": "password: fixture-private\n" + strings.Repeat("entry: example\n", 70) + "last: value\n"},
 	}}
-	m.startResourceAction(resourceAction{id: "value"})
+	m.startResourceAction(monitor.ResourceAction{Id: "value"})
 	press(t, m, "enter")
 	return m, a
 }
 
 func TestValueDocumentUsesReadOnlyEditorAndClearsOnHide(t *testing.T) {
 	m, a := valueModel(t)
-	d := a.valueDocument
+	d := a.ValueDocument
 	if !d.ReadOnly || d.Syntax != "yaml" || !strings.Contains(m.render(), "Plous Editor") {
 		t.Fatal("value did not use the shared read-only Editor")
 	}
@@ -48,7 +49,7 @@ func TestValueDocumentUsesReadOnlyEditorAndClearsOnHide(t *testing.T) {
 		t.Fatal("value search dispatched literal input")
 	}
 	press(t, m, "esc")
-	if a.valueDocument != d || d.Query != "" {
+	if a.ValueDocument != d || d.Query != "" {
 		t.Fatal("closing search hid the value")
 	}
 	press(t, m, "end")
@@ -57,7 +58,7 @@ func TestValueDocumentUsesReadOnlyEditorAndClearsOnHide(t *testing.T) {
 	}
 	typeText(m, "v")
 	press(t, m, "up")
-	if cmd := press(t, m, "enter"); cmd != nil || a.stage != "valueview" {
+	if cmd := press(t, m, "enter"); cmd != nil || a.Stage != "valueview" {
 		t.Fatal("reading Enter executed an action")
 	}
 	typeText(m, "y")
@@ -67,14 +68,14 @@ func TestValueDocumentUsesReadOnlyEditorAndClearsOnHide(t *testing.T) {
 	typeText(m, "v")
 	press(t, m, "esc")
 	press(t, m, "esc")
-	if a.stage != "values" || a.valueDocument != nil || d.Text() != "" || d.Query != "" || d.SelectedText() != "" {
+	if a.Stage != "values" || a.ValueDocument != nil || d.Text() != "" || d.Query != "" || d.SelectedText() != "" {
 		t.Fatal("hiding a Secret left text in its Editor buffer")
 	}
 }
 
 func TestValueDocumentExpansionHelpFocusAndLiteralPaste(t *testing.T) {
 	m, a := valueModel(t)
-	d := a.valueDocument
+	d := a.ValueDocument
 	for _, size := range [][2]int{{80, 16}, {120, 30}, {200, 50}} {
 		m.width, m.height = size[0], size[1]
 		view := m.render()
@@ -87,7 +88,7 @@ func TestValueDocumentExpansionHelpFocusAndLiteralPaste(t *testing.T) {
 			}
 		}
 	}
-	mainCommand(t, m, "z")
+	mainCommand(t, m, "f")
 	if !m.viewExpanded() || m.leftHidden || m.rightHidden {
 		t.Fatal("value expansion changed saved panel visibility")
 	}
@@ -101,15 +102,15 @@ func TestValueDocumentExpansionHelpFocusAndLiteralPaste(t *testing.T) {
 	}
 	press(t, m, "tab")
 	press(t, m, "esc")
-	if !m.viewExpanded() || a.valueDocument != d {
+	if !m.viewExpanded() || a.ValueDocument != d {
 		t.Fatal("Help lost the expanded document")
 	}
-	press(t, m, "tab")
-	if m.focus != 2 || m.viewExpanded() || a.valueDocument != d {
+	press(t, m, "alt+right")
+	if m.focus != 2 || m.viewExpanded() || a.ValueDocument != d {
 		t.Fatal("Tab did not preserve the value and restore the layout")
 	}
 	mainCommand(t, m, "c")
-	if !m.chatEditing || a.valueDocument != d {
+	if !m.chatEditing || a.ValueDocument != d {
 		t.Fatal("value prevented chat entry")
 	}
 	m.stopResourceAction()

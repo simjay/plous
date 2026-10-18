@@ -1,0 +1,2 @@
+resources: [../../envs/prod]
+namespace: production-us

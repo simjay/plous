@@ -1,0 +1,11 @@
+resources: [../../apps/api/base, ../../apps/worker/base, ../../apps/cache/base]
+components: [../../components/tls]
+namePrefix: prod-
+patches:
+  - path: replicas-patch.yaml
+replicas:
+  - name: api
+    count: 6
+images:
+  - name: example.invalid/api
+    newTag: '2'

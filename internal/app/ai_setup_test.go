@@ -1,14 +1,13 @@
 package app
 
 import (
+	tea "charm.land/bubbletea/v2"
+	ai "github.com/simjay/plous/internal/ai/model"
+	"github.com/simjay/plous/internal/workspace"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	tea "charm.land/bubbletea/v2"
-	"github.com/simjay/plous/internal/ai"
-	"github.com/simjay/plous/internal/workspace"
 )
 
 func TestKeyInputIsMaskedAndOnlySavedOnSave(t *testing.T) {
@@ -17,7 +16,7 @@ func TestKeyInputIsMaskedAndOnlySavedOnSave(t *testing.T) {
 	press(t, m, "down")
 	typeText(m, "SECRET-NEW-KEY")
 	if strings.Contains(m.render(), "SECRET") || !strings.Contains(m.render(), "•") {
-		t.Fatal("API key was not masked")
+		t.Fatal("API Key was not masked")
 	}
 	press(t, m, "esc")
 	if _, err := os.Stat(filepath.Join(root, "credentials.json")); !os.IsNotExist(err) {
@@ -42,11 +41,11 @@ func TestKeyInputIsMaskedAndOnlySavedOnSave(t *testing.T) {
 		return nil
 	})
 	m.beginAISettings(0)
-	if m.form.fields[1].value.text != "" {
+	if m.form.Fields[1].Value.Text != "" {
 		t.Fatal("saved secret was loaded into the editor")
 	}
 	press(t, m, "right")
-	if m.form.agent.CredentialRef != "" || m.form.apiKey != "" || m.form.agent.KeyEnv != "" {
+	if m.form.Agent.CredentialRef != "" || m.form.ApiKey != "" || m.form.Agent.KeyEnv != "" {
 		t.Fatal("changing provider retained its old credentials")
 	}
 }
@@ -66,7 +65,7 @@ func TestChatCatalogUsesEveryModelFromConnectedVendors(t *testing.T) {
 	}
 	startChat(t, m)
 	typeText(m, "/model")
-	if cmd := press(t, m, "enter"); cmd != nil || !m.chat().models {
+	if cmd := press(t, m, "enter"); cmd != nil || !m.chat().Models {
 		t.Fatal("picker must open without a network call")
 	}
 	before := m.settings.Agent
@@ -118,20 +117,21 @@ func TestUnsupportedSavedConnectionsStayReadableButCannotRun(t *testing.T) {
 			if _, err = m.store.SaveSettings(workspace.Settings{Agent: old, Providers: []ai.Config{old}}); err != nil {
 				t.Fatal(err)
 			}
-			m, err = newModel(m.store, "0.0.1")
+			m, err = newModel(m.store, m.history, "0.0.1")
 			if err != nil || m.settings.Agent != old {
 				t.Fatal("legacy settings were changed or could not load", err)
 			}
-			m.openSettings()
-			if old.SupportedProvider() != nil && !strings.Contains(m.settingsBody(90, 30), "unavailable") {
+			m.beginAgentSettings()
+			if old.SupportedProvider() != nil && !strings.Contains(m.formBody(90, 30), "unavailable") {
 				t.Fatal("missing unavailable label")
 			}
+			m.cancelForm()
 			startChat(t, m)
 			typeText(m, "Keep my draft")
-			if cmd := press(t, m, "enter"); cmd != nil || m.run != nil || m.draft().text != "Keep my draft" {
+			if cmd := press(t, m, "enter"); cmd != nil || m.run != nil || m.draft().Text != "Keep my draft" {
 				t.Fatal("unsupported connection started a request or lost the draft")
 			}
-			paths, _ := filepath.Glob(filepath.Join(root, "conversations", "*", "conversation.jsonl"))
+			paths, _ := filepath.Glob(filepath.Join(root, "conversations", "*", "conversation", "*.jsonl"))
 			if len(paths) != 0 {
 				t.Fatal("unsupported request was persisted")
 			}
@@ -181,11 +181,11 @@ func TestBasicSetupNeedsOnlyVendorAndKey(t *testing.T) {
 			press(t, m, "enter")
 			typeText(m, "setup-only-key")
 			press(t, m, "enter")
-			if m.form.index != len(m.form.fields) {
+			if m.form.Index != len(m.form.Fields) {
 				t.Fatal("key must advance directly to Save")
 			}
 			press(t, m, "enter")
-			if m.form != nil || m.settings.Agent.Provider != provider {
+			if m.form == nil || m.form.Kind != "mainagent" || m.settings.Agent.Provider != provider {
 				t.Fatal("basic setup failed", m.status)
 			}
 			if err := m.settings.Agent.Ready("setup-only-key"); err != nil {
@@ -199,10 +199,10 @@ func TestBasicSetupNeedsOnlyVendorAndKey(t *testing.T) {
 				t.Fatal("key not shared by default model", err)
 			}
 			m.beginAISettings(0)
-			m.form.index = len(m.form.fields) + 2
+			m.form.Index = len(m.form.Fields) + 2
 			press(t, m, "enter")
-			for _, field := range m.form.fields {
-				if field.key == "model" {
+			for _, field := range m.form.Fields {
+				if field.Key == "model" {
 					t.Fatal("Advanced must not contain model selection")
 				}
 			}

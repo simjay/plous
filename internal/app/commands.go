@@ -1,6 +1,8 @@
 package app
 
-import "strings"
+import (
+	"strings"
+)
 
 type commandDefinition struct {
 	key, name string
@@ -16,18 +18,28 @@ var applicationCommands = []commandDefinition{
 	{"c", "chat"},
 	{"C", "newchat"},
 	{"H", "openchat"},
+	{"A", "readreply"},
 	{"X", "stopchat"},
 	{"p", "restoreprompt"},
-	{"k", "kinds"},
 	{"K", "connections"},
 	{"N", "namespace"},
 	{"g", "refresh"},
+	{"G", "graph"},
 	{"y", "yaml"},
 	{"d", "describe"},
-	{"z", "zoom"},
+	{"f", "fullscreen"},
+	{"e", "expandsection"},
 	{"L", "linenumbers"},
 	{"v", "review"},
 	{"a", "actions"},
+	{"B", "rollback"},
+	{"r", "render"},
+	{"J", "release"},
+	{"F", "revision"},
+	{"O", "observations"},
+	{"I", "charts"},
+	{"W", "chartrange"},
+	{"P", "chartlatest"},
 }
 
 // Resolve exact, case-sensitive aliases without interpreting resource names as prefixes.

@@ -1,22 +1,24 @@
 package app
 
 import (
+	tea "charm.land/bubbletea/v2"
 	"context"
 	"fmt"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/simjay/plous/internal/ai/history"
+	ai "github.com/simjay/plous/internal/ai/model"
+	appchat "github.com/simjay/plous/internal/app/chat"
+	textview "github.com/simjay/plous/internal/ui/text"
+
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
-	"github.com/simjay/plous/internal/ai"
-	"github.com/simjay/plous/internal/workspace"
 )
 
 func addAIConnection(t *testing.T, m *model, name, provider string) {
 	t.Helper()
-	openSettingsItem(t, m, "Add AI connection")
+	openProviderItem(t, m, "Add provider connection")
 	completeAIForm(t, m, map[string]string{"name": name, "provider": provider})
 }
 
@@ -24,10 +26,15 @@ func TestModelCheckmarkFollowsSelectionInsteadOfCursor(t *testing.T) {
 	m, _ := testModel(t)
 	addAIConnection(t, m, "First", "openai")
 	addAIConnection(t, m, "Second", "anthropic")
-	body := ansi.Strip(m.settingsBody(80, 30))
+	if body := m.settingsBody(80, 30); strings.Contains(body, "First") || strings.Contains(body, "Second") {
+		t.Fatal("root Settings exposes Plous providers")
+	}
+	m.beginAgentSettings()
+	body := ansi.Strip(m.formBody(80, 30))
 	if !strings.Contains(body, "First") || !strings.Contains(body, "Second") || strings.Contains(body, " · chat") || strings.Contains(body, "✓") {
 		t.Fatal("Settings must list connections without a model selection badge")
 	}
+	m.cancelForm()
 	startChat(t, m)
 	m.openModelPicker()
 	press(t, m, "down")
@@ -52,13 +59,13 @@ func TestMultipleConnectionsSelectEditRemoveAndRestart(t *testing.T) {
 	}
 	startChat(t, m)
 	typeText(m, "/model")
-	if cmd := press(t, m, "enter"); cmd != nil || !m.chat().models || m.run != nil || m.draft().text != "" {
+	if cmd := press(t, m, "enter"); cmd != nil || !m.chat().Models || m.run != nil || m.draft().Text != "" {
 		t.Fatal("model command sent a request or failed to open the picker")
 	}
 	press(t, m, "down")
 	press(t, m, "down")
 	press(t, m, "enter")
-	if m.settings.Agent.Name != "Second" || !m.chatEditing || m.chat().models {
+	if m.settings.Agent.Name != "Second" || !m.chatEditing || m.chat().Models {
 		t.Fatal("selection did not return to typing")
 	}
 	typeText(m, "Keep this draft")
@@ -66,24 +73,25 @@ func TestMultipleConnectionsSelectEditRemoveAndRestart(t *testing.T) {
 	if err := m.saveSession(); err != nil {
 		t.Fatal(err)
 	}
-	restarted, err := newModel(m.store, "0.0.1")
-	if err != nil || restarted.settings.Agent.Model != "claude-haiku-4-5-20251001" || restarted.draft().text != "Keep this draft" {
+	restarted, err := newModel(m.store, m.history, "0.0.1")
+	if err != nil || restarted.settings.Agent.Model != "claude-haiku-4-5-20251001" || restarted.draft().Text != "Keep this draft" {
 		t.Fatal("selection or draft did not survive restart", err)
 	}
-	openSettingsItem(t, m, "Second")
+	openProviderItem(t, m, "Second")
 	completeAIForm(t, m, map[string]string{"name": "Renamed"})
 	if m.settings.Agent.Model != "claude-haiku-4-5-20251001" || m.settings.Agent.Name != "Renamed" {
 		t.Fatal("editing the selected connection lost its selection")
 	}
 	for _, name := range []string{"Renamed", "First"} {
-		openSettingsItem(t, m, name)
-		m.form.index = len(m.form.fields) + 3
+		openProviderItem(t, m, name)
+		m.form.Index = len(m.form.Fields) + 3
 		press(t, m, "enter")
 		if m.page != "removeprovider" {
 			t.Fatal("removal must show a confirmation")
 		}
 		press(t, m, "down")
 		press(t, m, "enter")
+		press(t, m, "esc")
 	}
 	if len(m.settings.Configs()) != 0 || m.settings.Agent != ai.DefaultConfig() {
 		t.Fatal("removing the last connection did not clear the selection")
@@ -99,30 +107,31 @@ func TestModelSwitchKeepsInflightRequestAndHistory(t *testing.T) {
 	addAIConnection(t, m, "Second", "anthropic")
 	startChat(t, m)
 	c := m.chat()
-	conversation, err := m.store.NewConversation("", "Running")
+	conversation, err := m.history.NewConversation("", "Running")
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.conversation = conversation
-	turn, err := m.store.StartTurn("", conversation.ID, workspace.Request{Agent: m.settings.Agent, Prompt: "Inspect"})
+	c.Conversation = conversation
+	turn, err := m.history.StartTurn("", conversation.ID, history.Request{Agent: m.settings.Agent, Prompt: "Inspect"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.turns = []workspace.Turn{turn}
+	c.Turns = []history.Turn{turn}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	run := &chatRun{chat: c, cancel: cancel}
+	run := &appchat.ChatRun{Chat: c, Cancel: cancel}
 	m.run = run
 	typeText(m, "/m")
 	press(t, m, "enter")
 	press(t, m, "down")
 	press(t, m, "down")
 	press(t, m, "enter")
-	if m.run != run || ctx.Err() != nil || c.turns[0].Request.Agent.Name != "First" || m.settings.Agent.Name != "Second" {
+	if m.run != run || ctx.Err() != nil || c.Turns[0].Request.Agent.Name != "First" || m.settings.Agent.Name != "Second" {
 		t.Fatal("switching models mutated or cancelled an in-flight request")
 	}
-	m.updateChatEvent(chatEvent{run: run, done: true, result: ai.Result{Text: "Done"}})
-	turns, err := m.store.Turns("", conversation.ID)
+	m.updateChatEvent(appchat.ChatEvent{Run: run, Done: true, Result: ai.Result{Text: "Done"}})
+	m.drainPersistence()
+	turns, err := m.history.Turns("", conversation.ID)
 	if err != nil || turns[0].Request.Agent.Model != "gpt-5.4-mini" || turns[0].Response.Text != "Done" {
 		t.Fatal("running response lost its original model", err)
 	}
@@ -134,35 +143,35 @@ func TestModelCommandScopeAndLiteralText(t *testing.T) {
 		startChat(t, m)
 		typeText(m, command)
 		press(t, m, "enter")
-		if !m.chat().models {
+		if !m.chat().Models {
 			t.Fatal("picker must open without a configured model")
 		}
 		press(t, m, "esc")
-		if !m.chatEditing || m.chat().models {
+		if !m.chatEditing || m.chat().Models {
 			t.Fatal("Esc must return to typing")
 		}
 		m.Update(tea.PasteMsg{Content: command})
 		press(t, m, "enter")
-		if m.chat().models || m.draft().text != command {
+		if m.chat().Models || m.draft().Text != command {
 			t.Fatal("pasted model command executed")
 		}
 		press(t, m, "ctrl+u")
 		typeText(m, command)
 		press(t, m, "enter")
-		if !m.chat().models {
+		if !m.chat().Models {
 			t.Fatal("clearing pasted text did not restore command input")
 		}
 		press(t, m, "enter")
-		if m.page != "settings" || m.settingsItems()[m.cursor] != "Add AI connection" {
+		if m.form == nil || m.form.Kind != "mainagent" || m.form.Actions()[m.form.Index-len(m.form.Fields)] != "Add provider connection" {
 			t.Fatal("empty picker must offer Settings")
 		}
 	}
 	for _, text := range []string{"/model explanation", "line\n/model", "//model"} {
 		m, _ := testModel(t)
 		startChat(t, m)
-		*m.draft() = newEditor(text)
+		*m.draft() = textview.NewField(text)
 		press(t, m, "enter")
-		if m.chat().models || m.draft().text == "" {
+		if m.chat().Models || m.draft().Text == "" {
 			t.Fatal("ordinary or escaped text became a command")
 		}
 	}
@@ -171,7 +180,7 @@ func TestModelCommandScopeAndLiteralText(t *testing.T) {
 func TestAIConnectionValidationPreservesForm(t *testing.T) {
 	m, root := testModel(t)
 	addAIConnection(t, m, "First", "openai")
-	openSettingsItem(t, m, "Add AI connection")
+	openProviderItem(t, m, "Add provider connection")
 	values := map[string]string{"name": "FIRST", "provider": "openai", "api_key": "rejected-secret"}
 	m.saveAppSettings(values)
 	if m.form == nil || m.settings.Revision != 1 || !strings.Contains(m.status, "unique") {
@@ -199,7 +208,7 @@ func TestModelPickerAndSettingsFitWithManyConnections(t *testing.T) {
 		m.Update(tea.WindowSizeMsg{Width: size[0], Height: size[1]})
 		for _, settings := range []bool{false, true} {
 			if settings {
-				m.openSettings()
+				m.beginAgentSettings()
 			} else {
 				startChat(t, m)
 				m.openModelPicker()
@@ -209,7 +218,10 @@ func TestModelPickerAndSettingsFitWithManyConnections(t *testing.T) {
 				count = 12
 			}
 			for i := range count + 1 {
-				m.cursor, m.chat().modelCursor = i, i
+				m.chat().ModelCursor = i
+				if settings {
+					m.form.Index = len(m.form.Fields) + i
+				}
 				lines := strings.Split(ansi.Strip(m.render()), "\n")
 				if len(lines) != size[1] {
 					t.Fatalf("%v: incorrect height", size)
@@ -221,7 +233,7 @@ func TestModelPickerAndSettingsFitWithManyConnections(t *testing.T) {
 				}
 				label := ""
 				if i < count {
-					label = "› " + chatModelName(m.chatModelChoices()[i])
+					label = "› " + appchat.ChatModelName(m.chatModelChoices()[i])
 					if settings {
 						label = fmt.Sprintf("› Connection %d", i)
 					}
@@ -231,6 +243,7 @@ func TestModelPickerAndSettingsFitWithManyConnections(t *testing.T) {
 				}
 			}
 		}
+		m.cancelForm()
 		m.closeSettings()
 	}
 }
@@ -248,7 +261,7 @@ func TestSidebarSeparatesWorkspacesAndApplication(t *testing.T) {
 		if len(lines) != height || !strings.Contains(lines[height-1], "Settings") || strings.Contains(body, "General chat") {
 			t.Fatal("only Settings belongs at the bottom of the sidebar")
 		}
-		if strings.Index(body, "+ New workspace") > strings.Index(body, "Application") {
+		if strings.Index(body, "+ New Workspace") > strings.Index(body, "Application") {
 			t.Fatal("workspace creation is in the application section")
 		}
 	}

@@ -1,0 +1,9 @@
+apiVersion: builtin
+kind: LabelTransformer
+metadata:
+  name: metadata-only
+labels:
+  owner: platform
+fieldSpecs:
+  - path: metadata/labels
+    create: true

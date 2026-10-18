@@ -1,11 +1,15 @@
 GO ?= go
 PYTHON ?= python3
 TEST_FLAGS ?= -count=1
+TEST_PACKAGES ?= ./...
+TEST_E2E_PATTERN ?= test_*.py
+TEST_E2E_ARGS ?=
 BENCH_FLAGS ?= -bench=. -benchmem -benchtime=300ms
+PLOUSBENCH_FLAGS ?= -benchtime=5x -count=1
 VERSION ?= v$(shell cat cmd/plous/VERSION)
 export GO VERSION
 
-.PHONY: build run test test-unit test-e2e test-playground test-minikube test-ai-live test-race test-coverage bench check fmt-check vet dist clean docs-install docs-dev docs-build docs-check
+.PHONY: build build-test-tools check-test-startup test-ux run test eval test-unit test-e2e test-playground test-minikube test-ai-live test-agent-clients test-race test-coverage bench check fmt-check vet dist clean docs-check build-plousbench test-plousbench bench-plousbench
 
 build:
 	mkdir -p bin
@@ -14,34 +18,52 @@ build:
 run: build
 	./bin/plous
 
-docs-install:
-	npm --prefix docs-site ci
-
-docs-dev:
-	npm --prefix docs-site run dev
-
-docs-build:
-	npm --prefix docs-site run build
-
 docs-check:
-	npm --prefix docs-site test
-	npm --prefix docs-site run check
-	$(MAKE) test-unit TEST_FLAGS='-count=1 -run TestDisplayedColonCommandsAreRegistered'
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) tests/docs/check.py
 
 test: test-unit test-e2e
 
-test-unit:
-	$(GO) test $(TEST_FLAGS) ./...
+eval:
+	$(GO) test $(TEST_FLAGS) ./tests/acceptance/ai/...
 
-test-e2e: build
-	PLOUS_TEST_BINARY="$(CURDIR)/bin/plous" PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m unittest discover -s tests/e2e -p 'test_*.py' -v
+test-unit:
+	$(GO) test $(TEST_FLAGS) $(TEST_PACKAGES)
+
+build-test-tools:
+	mkdir -p bin
+	$(GO) build -trimpath -buildvcs=false -o bin/test-terminalscreen ./tests/support/terminalscreen
+
+check-test-startup: build build-test-tools
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) tests/support/check_startup.py "$(CURDIR)/bin/plous"
+
+test-e2e: check-test-startup
+	PLOUS_TEST_BINARY="$(CURDIR)/bin/plous" PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m unittest discover -s tests/e2e -p '$(TEST_E2E_PATTERN)' -v $(TEST_E2E_ARGS)
+
+test-ux: check-test-startup
+	$(GO) test -count=1 -run 'TestUXScreenMatrix|TestTerminalOutputBelongsToRenderer|TestCodeStartupFramesStayInsideTerminal' ./internal/app
+	PLOUS_TEST_BINARY="$(CURDIR)/bin/plous" PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m unittest discover -s tests/e2e -p 'test_ux.py' -v
+	PLOUS_TEST_BINARY="$(CURDIR)/bin/plous" PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m unittest discover -s tests/e2e -p 'test_kustomize.py' -k restored_sources -v
 
 test-playground:
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m unittest discover -s tests/e2e -p 'test_playground.py' -v
 
 test-ai-live:
 	@test -n "$(PLOUS_LIVE_AI_PROFILE)" || { echo "Set PLOUS_LIVE_AI_PROFILE to explicitly test a saved AI connection"; exit 1; }
-	$(GO) test -count=1 -v -run TestSavedProviderLive ./internal/agent
+	$(GO) test -count=1 -v -run TestSavedProviderLive ./tests/live/ai
+
+test-agent-clients:
+	PLOUS_TEST_INSTALLED_CLI=claude-code $(MAKE) test-unit TEST_PACKAGES='./tests/integration/nativeagents' TEST_FLAGS='-count=1 -v -run TestInstalledNativeCLIWithMockProvider'
+	PLOUS_TEST_INSTALLED_CLI=codex $(MAKE) test-unit TEST_PACKAGES='./tests/integration/nativeagents' TEST_FLAGS='-count=1 -v -run TestInstalledNativeCLIWithMockProvider'
+
+build-plousbench:
+	mkdir -p bin
+	$(GO) build -trimpath -buildvcs=false -o bin/plousbench ./benchmark/cmd/plousbench
+
+test-plousbench:
+	$(MAKE) test-unit TEST_PACKAGES='./benchmark/...'
+
+bench-plousbench:
+	$(GO) test -run '^$$' -bench '^BenchmarkPlousBenchTools$$' $(PLOUSBENCH_FLAGS) ./benchmark/integration
 
 test-minikube: build
 	@test -n "$(PLOUS_MINIKUBE_TEST_KUBECONFIG)" || { echo "Set PLOUS_MINIKUBE_TEST_KUBECONFIG to an explicit Minikube configuration"; exit 1; }
@@ -49,20 +71,20 @@ test-minikube: build
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m unittest discover -s tests/live -v
 
 test-race:
-	$(GO) test -race $(TEST_FLAGS) ./...
+	$(GO) test -race $(TEST_FLAGS) $(TEST_PACKAGES)
 
 bench:
-	$(GO) test -run '^$$' $(BENCH_FLAGS) ./internal/app ./internal/logview ./internal/diffview ./internal/editor ./internal/textview
+	$(GO) test -run '^$$' $(BENCH_FLAGS) ./internal/app ./internal/ui/logs ./internal/ui/diff ./internal/ui/editor ./internal/ui/text
 
 test-coverage:
 	mkdir -p .cache/tests
 	$(GO) test $(TEST_FLAGS) -coverprofile=.cache/tests/coverage.out ./...
 	$(GO) tool cover -html=.cache/tests/coverage.out -o .cache/tests/coverage.html
 
-check: fmt-check vet test
+check: docs-check fmt-check vet test
 
 fmt-check:
-	@test -z "$$(gofmt -l cmd internal)" || { echo "Run gofmt on cmd/ and internal/"; exit 1; }
+	@test -z "$$(gofmt -l cmd internal benchmark tests)" || { echo "Run gofmt on cmd/, internal/, benchmark/, and tests/"; exit 1; }
 
 vet:
 	$(GO) vet ./...

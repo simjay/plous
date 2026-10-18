@@ -1,10 +1,9 @@
 package app
 
 import (
+	tea "charm.land/bubbletea/v2"
 	"encoding/json"
 	"testing"
-
-	tea "charm.land/bubbletea/v2"
 )
 
 func readOnlyPersistenceModel(t *testing.T, view string) *model {
@@ -34,6 +33,7 @@ func TestReadOnlyGlobalShortcutsAutosaveSession(t *testing.T) {
 				initialMode := m.mode
 				typeText(m, shortcut[:1])
 				m.Update(autosaveMsg{})
+				m.drainPersistence()
 				if m.dirty {
 					t.Fatal("autosave between prefix keys should clear dirty state")
 				}
@@ -42,6 +42,7 @@ func TestReadOnlyGlobalShortcutsAutosaveSession(t *testing.T) {
 					t.Fatal("completed global shortcut must mark the session for autosave")
 				}
 				m.Update(autosaveMsg{})
+				m.drainPersistence()
 				data, err := m.store.ReadSession()
 				if err != nil {
 					t.Fatal(err)
@@ -54,7 +55,7 @@ func TestReadOnlyGlobalShortcutsAutosaveSession(t *testing.T) {
 				if shortcut[0] >= '1' && shortcut[0] <= '3' {
 					wantMode = int(shortcut[0] - '1')
 				}
-				if saved.Mode != wantMode || saved.LeftHidden != (shortcut == "bb") || saved.RightHidden != (shortcut == "ii") {
+				if saved.Mode != wantMode || saved.LeftHidden != (shortcut == "bb") || saved.RightHidden || (saved.AssistantSize == assistantDouble) != (shortcut == "ii") {
 					t.Fatalf("autosave lost completed shortcut: mode=%d, sidebar hidden=%t, AI hidden=%t", saved.Mode, saved.LeftHidden, saved.RightHidden)
 				}
 			})
@@ -78,14 +79,15 @@ func TestReadOnlySearchDoesNotRunOrPersistGlobalShortcuts(t *testing.T) {
 			m.Update(tea.PasteMsg{Content: "\n:quit"})
 			query := ""
 			if view == "Activity" {
-				query = m.activityReview.comparison.Reader.Query
+				query = m.activityReview.Comparison.Reader.Query
 			} else {
-				query = m.explore.yamlDocument.document.Query
+				query = m.explore.YamlDocument.Document.Query
 			}
 			if query != "bbii112233:settings:quit" || m.mode != mode || m.leftHidden || m.rightHidden || m.command != nil || m.settingsOverlay != nil || m.dirty {
 				t.Fatal("literal search input reached global shortcuts or session persistence")
 			}
 			m.Update(autosaveMsg{})
+			m.drainPersistence()
 			after, err := m.store.ReadSession()
 			if err != nil {
 				t.Fatal(err)

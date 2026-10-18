@@ -8,52 +8,53 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/simjay/plous/internal/kubernetes"
+	"github.com/simjay/plous/internal/app/monitor"
+	kubernetes "github.com/simjay/plous/internal/integrations/kubernetes/monitor"
 )
 
-func progressModel(t *testing.T) (*model, *resourceActionState) {
+func progressModel(t *testing.T) (*model, *monitor.ResourceActionState) {
 	t.Helper()
 	m := exploreModel(t)
 	m.openExploreSelection(0)
-	m.explore.detailValid = true
+	m.explore.DetailValid = true
 	m.openResourceActions("")
-	a := m.explore.action
-	a.pending = ""
-	a.stage = "done"
-	a.progress = &resourceProgress{status: kubernetes.OperationProgress{State: "waiting", Summary: "Deletion in progress", Details: "Waiting on finalizers: test.example/hold"}, deadline: time.Now().Add(time.Minute)}
-	a.note = "Deletion requested."
+	a := m.explore.Action
+	a.Pending = ""
+	a.Stage = "done"
+	a.Progress = &monitor.ResourceProgress{Status: kubernetes.OperationProgress{State: "waiting", Summary: "Deletion in progress", Details: "Waiting on finalizers: test.example/hold"}, Deadline: time.Now().Add(time.Minute)}
+	a.Note = "Deletion requested."
 	return m, a
 }
 
 func TestObservationEscapeReturnsToDetailsAndIgnoresLateResults(t *testing.T) {
 	m, a := progressModel(t)
 	ctx, cancel := context.WithCancel(context.Background())
-	a.cancel = cancel
-	a.progress.checking = true
+	a.Cancel = cancel
+	a.Progress.Checking = true
 	m.updateResourceActionKey(tea.KeyPressMsg{Code: tea.KeyEscape})
-	if ctx.Err() == nil || m.explore.action != nil || m.explore.detail == nil {
+	if ctx.Err() == nil || m.explore.Action != nil || m.explore.Detail == nil {
 		t.Fatal("Esc did not stop observation and retain details")
 	}
-	m.updateResourceProgress(resourceProgressResult{action: a, progress: a.progress, status: kubernetes.OperationProgress{State: "complete"}})
-	if m.explore.action != nil {
+	m.updateResourceProgress(monitor.ResourceProgressResult{Action: a, Progress: a.Progress, Status: kubernetes.OperationProgress{State: "complete"}})
+	if m.explore.Action != nil {
 		t.Fatal("late progress reopened action")
 	}
 }
 
 func TestObservationTimeoutAndRecheckNeverResubmit(t *testing.T) {
 	m, a := progressModel(t)
-	a.progress.deadline = time.Now().Add(-time.Second)
-	if cmd := m.syncResourceProgress(a); cmd != nil || a.progress.status.Watching() || !strings.Contains(a.progress.status.Details, "does not mean") {
+	a.Progress.Deadline = time.Now().Add(-time.Second)
+	if cmd := m.syncResourceProgress(a); cmd != nil || a.Progress.Status.Watching() || !strings.Contains(a.Progress.Status.Details, "does not mean") {
 		t.Fatal("timeout misreported operation failure")
 	}
 	m.updateResourceActionKey(tea.KeyPressMsg{Code: 'g', Text: "g"})
-	if !a.progress.status.Watching() || a.pending != "" || a.progress.deadline.Before(time.Now()) {
+	if !a.Progress.Status.Watching() || a.Pending != "" || a.Progress.Deadline.Before(time.Now()) {
 		t.Fatal("recheck did not restart only observation")
 	}
-	old := a.progress
-	a.progress = &resourceProgress{status: kubernetes.OperationProgress{State: "waiting"}}
-	m.updateResourceProgress(resourceProgressResult{action: a, progress: old, status: kubernetes.OperationProgress{State: "complete"}})
-	if !a.progress.status.Watching() {
+	old := a.Progress
+	a.Progress = &monitor.ResourceProgress{Status: kubernetes.OperationProgress{State: "waiting"}}
+	m.updateResourceProgress(monitor.ResourceProgressResult{Action: a, Progress: old, Status: kubernetes.OperationProgress{State: "complete"}})
+	if !a.Progress.Status.Watching() {
 		t.Fatal("stale observer changed new result")
 	}
 }
@@ -77,7 +78,7 @@ func TestProgressOverlayRetainsTargetStatusAndControlsAcrossSizes(t *testing.T) 
 			t.Fatal("height overflow")
 		}
 	}
-	a.progress.status = kubernetes.OperationProgress{State: "unavailable", Summary: "Status unavailable"}
+	a.Progress.Status = kubernetes.OperationProgress{State: "unavailable", Summary: "Status unavailable"}
 	if !strings.Contains(ansi.Strip(m.render()), "g check again") {
 		t.Fatal("missing recovery control")
 	}
@@ -85,7 +86,7 @@ func TestProgressOverlayRetainsTargetStatusAndControlsAcrossSizes(t *testing.T) 
 
 func TestObservationCancelsPendingReadAndDoesNotScheduleDuplicates(t *testing.T) {
 	m, a := progressModel(t)
-	a.progress.next = time.Now().Add(time.Hour)
+	a.Progress.Next = time.Now().Add(time.Hour)
 	cmd := m.syncResourceProgress(a)
 	if cmd == nil || m.syncResourceProgress(a) != nil {
 		t.Fatal("observer was missing or scheduled twice")
@@ -98,16 +99,16 @@ func TestObservationCancelsPendingReadAndDoesNotScheduleDuplicates(t *testing.T)
 
 func TestProgressScrollClampsAndStripsServerControlSequences(t *testing.T) {
 	m, a := progressModel(t)
-	a.progress.status.Details = strings.Repeat("long controller message\n", 50) + "last line\x1b[2J"
+	a.Progress.Status.Details = strings.Repeat("long controller message\n", 50) + "last line\x1b[2J"
 	m.updateResourceActionKey(tea.KeyPressMsg{Code: tea.KeyEnd})
-	view := renderOperationProgress(a, 60, 8)
+	view := monitor.RenderOperationProgress(a, 60, 8)
 	if !strings.Contains(ansi.Strip(view), "last line") || strings.Contains(view, "\x1b[2J") {
 		t.Fatal("end or terminal sanitization failed")
 	}
-	end := a.scroll
+	end := a.Scroll
 	m.updateResourceActionKey(tea.KeyPressMsg{Code: tea.KeyUp})
-	_ = renderOperationProgress(a, 60, 8)
-	if a.scroll != end-1 {
+	_ = monitor.RenderOperationProgress(a, 60, 8)
+	if a.Scroll != end-1 {
 		t.Fatal("scrolling up remained stuck at the end")
 	}
 }

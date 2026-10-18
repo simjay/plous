@@ -1,23 +1,25 @@
 package app
 
-import "github.com/simjay/plous/internal/kubernetes"
-
-const exploreLogBufferLimit = 128 * 1024
+import (
+	"github.com/simjay/plous/internal/app/monitor"
+	kubernetes "github.com/simjay/plous/internal/integrations/kubernetes/monitor"
+	"github.com/simjay/plous/internal/ui"
+)
 
 func (m *model) resetExploreLogs() {
 	e := m.explorer()
-	e.logError = ""
-	e.workloadLogStatus = kubernetes.WorkloadLogStatus{}
-	e.logConnected = false
+	e.LogError = ""
+	e.WorkloadLogStatus = kubernetes.WorkloadLogStatus{}
+	e.LogConnected = false
 	m.podLogViewer().Reset()
-	m.podLogViewer().SetFormatter(podLogFormatter(e.logTimestamps, e.mergedLogs))
+	m.podLogViewer().SetFormatter(monitor.PodLogFormatter(e.LogTimestamps, e.MergedLogs))
 }
 
 func (m *model) appendExploreLogs(text string) {
-	text = plain(text)
+	text = ui.Plain(text)
 	if text == "" {
 		return
 	}
-	m.explorer().logConnected = true
+	m.explorer().LogConnected = true
 	m.podLogViewer().Append(text)
 }

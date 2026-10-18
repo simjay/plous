@@ -1,0 +1,9 @@
+helmCharts:
+- name: demo
+  releaseName: demo
+  valuesInline:
+    replicas: 4
+namePrefix: composed-
+replicas:
+- name: demo
+  count: 6

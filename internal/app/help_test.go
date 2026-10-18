@@ -1,15 +1,16 @@
 package app
 
 import (
+	tea "charm.land/bubbletea/v2"
 	"context"
 	"fmt"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/simjay/plous/internal/ai/history"
+	ai "github.com/simjay/plous/internal/ai/model"
+	appchat "github.com/simjay/plous/internal/app/chat"
+
 	"strings"
 	"testing"
-
-	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
-	"github.com/simjay/plous/internal/ai"
-	"github.com/simjay/plous/internal/workspace"
 )
 
 func TestHelpOpensGloballyAndRestoresEachPanel(t *testing.T) {
@@ -41,7 +42,7 @@ func TestHelpOpensGloballyAndRestoresEachPanel(t *testing.T) {
 func TestHelpPreservesFormAndIgnoresPaste(t *testing.T) {
 	m, _ := testModel(t)
 	createWorkspace(t, m, "Payments")
-	openSettingsItem(t, m, "Rename workspace")
+	openSettingsItem(t, m, "Rename Workspace")
 	typeText(m, " unsaved")
 	form := m.form
 	press(t, m, "enter")
@@ -59,7 +60,7 @@ func TestHelpPreservesFormAndIgnoresPaste(t *testing.T) {
 	}
 	press(t, m, "esc")
 	focusPanel(t, m, 1)
-	if m.form != form || form.fields[0].value.text != "Payments unsaved" || m.current().Name != "Payments" {
+	if m.form != form || form.Fields[0].Value.Text != "Payments unsaved" || m.current().Name != "Payments" {
 		t.Fatal("help changed form edits or saved them")
 	}
 }
@@ -70,7 +71,7 @@ func TestGlobalCommandsAndChatTypingAreSeparate(t *testing.T) {
 	focusPanel(t, m, 2)
 	typeText(m, "ignored")
 	m.Update(tea.PasteMsg{Content: ":q\n"})
-	if m.draft().text != "" || m.chatEditing || m.command != nil {
+	if m.draft().Text != "" || m.chatEditing || m.command != nil {
 		t.Fatal("chat navigation accepted text or paste")
 	}
 	for _, command := range []string{"c", "chat"} {
@@ -83,15 +84,15 @@ func TestGlobalCommandsAndChatTypingAreSeparate(t *testing.T) {
 		m.Update(tea.PasteMsg{Content: " :settings"})
 		press(t, m, "ctrl+n")
 		press(t, m, "ctrl+o")
-		if m.help != nil || m.command != nil || m.chat().history || !strings.Contains(m.draft().text, ":help :settings") {
+		if m.help != nil || m.command != nil || m.chat().History || !strings.Contains(m.draft().Text, ":help :settings") {
 			t.Fatal("typing or retired Ctrl shortcuts invoked navigation")
 		}
 		press(t, m, "esc")
 	}
-	draft := m.draft().text
+	draft := m.draft().Text
 	typeText(m, ":h")
 	press(t, m, "enter")
-	if m.help == nil || m.draft().text != draft {
+	if m.help == nil || m.draft().Text != draft {
 		t.Fatal("Esc followed by help lost the draft")
 	}
 	press(t, m, "esc")
@@ -99,7 +100,7 @@ func TestGlobalCommandsAndChatTypingAreSeparate(t *testing.T) {
 		focusPanel(t, m, 2)
 		typeText(m, ":"+command)
 		press(t, m, "enter")
-		if m.page != "settings" || m.focus != 1 || m.draft().text != draft {
+		if m.page != "settings" || m.focus != 1 || m.draft().Text != draft {
 			t.Fatal("global settings failed")
 		}
 	}
@@ -108,20 +109,21 @@ func TestGlobalCommandsAndChatTypingAreSeparate(t *testing.T) {
 func TestChatActionAliasesAndGlobalStop(t *testing.T) {
 	for _, short := range []bool{true, false} {
 		m, _ := testModel(t)
-		id := createWorkspace(t, m, "Payments")
-		conversation, err := m.store.NewConversation(id, "Saved chat")
+		createWorkspace(t, m, "Payments")
+		id := selectChatConnection(t, m)
+		conversation, err := m.history.NewConversation(id, "Saved chat")
 		if err != nil {
 			t.Fatal(err)
 		}
-		turn, err := m.store.StartTurn(id, conversation.ID, workspace.Request{Prompt: "hello", Agent: ai.DefaultConfig()})
+		turn, err := m.history.StartTurn(id, conversation.ID, history.Request{Prompt: "hello", Agent: ai.DefaultConfig()})
 		if err != nil {
 			t.Fatal(err)
 		}
 		c := m.chat()
-		c.conversation, c.turns = conversation, []workspace.Turn{turn}
+		c.Conversation, c.Turns = conversation, []history.Turn{turn}
 		ctx, cancel := context.WithCancel(context.Background())
 		t.Cleanup(cancel)
-		m.run = &chatRun{chat: c, cancel: cancel}
+		m.run = &appchat.ChatRun{Chat: c, Cancel: cancel}
 		startChat(t, m)
 		typeText(m, "Keep this draft")
 		press(t, m, "esc")
@@ -135,26 +137,32 @@ func TestChatActionAliasesAndGlobalStop(t *testing.T) {
 		focusPanel(t, m, 0)
 		typeText(m, ":"+commands[0])
 		press(t, m, "enter")
-		if ctx.Err() == nil || m.run != nil {
-			t.Fatal("global stop did not cancel the response")
+		if ctx.Err() == nil || m.run == nil || !m.run.Stopping {
+			t.Fatal("global stop did not cancel the response while retaining its producer")
 		}
-		saved, err := m.store.Turns(id, conversation.ID)
+		m.Update(appchat.ChatEvent{Run: m.run, Done: true, Err: context.Canceled})
+		m.drainPersistence()
+		saved, err := m.history.Turns(id, conversation.ID)
 		if err != nil || saved[0].Response.Status != "cancelled" {
 			t.Fatal("stop did not persist the response", err)
 		}
 		typeText(m, ":"+commands[1])
+		press(t, m, "down")
 		press(t, m, "enter")
-		if m.chat().conversation.ID != "" || !m.chatEditing || m.focus != 2 || m.draft().text != "Keep this draft" {
+		finishChatRestore(t, m)
+		if m.chat().Conversation.ID != "" || !m.chatEditing || m.focus != 2 || m.draft().Text != "Keep this draft" {
 			t.Fatal("new chat did not preserve the draft and enter input")
 		}
 		press(t, m, "esc")
 		typeText(m, ":"+commands[2])
 		press(t, m, "enter")
-		if !m.chat().history || m.chatEditing || len(m.chat().choices) != 1 {
+		if !m.chat().History || m.chatEditing || len(m.chat().Choices) != 2 {
 			t.Fatal("open chat did not show history")
 		}
+		press(t, m, "down")
 		press(t, m, "enter")
-		if m.chat().conversation.ID != conversation.ID || m.chatEditing {
+		finishChatRestore(t, m)
+		if m.chat().Conversation.ID != conversation.ID || m.chatEditing {
 			t.Fatal("history selection did not reopen the conversation in navigation")
 		}
 	}
@@ -179,7 +187,7 @@ func TestHelpFourSectionsFitAndCanBeRead(t *testing.T) {
 					t.Fatalf("help row overflow at %v: %q", size, line)
 				}
 			}
-			for _, label := range []string{"1 Workspaces", "2 Views", "3 AI chat", "4 Global", ":settings", ":help", ":quit", ":b / :sidebar", ":i / :aiinteraction", "bb ii ss cc hh", "11 22 33"} {
+			for _, label := range []string{"Workspace", "AI chat", "Global", ":quit", "bb", "ii", "11", "22", "33"} {
 				if !strings.Contains(view, label) {
 					t.Fatalf("missing %q at %v", label, size)
 				}
@@ -190,7 +198,7 @@ func TestHelpFourSectionsFitAndCanBeRead(t *testing.T) {
 				t.Fatalf("Help must leave visible space around its overlay at %v", size)
 			}
 			if strings.Count(window[len(window)-1], "╰") != 1 || strings.Count(window[0], "╭") != 3 {
-				t.Fatal("Help must retain three upper sections and one full-width global box")
+				t.Fatalf("Help must retain three upper sections and one full-width global box at %v: first %q, last %q", size, window[0], window[len(window)-1])
 			}
 			footerLabel := "Help"
 			if editingCommand {
@@ -228,7 +236,7 @@ func TestHelpOverlayReturnsToSettingsAndPreservesBackground(t *testing.T) {
 	m.openSettings()
 	m.beginAppSettings()
 	typeText(m, " unsaved")
-	m.form.index = len(m.form.fields)
+	m.form.Index = len(m.form.Fields)
 	before := ansi.Strip(m.render())
 	form, settings := m.form, m.settingsOverlay
 	typeText(m, "hh")

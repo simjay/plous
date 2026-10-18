@@ -1,0 +1,374 @@
+{
+  "scope": "cluster",
+  "routes": [
+    {
+      "path": "/cluster/version",
+      "body": {
+        "major": "1",
+        "minor": "34",
+        "gitVersion": "v1.34.0"
+      }
+    },
+    {
+      "path": "/cluster/api/v1",
+      "body": {
+        "apiVersion": "v1",
+        "kind": "APIResourceList",
+        "groupVersion": "v1",
+        "resources": [
+          {
+            "name": "pods",
+            "kind": "Pod",
+            "namespaced": true,
+            "verbs": [
+              "get",
+              "list"
+            ]
+          },
+          {
+            "name": "services",
+            "kind": "Service",
+            "namespaced": true,
+            "verbs": [
+              "get",
+              "list"
+            ]
+          },
+          {
+            "name": "events",
+            "kind": "Event",
+            "namespaced": true,
+            "verbs": [
+              "get",
+              "list"
+            ]
+          },
+          {
+            "name": "secrets",
+            "kind": "Secret",
+            "namespaced": true,
+            "verbs": [
+              "get",
+              "list"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "path": "/cluster/apis/apps",
+      "body": {
+        "kind": "APIGroup",
+        "preferredVersion": {
+          "groupVersion": "apps/v1",
+          "version": "v1"
+        },
+        "versions": [
+          {
+            "groupVersion": "apps/v1",
+            "version": "v1"
+          }
+        ]
+      }
+    },
+    {
+      "path": "/cluster/apis/apps/v1",
+      "body": {
+        "apiVersion": "v1",
+        "kind": "APIResourceList",
+        "groupVersion": "apps/v1",
+        "resources": [
+          {
+            "name": "deployments",
+            "kind": "Deployment",
+            "namespaced": true,
+            "verbs": [
+              "get",
+              "list"
+            ]
+          },
+          {
+            "name": "replicasets",
+            "kind": "ReplicaSet",
+            "namespaced": true,
+            "verbs": [
+              "get",
+              "list"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "path": "/cluster/apis/apps/v1/namespaces/apps/deployments/web",
+      "body": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+          "name": "web",
+          "namespace": "apps",
+          "uid": "web-uid",
+          "creationTimestamp": "2026-10-01T00:00:00Z",
+          "resourceVersion": "1",
+          "labels": {
+            "app": "web"
+          },
+          "generation": 7
+        },
+        "spec": {
+          "replicas": 3,
+          "selector": {
+            "matchLabels": {
+              "app": "web"
+            }
+          }
+        },
+        "status": {
+          "replicas": 3,
+          "readyReplicas": 3,
+          "availableReplicas": 3,
+          "updatedReplicas": 3,
+          "observedGeneration": 7
+        }
+      }
+    },
+    {
+      "path": "/cluster/api/v1/namespaces/apps/pods/web",
+      "body": {
+        "apiVersion": "v1",
+        "kind": "Pod",
+        "metadata": {
+          "name": "web",
+          "namespace": "apps",
+          "uid": "web-uid",
+          "creationTimestamp": "2026-10-01T00:00:00Z",
+          "resourceVersion": "1",
+          "labels": {
+            "app": "web"
+          },
+          "ownerReferences": [
+            {
+              "apiVersion": "apps/v1",
+              "kind": "ReplicaSet",
+              "name": "web-rs",
+              "uid": "web-rs-uid",
+              "controller": true
+            }
+          ]
+        },
+        "spec": {
+          "containers": [
+            {
+              "name": "app",
+              "image": "web:v3"
+            }
+          ]
+        },
+        "status": {
+          "phase": "Running",
+          "containerStatuses": [
+            {
+              "name": "app",
+              "ready": true,
+              "restartCount": 0,
+              "state": {
+                "running": {}
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "path": "/cluster/api/v1/namespaces/apps/pods",
+      "body": {
+        "apiVersion": "v1",
+        "kind": "PodList",
+        "metadata": {},
+        "items": [
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "web",
+              "namespace": "apps",
+              "uid": "web-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "path": "/cluster/api/v1/namespaces/apps/pods/web/log",
+      "text": "2026-10-15T10:00:00Z panic: dependency unavailable \u03a9\n"
+    },
+    {
+      "path": "/cluster/api/v1/namespaces/apps/secrets/sh.helm.release.v1.web.v2",
+      "body": {
+        "apiVersion": "v1",
+        "kind": "Secret",
+        "metadata": {
+          "name": "sh.helm.release.v1.web.v2",
+          "namespace": "apps",
+          "uid": "sh.helm.release.v1.web.v2-uid",
+          "creationTimestamp": "2026-10-01T00:00:00Z",
+          "resourceVersion": "1",
+          "labels": {
+            "owner": "helm",
+            "name": "web",
+            "version": "2",
+            "status": "deployed"
+          }
+        },
+        "type": "helm.sh/release.v1",
+        "data": {
+          "release": "SDRzSUFBQUFBQUFDLzExUXkyN0RJQkQ4RmNTNVNoTWZ1YmJmMEJPWExhemJWZU1GQVNhdHJQeDcyWFd0U0wweHd6QVBOc3V3b0hYRzN2RGRQaG1GTlVOUURuS3VRbllzbFJJUGFocUllRTdqdU5uYW9LMVZoQkh6TmYxZ0ZISEVHZ3JsdGord00zMjN0YUFwMkVsTjdrTVRQcUUwOVZpd1FZUUdDdjUxZWNUYXkrbDhPZ3NIbWQ0ZWRKL1Vyc04xUlNteTNkVTk4VXdmNmxoR01RcndrbGFXdkVtdUYyQ2FzYlo5NFdIbmpLeDk3aGZQWDhUUm1WZmR0Q0EzejBkTDU5a1lhZW5NNkhnQS9hLzl2ZWVhTWFqc0w3cU9WRDlXL3dLNXo0cHhhZ0VBQUE9PQ=="
+        }
+      }
+    },
+    {
+      "path": "/cluster/api/v1/namespaces/apps/secrets/sh.helm.release.v1.web.v3",
+      "body": {
+        "apiVersion": "v1",
+        "kind": "Secret",
+        "metadata": {
+          "name": "sh.helm.release.v1.web.v3",
+          "namespace": "apps",
+          "uid": "sh.helm.release.v1.web.v3-uid",
+          "creationTimestamp": "2026-10-01T00:00:00Z",
+          "resourceVersion": "1",
+          "labels": {
+            "owner": "helm",
+            "name": "web",
+            "version": "3",
+            "status": "deployed"
+          }
+        },
+        "type": "helm.sh/release.v1",
+        "data": {
+          "release": "SDRzSUFBQUFBQUFDLzExUXUyNERJUkQ4RlVRZE9YYmMwU2Jma0lwbUEzdkpLcjRGc1J5SmRmSy9HL1p5c3BTT0dZWjVzRnFHR2EwejlnYy83Sk5SS0JtQ2NwQ3pETEpoRVVyY3FYTkh4RlBxeDlWS2hicklFRWJNbDNURk9NUVJKUlRLZFh0Z0ovcXRTMEZUc0pHYTNMb21mRUdwNmpGamhRZ1ZGUHpyOG9pMXA4UHhjQndjWkhwLzBPMUY3UnBjRmh4RjFwdTZKNTdvVXgxTEwwWUJYdFBDSSs4OHJtZGdtbERxdG5DM2MyYXNmVzRuejkvRTBaazMzVFFqVjg5N1MrZlptTkhTbWQ1eEIvcGYyM3ZQa2pHbzdDOWFlcXJ2cSsvd0ZpbXBhZ0VBQUE9PQ=="
+        }
+      }
+    },
+    {
+      "path": "/cluster/api/v1/namespaces/apps/secrets",
+      "body": {
+        "apiVersion": "v1",
+        "kind": "SecretList",
+        "items": [
+          {
+            "apiVersion": "v1",
+            "kind": "Secret",
+            "metadata": {
+              "name": "sh.helm.release.v1.web.v2",
+              "namespace": "apps",
+              "uid": "sh.helm.release.v1.web.v2-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "owner": "helm",
+                "name": "web",
+                "version": "2",
+                "status": "deployed"
+              }
+            },
+            "type": "helm.sh/release.v1",
+            "data": {
+              "release": "SDRzSUFBQUFBQUFDLzExUXkyN0RJQkQ4RmNTNVNoTWZ1YmJmMEJPWExhemJWZU1GQVNhdHJQeDcyWFd0U0wweHd6QVBOc3V3b0hYRzN2RGRQaG1GTlVOUURuS3VRbllzbFJJUGFocUllRTdqdU5uYW9LMVZoQkh6TmYxZ0ZISEVHZ3JsdGord00zMjN0YUFwMkVsTjdrTVRQcUUwOVZpd1FZUUdDdjUxZWNUYXkrbDhPZ3NIbWQ0ZWRKL1Vyc04xUlNteTNkVTk4VXdmNmxoR01RcndrbGFXdkVtdUYyQ2FzYlo5NFdIbmpLeDk3aGZQWDhUUm1WZmR0Q0EzejBkTDU5a1lhZW5NNkhnQS9hLzl2ZWVhTWFqc0w3cU9WRDlXL3dLNXo0cHhhZ0VBQUE9PQ=="
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Secret",
+            "metadata": {
+              "name": "sh.helm.release.v1.web.v3",
+              "namespace": "apps",
+              "uid": "sh.helm.release.v1.web.v3-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "owner": "helm",
+                "name": "web",
+                "version": "3",
+                "status": "deployed"
+              }
+            },
+            "type": "helm.sh/release.v1",
+            "data": {
+              "release": "SDRzSUFBQUFBQUFDLzExUXUyNERJUkQ4RlVRZE9YYmMwU2Jma0lwbUEzdkpLcjRGc1J5SmRmSy9HL1p5c3BTT0dZWjVzRnFHR2EwejlnYy83Sk5SS0JtQ2NwQ3pETEpoRVVyY3FYTkh4RlBxeDlWS2hicklFRWJNbDNURk9NUVJKUlRLZFh0Z0ovcXRTMEZUc0pHYTNMb21mRUdwNmpGamhRZ1ZGUHpyOG9pMXA4UHhjQndjWkhwLzBPMUY3UnBjRmh4RjFwdTZKNTdvVXgxTEwwWUJYdFBDSSs4OHJtZGdtbERxdG5DM2MyYXNmVzRuejkvRTBaazMzVFFqVjg5N1MrZlptTkhTbWQ1eEIvcGYyM3ZQa2pHbzdDOWFlcXJ2cSsvd0ZpbXBhZ0VBQUE9PQ=="
+            }
+          }
+        ]
+      }
+    },
+    {
+      "path": "/cluster/apis",
+      "body": {
+        "apiVersion": "v1",
+        "kind": "APIGroupList",
+        "groups": [
+          {
+            "name": "apps",
+            "versions": [
+              {
+                "groupVersion": "apps/v1",
+                "version": "v1"
+              }
+            ],
+            "preferredVersion": {
+              "groupVersion": "apps/v1",
+              "version": "v1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "path": "/cluster/api/v1/namespaces/apps/secrets/sh.helm.release.v1.web.v1",
+      "status": 404,
+      "body": {
+        "apiVersion": "v1",
+        "kind": "Status",
+        "status": "Failure",
+        "reason": "NotFound",
+        "code": 404,
+        "message": "retained fixture revision was pruned"
+      }
+    }
+  ]
+}

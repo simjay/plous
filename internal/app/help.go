@@ -1,34 +1,44 @@
 package app
 
 import (
+	lipgloss "charm.land/lipgloss/v2"
+	"fmt"
+	"github.com/simjay/plous/internal/ui"
+	helpview "github.com/simjay/plous/internal/ui/help"
+	textview "github.com/simjay/plous/internal/ui/text"
+	"strconv"
 	"strings"
-
-	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
 )
 
 type helpState struct {
-	previousFocus int
-	section       int
-	scroll        [3]int
+	previousFocus, section int
+	scroll                 [3]int
+	sections               [3]helpview.Section
 }
 
-// Group commands by the panel they affect. Colon commands work globally in
-// navigation; other keys apply to the focused panel or active editor.
-var panelHelp = [3]string{
-	":n / :new\nNew workspace\n\n/  Search tree\n↑↓  Select\n←→  Fold / expand\nEnter  Select / toggle\nHome / End\nFirst / last\nPgUp / PgDn\nJump ten rows",
-	":1 / 11  Overview\n:2 / 22  Explore\n:3 / 33  Activity",
-	":c / :chat / cc  Type\n:C / :newchat  New chat\n:H / :openchat  History\n:X / :stopchat  Stop\n/m / /model  Choose model\n\nEnter  Send / run command\nShift+Enter  Newline\nCtrl+J  Newline fallback\nEsc  Leave input; keep draft\n\nRead conversation\n↑↓ / j k  Scroll lines\nPgUp / PgDn  Scroll a page, also while typing\nHome  Oldest message\nEnd  Latest; follow new replies\nHome/End still move the caret while typing.\nNew reply text does not move older messages while reading.\n\nHistory: ↑↓ choose · Enter open\n/  Find replies / search history\nFind: Enter finish · n/N matches\nEsc closes search\n//model  Literal /model\n:p / :restoreprompt  Restore last message\n\nChat scope\nThe header shows the workspace, tool, and selected connection.\nMessages include saved scope and the current page identity.\nRead-only tools can retrieve resources, bounded logs, Activity, and earlier workspace chats.\nReads stay on the captured connection. Namespace limits apply to namespaced resources.\nGeneral chat can search its current conversation only.\nNo arbitrary files or shell commands are available.",
+func (m *model) openHelp() {
+	if m.help != nil {
+		if !m.helpVisible() {
+			m.help.previousFocus = m.focus
+			m.helpTravel = overlayTravel{}
+		}
+		return
+	}
+	m.helpTravel = overlayTravel{}
+	sections := m.helpSections()
+	m.help = &helpState{previousFocus: m.focus, section: m.focus, sections: sections}
+	if m.chatSourcesVisible() {
+		m.help.section = 2
+	} else if m.settingsOverlay != nil || m.form != nil {
+		m.help.section = 1
+	}
 }
-
-const globalHelp = ":s / :settings (ss)   :h / :help (hh)   :q / :quit\n" +
-	":b / :sidebar (bb)   :i / :aiinteraction (ii)   Toggle panels\n" +
-	"Tab / Shift+Tab  Panels outside overlays   Ctrl+C  Save and exit\n" +
-	"bb ii ss cc hh · 11 22 33: navigation only."
 
 func (m *model) closeHelp() {
 	if m.help != nil {
-		m.focus = m.help.previousFocus
+		if m.helpVisible() {
+			m.focus = m.help.previousFocus
+		}
 		m.help = nil
 		m.ensureVisibleFocus()
 	}
@@ -44,10 +54,10 @@ func (m *model) helpDimensions() (width, height int) {
 
 func (m *model) helpSizes() (widths [3]int, topHeight, bottomHeight int) {
 	width, height := m.helpDimensions()
-	widths[0] = min(26, max(18, width/6))
-	widths[2] = min(48, max(24, width*3/10))
+	widths[0] = max(18, width/4)
+	widths[2] = max(24, width/3)
 	widths[1] = width - widths[0] - widths[2]
-	bottomHeight = 7
+	bottomHeight = 8
 	topHeight = height - bottomHeight
 	return
 }
@@ -74,7 +84,7 @@ func (m *model) updateHelp(key string) {
 	section := m.help.section
 	widths, height, _ := m.helpSizes()
 	available := m.helpBodyHeight(section, height)
-	lines := strings.Split(ansi.Wrap(m.panelHelpText(section), widths[section]-4, ""), "\n")
+	lines := helpLines(m.panelHelpSection(section), widths[section]-4)
 	last := max(0, len(lines)-available)
 	offset := min(m.help.scroll[section], last)
 	switch key {
@@ -95,175 +105,62 @@ func (m *model) updateHelp(key string) {
 }
 
 func helpBox(title, content string, width, height int, focused bool) string {
-	color := borderColor
+	color := ui.BorderColor
 	if focused {
-		color = focusedBorder
+		color = ui.FocusedBorder
 	}
-	headingStyle := overlayTitleStyle.Background(surface)
+	headingStyle := ui.OverlayTitleStyle.Background(ui.Surface)
 	if focused {
-		headingStyle = headingStyle.Background(highlight).Width(width - 4)
+		headingStyle = headingStyle.Background(ui.Highlight).Width(width - 4)
 	}
-	heading := headingStyle.Render(clipped(title, width-4))
+	heading := headingStyle.Render(ui.Clipped(title, width-4))
 	return lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(color).
-		Foreground(foreground).Background(surface).
+		Foreground(ui.Foreground).Background(ui.Surface).
 		Padding(0, 1).Width(width).Height(height).MaxWidth(width).MaxHeight(height).
 		Render(heading + "\n" + content)
 }
 
 func (m *model) helpPanels() string {
 	widths, topHeight, bottomHeight := m.helpSizes()
-	titles := [3]string{"1 Workspaces", "2 Views", "3 AI chat"}
 	panels := make([]string, 3)
 	for i, width := range widths {
+		section := m.panelHelpSection(i)
 		height := m.helpBodyHeight(i, topHeight)
-		body := styledTextView(styledHelpText(m.panelHelpText(i)), width-4, height, m.help.scroll[i])
+		lines := helpLines(section, width-4)
+		offset := min(m.help.scroll[i], max(0, len(lines)-height))
+		title := section.Title
+		if len(lines) > height {
+			label := fmt.Sprintf("%d/%d", offset+1, len(lines))
+			title = ui.Clipped(title, max(1, width-5-len(label))) + " " + label
+		}
+		end := min(len(lines), offset+height)
+		body := strings.Join(lines[offset:end], "\n")
 		if i == 1 && m.command != nil {
 			body = lipgloss.NewStyle().Width(width-4).Height(height).Render(body) + "\n" + m.commandBox(width-4)
 		}
-		panels[i] = helpBox(titles[i], body, width, topHeight, m.help.section == i)
+		panels[i] = textview.MouseScope(ui.MouseTarget(helpBox(title, body, width, topHeight, m.help.section == i), "help/"+strconv.Itoa(i)), "help")
 	}
 	width, _ := m.helpDimensions()
-	global := helpBox("4 Global · Help · Esc close", styledHelpText(globalHelp), width, bottomHeight, false)
+	global := textview.MouseScope(helpBox("Global · Navigation", m.globalHelpBody(), width, bottomHeight, false), "help")
 	return lipgloss.JoinVertical(lipgloss.Left, lipgloss.JoinHorizontal(lipgloss.Top, panels...), global)
 }
 
-func (m *model) panelHelpText(panel int) string {
-	text := panelHelp[panel]
-	if panel == 1 {
-		view := *m
-		view.help, view.command, view.focus = nil, nil, 1
-		text += "\n\n" + view.viewHelp()
-	}
-	return text
+func (m *model) globalHelpBody() string {
+	key := func(k, label string) string { return ui.ShortcutStyle.Render(k) + " " + label }
+	return strings.Join([]string{
+		key(":1 / 11", "Overview") + "   " + key(":2 / 22", "Explore") + "   " + key(":3 / 33", "Activity"),
+		key(navigationBinding("sidebar"), "Sidebar") + "   " + key(navigationBinding("aiinteraction"), "AI panel") + "   " + key(navigationBinding("fullscreen"), "Fullscreen*"),
+		key(navigationBinding("settings"), "Settings") + "   " + key(navigationBinding("help"), "Help") + "   " + key(":quit", "Exit"),
+		key("Alt+← / Alt+→", "Panels") + "   " + key("Ctrl+]", "Agent / return") + "   " + key("Ctrl+C", "Save and exit"),
+		key(":", "Command, then Enter") + "   " + key("Tab", "Tree / main") + "   " + ui.Muted.Render("* Outside overlays"),
+	}, "\n")
 }
 
-const readerNavigationHelp = "↑↓ / j k / PgUp / PgDn  Scroll\nHome / End  First / last\n/ Find · Enter finish · n/N matches\nv Select · y Copy · Esc clear / back"
-const readerHelp = readerNavigationHelp + "\n:z / :zoom  Expand / restore"
-
-const editorHelp = `Plous Editor
-:h / :help  Open this reference
-PgUp / PgDn  Scroll Help
-Esc  Return to the same draft
-
-Modes and movement
-NORMAL: movement and editing keys
-INSERT: type literal text
-SELECT: movement extends selection
-Arrows / h j k l  Move cursor
-w / b / e  Next / previous word / word end
-0 / $ or Home / End  Line start / end
-gg / G  Document start / end
-PgUp / PgDn  Move a page
-
-Enter text
-i  Insert at cursor
-a  Append after cursor
-o  New line below, then Insert
-Esc in Insert  Return to Normal
-Tab in Insert  Indent two spaces
-Enter in Insert  New line with indentation
-Backspace / Delete in Insert  Delete before / at cursor
-Paste  One literal undoable edit
-
-Select and edit
-v / V  Select characters / whole lines
-Esc in Select  Return to Normal
-x  Delete character or selection
-dd  Cut whole line
-d in Select  Cut selection
-yy in Normal  Copy line
-y in Select  Copy selection
-p  Paste last text copied/cut in this editor
-u / :u / :undo  Undo
-U (Shift+U) / :U / :redo  Redo
-> / <  Indent / outdent lines
-
-Find
-/  Enter search text
-Enter  Finish search input
-n / N  Next / previous match
-Up / Down while typing  Previous / next match
-Esc  Clear search before leaving the editor
-
-Save and close
-:w  Save to Kubernetes; validation runs automatically
-:v / :review  Optional review without saving
-Review uses the same :w Save command.
-Saved to Kubernetes confirms the server accepted the change.
-:wq  Save and close after success
-:q  Close; modified text asks before discarding
-:q!  Discard draft and close
-Esc in Normal  Focus document actions
-Left / Right, Enter  Choose / activate action
-Esc in actions  Request Close
-!  Full details of the last save or validation error
-:quit / Ctrl+C  Exit Plous, without applying draft
-
-View and focus
-:z / :zoom  Expand / restore
-:L / :linenumbers  Toggle line numbers
-Tab in Normal/Select, Shift+Tab  Switch panels
-Help, chat and review preserve draft and undo history.
-Esc leaves search/selection before restoring an expanded view.
-In Insert, press Esc before :h or another command.
-Document keys own h, b, i and other app prefix letters.
-No Vim counts, registers, macros or arbitrary operators.`
-
-func (m *model) viewHelp() string {
-	switch {
-	case m.form != nil:
-		return "Form\n↑↓ Fields · Enter next / activate\n←→ Choose · Space toggle\nEsc Cancel to previous screen\nText and paste stay literal in fields.\nCommands work from action buttons."
-	case m.settingsOverlay != nil:
-		return "Settings\n↑↓ Select · Enter open\nApplication: AI connections\nCurrent workspace: name and connections\nEsc Return to previous view"
-	case m.resourceTerminalVisible():
-		text := "Exec\nCtrl+] Review output (release terminal input)\nCtrl+C Save and exit Plous\n" + readerHelp
-		if m.explore.terminal.done {
-			return text + "\ne Edit command / choose shell\nR Retry same command · x Close"
-		}
-		return text + "\nr Resume terminal input\nt Interrupt remote process · x Close"
-	case m.documentActive():
-		a := m.explore.action
-		if a.diagnostic != nil {
-			return "Error details\nEsc Back to editor; draft and undo history stay intact\nSave result unknown means check Kubernetes before retrying.\n" + readerHelp + "\n\n" + editorHelp
-		}
-		if a.stage == "review" {
-			return "Optional review\nNothing saved. :w saves these changes to Kubernetes.\n:wq Saves and closes after success\nEsc Back to editor; keeps draft\nClear search/selection and restore expansion first.\n" + readerHelp + "\n[ ] Previous / next change\na Actions · ←→ Choose · Enter activate\nEnter while reading never saves.\n\n" + editorHelp
-		}
-		return editorHelp
-	case m.valueDocumentActive():
-		return "Value (read only)\n↑↓ / PgUp / PgDn Scroll\n/ Find · Enter finish · n/N matches\nv Select · y Copy selection / line\na Read / actions · ←→ Choose · Enter activate\nCopy value copies the entire value.\n:z / :zoom · :L / :linenumbers\nEsc Clear search / selection, then hide"
-	case m.resourceActionVisible():
-		if a := m.explore.action; a.stage == "done" && a.progress != nil {
-			return "Operation progress\n↑↓ / j k / PgUp / PgDn Scroll\nHome / End First / last page\ng Check status again after a stopped check\nEnter / Esc Return to resource details\nClosing stops checks, not the accepted operation."
-		}
-		return "Resource action\n↑↓ Select · Enter next / confirm\nEsc Return to previous step\nType values in the focused input.\nChanges require explicit confirmation."
-	case m.activityReviewVisible():
-		return "Activity comparison (read only)\n" + readerHelp + "\n[ ] Previous / next change\nEsc Return to saved summary"
-	case m.yamlDocumentActive():
-		text := "YAML (read only)\n↑↓ / j k / PgUp / PgDn Scroll\n/ Find · Enter finish · n/N matches\nz Select · y Copy · E Edit\n:z / :zoom · :L / :linenumbers\nEsc Clear search / selection, then back"
-		if m.explore.resource.Key() == "secrets" {
-			text += "\nv Reveal / hide Secret values"
-		}
-		return text
-	case m.logWorkspaceActive():
-		return "Pod / workload logs\n" + readerNavigationHelp + "\nz Expand / restore · :z / :zoom also work\nSpace Pause / jump live\ng Reload logs (clears and reloads buffer) · o Choose container\np Previous instance (before a restart)\nu Time range (requested history)\nt Timestamps · w Wrap lines (fit long lines)\nNew logs keep collecting while reading.\nWorkloads default to All Pods; lines start with Pod/container.\nPod Logs also offers All application containers.\no filters containers; workloads filter across Pods.\nMembership refreshes every 3s; failures stay isolated.\nUp to 32 sources; omitted sources are reported."
-	case m.exploreVisible():
-		e := m.explorer()
-		if e.picker != "" || e.input != nil {
-			return "Explore selection / filter\nType to search or enter a value\n↑↓ Select · Enter apply\nEsc Cancel\nNamespaces: choose Reload namespaces with an empty search; manual entry available"
-		}
-		if e.detail != nil {
-			return "Resource details\nd Describe · y YAML · e Events · r Related\n[ ] Change section · / Find\nEnter Finish find · n/N Matches\nPgUp / PgDn Scroll · Esc Back" + m.resourceActionHelp()
-		}
-		return "Resource table\n↑↓ / j k Select · Enter Open\n/ Text filter · Backspace Clear text filter\nf Label selector · S Sort\nn Namespaces · g Refresh\n:k / :kinds  Resource picker\n:N / :namespace  Namespace picker\n:K / :connections  Connection picker\n:g / :refresh  Reload\n:pods / :deployments / :services\nEsc Focus sidebar"
-	case m.mode == 2:
-		if m.detail != "" {
-			return "Activity detail\nd / :v / :review  Compare snapshots\n/ Find · Enter finish · n/N matches\nPgUp / PgDn Scroll · Esc Back"
-		}
-		return "Activity\n/ Filter changes\n↑↓ Select · Enter Details · Esc Sidebar"
-	default:
-		return "Overview / connection settings\n/ Find · Enter finish · n/N matches\nPgUp / PgDn Scroll · Esc Back / sidebar\nEmpty workspace: Enter Add tool"
+func (m *model) panelHelpSection(panel int) helpview.Section {
+	if m.help != nil && m.help.sections[panel].Title != "" {
+		return m.help.sections[panel]
 	}
+	return m.helpSections()[panel]
 }
 
 func (m *model) renderHelpOverlay() string {
@@ -273,5 +170,5 @@ func (m *model) renderHelpOverlay() string {
 	base.ensureVisibleFocus()
 	lines := strings.Split(base.render(), "\n")
 	lines[len(lines)-1] = m.footer()
-	return centeredOverlay(strings.Join(lines, "\n"), m.helpPanels())
+	return ui.CenteredOverlay(strings.Join(lines, "\n"), m.helpPanels())
 }

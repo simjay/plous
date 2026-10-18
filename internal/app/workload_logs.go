@@ -3,45 +3,40 @@ package app
 import (
 	"slices"
 
-	"github.com/simjay/plous/internal/kubernetes"
+	"github.com/simjay/plous/internal/app/monitor"
+	kubernetes "github.com/simjay/plous/internal/integrations/kubernetes/monitor"
 )
-
-const allApplicationContainers = "All application containers"
-
-func (a *resourceActionState) allPodsChoice() bool {
-	return a.operation == "logs" && a.resource.Key() != "pods" && kubernetes.HasPodTargets(a.resource)
-}
 
 func (m *model) openWorkloadLogs() {
 	e := m.explorer()
-	origin := e.logOrigin
-	if e.detail != nil && e.tab != 4 {
-		location := e.location()
+	origin := e.LogOrigin
+	if e.Detail != nil && e.Tab != 4 {
+		location := e.Location()
 		origin = &location
 	}
-	e.logOrigin = origin
+	e.LogOrigin = origin
 	m.stopResourceAction()
-	e.mergedLogs = true
-	e.container, e.tab, e.detailKey, e.logKey = "", 4, "", ""
-	e.scroll, e.previous, e.detailValid = 0, false, false
+	e.MergedLogs = true
+	e.Container, e.Tab, e.DetailKey, e.LogKey = "", 4, "", ""
+	e.Scroll, e.Previous, e.DetailValid = 0, false, false
 	m.podLogViewer().Follow()
 }
 
 func (m *model) logContainers() []string {
 	e := m.explorer()
-	if e.mergedLogs && e.resource.Key() != "pods" {
-		names := slices.Clone(e.workloadLogStatus.Containers)
-		if e.container != "" && !slices.Contains(names, e.container) {
-			names = append(names, e.container)
+	if e.MergedLogs && e.Resource.Key() != "pods" {
+		names := slices.Clone(e.WorkloadLogStatus.Containers)
+		if e.Container != "" && !slices.Contains(names, e.Container) {
+			names = append(names, e.Container)
 		}
-		return append([]string{allApplicationContainers}, names...)
+		return append([]string{monitor.AllApplicationContainers}, names...)
 	}
-	if e.detail == nil {
+	if e.Detail == nil {
 		return nil
 	}
-	names := kubernetes.Containers(*e.detail)
-	if e.tab == 4 {
-		return append([]string{allApplicationContainers}, names...)
+	names := kubernetes.Containers(*e.Detail)
+	if e.Tab == 4 {
+		return append([]string{monitor.AllApplicationContainers}, names...)
 	}
 	return names
 }

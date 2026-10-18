@@ -1,14 +1,16 @@
 package app
 
 import (
+	tea "charm.land/bubbletea/v2"
 	"context"
 	"fmt"
+	"github.com/simjay/plous/internal/ai/history"
+	ai "github.com/simjay/plous/internal/ai/model"
+	appchat "github.com/simjay/plous/internal/app/chat"
+	textview "github.com/simjay/plous/internal/ui/text"
+	"github.com/simjay/plous/internal/workspace"
 	"strings"
 	"testing"
-
-	tea "charm.land/bubbletea/v2"
-	"github.com/simjay/plous/internal/ai"
-	"github.com/simjay/plous/internal/workspace"
 )
 
 func TestChatCommandFocusesComposerFromNavigation(t *testing.T) {
@@ -18,7 +20,7 @@ func TestChatCommandFocusesComposerFromNavigation(t *testing.T) {
 				m, _ := testModel(t)
 				id := createWorkspace(t, m, "Payments")
 				mainCommand(t, m, "1")
-				*m.draft() = newEditor("Saved draft")
+				*m.draft() = textview.NewField("Saved draft")
 				switch from {
 				case "tree":
 					focusPanel(t, m, 0)
@@ -31,16 +33,16 @@ func TestChatCommandFocusesComposerFromNavigation(t *testing.T) {
 				case "help":
 					mainCommand(t, m, "h")
 				case "hidden":
-					mainCommand(t, m, "i")
+					hideAssistant(t, m)
 				}
 				page := m.page
 				typeText(m, ":"+command)
 				press(t, m, "enter")
 				typeText(m, " continued")
-				if m.focus != 2 || !m.chatEditing || m.rightHidden || m.help != nil || m.chat().history || m.command != nil {
+				if m.focus != 2 || !m.chatEditing || m.rightHidden || m.help != nil || m.chat().History || m.command != nil {
 					t.Fatalf("chat composer did not receive focus: %s", m.status)
 				}
-				if m.draft().text != "Saved draft continued" || m.active != id || m.page != page {
+				if m.draft().Text != "Saved draft continued" || m.active != id || m.page != page {
 					t.Fatal("chat entry changed workspace, view, or draft")
 				}
 			})
@@ -51,7 +53,7 @@ func TestChatCommandFocusesComposerFromNavigation(t *testing.T) {
 func TestChatCommandRevealsPanelBeforeWorkspaceCreation(t *testing.T) {
 	for _, command := range []string{"c", "chat"} {
 		m, _ := testModel(t)
-		mainCommand(t, m, "i")
+		hideAssistant(t, m)
 		mainCommand(t, m, "h")
 		mainCommand(t, m, command)
 		if m.focus != 2 || m.rightHidden || m.help != nil || !m.chatEditing {
@@ -59,7 +61,7 @@ func TestChatCommandRevealsPanelBeforeWorkspaceCreation(t *testing.T) {
 		}
 		typeText(m, "Hello")
 		m.Update(tea.PasteMsg{Content: " :s 11"})
-		if m.draft().text != "Hello :s 11" || len(m.workspaces) != 0 {
+		if m.draft().Text != "Hello :s 11" || len(m.workspaces) != 0 {
 			t.Fatal("general chat must accept literal text without creating a workspace")
 		}
 	}
@@ -71,7 +73,9 @@ func TestApplicationSettingsSaveAndCancelThroughSettings(t *testing.T) {
 			m, _ := testModel(t)
 			mainCommand(t, m, command)
 			press(t, m, "enter")
-			if m.form == nil || m.form.kind != "appsettings" {
+			press(t, m, "enter")
+			press(t, m, "enter")
+			if m.form == nil || m.form.Kind != "appsettings" {
 				t.Fatal("global settings unavailable before first workspace")
 			}
 			completeAIForm(t, m, map[string]string{"name": "Review helper", "provider": "openai", "endpoint": "http://localhost:1234/v1", "instructions": "Be concise"})
@@ -80,6 +84,8 @@ func TestApplicationSettingsSaveAndCancelThroughSettings(t *testing.T) {
 			}
 			mainCommand(t, m, command)
 			press(t, m, "enter")
+			press(t, m, "enter")
+			press(t, m, "enter")
 			press(t, m, "down")
 			typeText(m, "unsaved")
 			press(t, m, "esc")
@@ -87,12 +93,13 @@ func TestApplicationSettingsSaveAndCancelThroughSettings(t *testing.T) {
 			if err != nil || saved.Agent.Name != "Review helper" {
 				t.Fatal("cancel applied edits", err)
 			}
-			if m.page != "settings" {
-				t.Fatal("cancel did not return to Settings")
+			if m.form == nil || m.form.Kind != "mainagent" {
+				t.Fatal("cancel did not return to Agent setup")
 			}
 		})
 	}
 }
+
 func TestChatSendKeysAndLiteralPaste(t *testing.T) {
 	m, _ := testModel(t)
 	createWorkspace(t, m, "Test")
@@ -102,65 +109,76 @@ func TestChatSendKeysAndLiteralPaste(t *testing.T) {
 	typeText(m, ":q")
 	press(t, m, "ctrl+j")
 	m.Update(tea.PasteMsg{Content: "/new\n:setting"})
-	if m.run != nil || m.command != nil || m.draft().text != "hello\n:q\n/new\n:setting" {
+	if m.run != nil || m.command != nil || m.draft().Text != "hello\n:q\n/new\n:setting" {
 		t.Fatal("text was interpreted as commands")
 	}
 	press(t, m, "enter")
-	if m.run != nil || m.draft().text == "" || !strings.Contains(m.status, "connect a vendor") {
+	if m.run != nil || m.draft().Text == "" || !strings.Contains(m.status, "connect a vendor") {
 		t.Fatalf("unconfigured send lost draft: %s", m.status)
 	}
 }
+
 func TestChatRunRoutesUpdatesAndPreservesCancellation(t *testing.T) {
 	m, _ := testModel(t)
-	first := createWorkspace(t, m, "First")
+	createWorkspace(t, m, "First")
+	first := selectChatConnection(t, m)
 	c := m.chat()
-	conversation, err := m.store.NewConversation(first, "Hello")
+	conversation, err := m.history.NewConversation(first, "Hello")
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.conversation = conversation
-	turn, err := m.store.StartTurn(first, conversation.ID, workspace.Request{Prompt: "hello", Agent: ai.DefaultConfig()})
+	c.Conversation = conversation
+	turn, err := m.history.StartTurn(first, conversation.ID, history.Request{Prompt: "hello", Agent: ai.DefaultConfig()})
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.turns = []workspace.Turn{turn}
+	c.Turns = []history.Turn{turn}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	run := &chatRun{chat: c, cancel: cancel, events: make(chan chatEvent, 1)}
+	run := &appchat.ChatRun{Chat: c, Cancel: cancel, Events: make(chan appchat.ChatEvent, 1)}
 	m.run = run
 	second := createWorkspace(t, m, "Second")
-	m.Update(chatEvent{run: run, text: "partial from first"})
-	if m.chat() == c || m.active != second || c.turns[0].Response.Text != "partial from first" {
+	selectChatConnection(t, m)
+	m.Update(appchat.ChatEvent{Run: run, Text: "partial from first"})
+	if m.chat() == c || m.active != second || c.ActiveTurn == nil || c.ActiveTurn.Response.Text != "partial from first" {
 		t.Fatal("response landed in wrong workspace")
 	}
-	if cmd := press(t, m, "ctrl+c"); cmd == nil {
-		t.Fatal("Ctrl+C must exit while streaming")
+	press(t, m, "ctrl+c")
+	if !m.quitting {
+		t.Fatal("Ctrl+C must request shutdown while streaming")
 	}
 	if ctx.Err() == nil {
 		t.Fatal("request not cancelled")
 	}
-	saved, err := m.store.Turns(first, conversation.ID)
+	if m.run != run || !run.Stopping {
+		t.Fatal("cancellation released the run before producer completion")
+	}
+	m.Update(appchat.ChatEvent{Run: run, Done: true, Result: ai.Result{Text: "late result"}})
+	m.drainPersistence()
+	saved, err := m.history.Turns(first, conversation.ID)
 	if err != nil || saved[0].Response.Status != "cancelled" || saved[0].Response.Text != "partial from first" {
 		t.Fatal(saved, err)
 	}
-	m.Update(chatEvent{run: run, done: true, result: ai.Result{Text: "late result"}})
-	if c.turns[0].Response.Text != "partial from first" {
-		t.Fatal("late response overwrote cancellation")
+	if len(c.Turns) != 0 {
+		t.Fatal("inactive response repopulated the evicted transcript")
 	}
 }
+
 func TestChatRecoveryAndNewConversationSurviveRestart(t *testing.T) {
 	m, root := testModel(t)
-	id := createWorkspace(t, m, "Test")
-	c, err := m.store.NewConversation(id, "unfinished")
+	createWorkspace(t, m, "Test")
+	id := selectChatConnection(t, m)
+	owner, connection := m.active, m.connection
+	c, err := m.history.NewConversation(id, "unfinished")
 	if err != nil {
 		t.Fatal(err)
 	}
-	turn, err := m.store.StartTurn(id, c.ID, workspace.Request{Agent: ai.DefaultConfig(), Prompt: "hello"})
+	turn, err := m.history.StartTurn(id, c.ID, history.Request{Agent: ai.DefaultConfig(), Prompt: "hello"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	turn.Response.Text = "checkpoint"
-	if err = m.store.SaveResponse(id, c.ID, turn.Request.ID, turn.Response); err != nil {
+	if err = m.history.SaveResponse(id, c.ID, turn.Request.ID, turn.Response); err != nil {
 		t.Fatal(err)
 	}
 	m.chatIDs[id] = c.ID
@@ -173,32 +191,37 @@ func TestChatRecoveryAndNewConversationSurviveRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	restored, err := newModel(store, "test")
+	restored, err := newModel(store, openTestHistory(t, store), "test")
 	if err != nil {
 		t.Fatal(err)
 	}
 	restored.width, restored.height = 120, 30
-	if got := restored.chat().turns[0].Response; got.Status != "interrupted" || got.Text != "checkpoint" {
+	restored.selectScope(owner, "files", connection)
+	finishChatRestore(t, restored)
+	if got := restored.chat().Turns[0].Response; got.Status != "interrupted" || got.Text != "checkpoint" {
 		t.Fatal(got)
 	}
 	mainCommand(t, restored, "C")
 	if err = restored.saveSession(); err != nil {
 		t.Fatal(err)
 	}
-	again, err := newModel(store, "test")
+	again, err := newModel(store, restored.history, "test")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if again.chat().conversation.ID != "" {
+	again.selectScope(owner, "files", connection)
+	if again.chat().Conversation.ID != "" {
 		t.Fatal("explicit new conversation reopened old history")
 	}
 	again.width, again.height = 120, 30
 	mainCommand(t, again, "H")
+	press(t, again, "down")
 	press(t, again, "enter")
-	if again.chat().conversation.ID != c.ID {
+	if again.chat().Conversation.ID != c.ID {
 		t.Fatal("history did not reopen conversation")
 	}
 }
+
 func TestWorkspaceContextIsAutomaticAndContainsOnlySavedScope(t *testing.T) {
 	m, _ := testModel(t)
 	if m.contextText() != "" {
@@ -233,35 +256,36 @@ func TestGeneralDraftPersistsAndStaysSeparateFromWorkspace(t *testing.T) {
 	if err := m.saveSession(); err != nil {
 		t.Fatal(err)
 	}
-	reloaded, err := newModel(m.store, "test-version")
-	if err != nil || reloaded.draft().text != "General :s 11 draft" {
+	reloaded, err := newModel(m.store, m.history, "test-version")
+	if err != nil || reloaded.draft().Text != "General :s 11 draft" {
 		t.Fatal("general draft did not survive restart", err)
 	}
 	focusPanel(t, m, 1)
 	createWorkspace(t, m, "Payments")
-	if m.draft().text != "" {
+	selectChatConnection(t, m)
+	if m.draft().Text != "" {
 		t.Fatal("general draft leaked into a workspace")
 	}
 	if err := m.saveSession(); err != nil {
 		t.Fatal(err)
 	}
-	reloaded, err = newModel(m.store, "test-version")
-	if err != nil || reloaded.active != m.active || reloaded.draft().text != "" {
+	reloaded, err = newModel(m.store, m.history, "test-version")
+	if err != nil || reloaded.active != "" || reloaded.draft().Text != "General :s 11 draft" {
 		t.Fatal("restart changed the selected workspace chat", err)
 	}
-	if draft := reloaded.drafts[""]; draft == nil || draft.text != "General :s 11 draft" {
+	if draft := reloaded.drafts[""]; draft == nil || draft.Text != "General :s 11 draft" {
 		t.Fatal("removing sidebar access must not erase a saved general draft")
 	}
 }
 
-func TestChatTimeoutPreservesTerminalResultAfterFullEventBuffer(t *testing.T) {
-	run := &chatRun{events: make(chan chatEvent, 1)}
-	run.events <- chatEvent{run: run, text: "checkpoint"}
-	run.terminal = chatEvent{run: run, done: true, result: ai.Result{Text: "last output", Usage: ai.Usage{Input: 30}}, err: context.DeadlineExceeded}
-	close(run.events)
-	first := waitChat(run)().(chatEvent)
-	final := waitChat(run)().(chatEvent)
-	if first.text != "checkpoint" || !final.done || final.result.Text != "last output" || final.result.Usage.Input != 30 || final.err != context.DeadlineExceeded {
-		t.Fatalf("terminal result lost: first=%+v final=%+v", first, final)
+func selectChatConnection(t *testing.T, m *model) string {
+	t.Helper()
+	w := *m.current()
+	w.Connections = append(w.Connections, workspace.Connection{Name: "Source", Tool: "code", Settings: map[string]string{"path": t.TempDir()}})
+	if !m.saveWorkspace(w) {
+		t.Fatal(m.status)
 	}
+	w = *m.current()
+	m.selectScope(w.ID, "files", w.Connections[len(w.Connections)-1].ID)
+	return m.conversationScope()
 }

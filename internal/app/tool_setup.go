@@ -1,17 +1,46 @@
 package app
 
 import (
+	"fmt"
 	"strings"
+	"unicode"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
-	"github.com/simjay/plous/internal/kubeconfig"
+	lipgloss "charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
+	appsettings "github.com/simjay/plous/internal/app/settings"
+	kubecommon "github.com/simjay/plous/internal/integrations/kubernetes/common"
+	"github.com/simjay/plous/internal/ui"
+	textview "github.com/simjay/plous/internal/ui/text"
+	"github.com/simjay/plous/internal/workspace"
 )
 
-type toolSetup struct {
-	fromSettings, contextsOnly bool
-	path, err                  string
-	refreshRequired            bool
+func (m *model) connectionPickerBody(width, height int) string {
+	lines := []string{}
+	selected := 0
+	for i, tool := range appsettings.ToolTypes {
+		group, hint, label := "", "", appsettings.ToolNames[tool]
+		switch tool {
+		case "kubernetes":
+			group, label = "Monitor", "Kubernetes Cluster"
+			hint = "Kubernetes resources and Helm releases"
+		case "code":
+			group, label = "Code", "Source"
+			hint = "Local directory or Git repository"
+		}
+		if group != "" {
+			if len(lines) > 0 {
+				lines = append(lines, "")
+			}
+			lines = append(lines, ui.SectionHeadingStyle.Render(group), ui.Muted.Render(ui.Clipped(hint, width)))
+		}
+		if i == m.cursor {
+			selected = len(lines)
+		}
+		lines = append(lines, ui.MouseChoice(ui.SettingsChoiceLine(label, i == m.cursor, width), i, label))
+	}
+	start := max(0, selected-height+1)
+	return strings.Join(lines[start:min(len(lines), start+height)], "\n")
 }
 
 func (m *model) beginToolSetup(contextsOnly bool) {
@@ -20,20 +49,23 @@ func (m *model) beginToolSetup(contextsOnly bool) {
 	}
 	fromSettings := m.page == "settings"
 	m.beginSettingsOverlay()
-	m.toolSetup = &toolSetup{fromSettings: fromSettings, contextsOnly: contextsOnly}
+	m.toolSetup = &appsettings.ToolSetup{FromSettings: fromSettings, ContextsOnly: contextsOnly, Tool: "kubernetes"}
 	m.page, m.cursor, m.status = "tools", 0, ""
 	if contextsOnly {
+		if m.tool == "helm" {
+			m.toolSetup.Tool = "helm"
+		}
 		m.beginKube()
 	}
 }
 
 func (m *model) backFromToolSetup() {
 	m.form = nil
-	if m.page == "contexts" && !m.toolSetup.contextsOnly {
+	if m.page == "contexts" && !m.toolSetup.ContextsOnly {
 		m.page, m.cursor = "tools", 0
-	} else if m.toolSetup.fromSettings {
+	} else if m.toolSetup.FromSettings {
 		m.openSettings()
-		m.selectSettingsItem("Add tool")
+		m.selectSettingsRow("connection-add")
 	} else {
 		m.closeSettings()
 	}
@@ -45,61 +77,103 @@ func (m *model) finishToolSetup(tool string) {
 	m.closeSettings()
 	m.selectScope(m.active, "", "")
 	m.expanded[m.active] = true
-	m.expanded[m.active+"/"+tool] = true
+	m.expanded[m.active+"/"+connectionArea(tool)] = true
 	for i, row := range m.treeRows() {
-		if row.workspace == m.active && row.tool == tool && row.kind == "connection" {
+		if row.workspace == m.active && (row.tool == tool || sourceConnection(tool) && row.tool == "files") && row.kind == "connection" {
 			m.treeCursor = i
 		}
 	}
 	m.focus = 0
 	m.ensureVisibleFocus()
-	m.status = toolNames[tool] + " connection added"
+	m.status = appsettings.ToolNames[tool] + " connection added"
+	if sourceConnection(tool) {
+		m.status = "Source added"
+	}
 }
 
 func (m *model) beginKube() {
-	m.form = &form{kind: "kube", fields: []field{{key: "kubeconfig", value: newEditor("~/.kube/config")}}}
+	m.form = &appsettings.Form{Kind: "kube", Fields: []appsettings.Field{{Key: "kubeconfig", Value: textview.NewField("~/.kube/config")}}}
 	m.page, m.status = "contexts", ""
 	m.loadKubecontexts()
 }
 
 func (m *model) invalidateContexts() {
-	m.toolSetup.refreshRequired, m.toolSetup.err = true, ""
+	m.toolSetup.RefreshRequired, m.toolSetup.Err = true, ""
 	m.contexts, m.chosen = nil, map[int]bool{}
+	m.toolSetup.Names = map[int]string{}
 	m.status = ""
 }
 
 func (m *model) contextsReady() bool {
-	return m.toolSetup != nil && m.form != nil && m.form.kind == "kube" &&
-		!m.toolSetup.refreshRequired && m.toolSetup.path == strings.TrimSpace(m.form.fields[0].value.text)
+	return m.toolSetup != nil && m.form != nil && m.form.Kind == "kube" &&
+		!m.toolSetup.RefreshRequired && m.toolSetup.Path == strings.TrimSpace(m.form.Fields[0].Value.Text)
 }
 
 func (m *model) loadKubecontexts() {
 	m.invalidateContexts()
-	path := strings.TrimSpace(m.form.fields[0].value.text)
+	path := strings.TrimSpace(m.form.Fields[0].Value.Text)
 	if path == "" {
-		m.toolSetup.err = "Enter a kubeconfig file path."
-		m.form.index = 0
+		m.toolSetup.Err = "Enter a kubeconfig file path."
+		m.form.Index = 0
 		return
 	}
-	contexts, err := kubeconfig.Discover(path)
+	contexts, err := kubecommon.DiscoverContexts(path)
 	if err != nil {
-		m.toolSetup.err = err.Error()
-		m.form.index = 0
+		m.toolSetup.Err = err.Error()
+		m.form.Index = 0
 		return
 	}
-	m.toolSetup.path, m.toolSetup.err = path, ""
-	m.toolSetup.refreshRequired = false
-	m.contexts, m.form.index = contexts, 2
+	m.toolSetup.Path, m.toolSetup.Err = path, ""
+	m.toolSetup.RefreshRequired = false
+	m.contexts, m.form.Index = contexts, 2
 }
 
 func (m *model) contextAlreadyAdded(index int) bool {
+	return m.existingContext(index) != nil
+}
+
+func (m *model) existingContext(index int) *workspace.Connection {
+	if index < 0 || index >= len(m.contexts) || m.current() == nil {
+		return nil
+	}
 	c := m.contexts[index]
+	target := workspace.Connection{Tool: "kubernetes", Settings: map[string]string{"context": c.Name, "kubeconfig": c.Kubeconfig}}
 	for _, connection := range m.current().Connections {
-		if connection.Tool == "kubernetes" && connection.Settings["context"] == c.Name && connection.Settings["kubeconfig"] == c.Kubeconfig {
-			return true
+		if sameClusterTarget(connection, target) {
+			return &connection
 		}
 	}
-	return false
+	return nil
+}
+
+func (m *model) pendingContextName(index int) string {
+	if name := m.toolSetup.Names[index]; name != "" {
+		return name
+	}
+	return m.contexts[index].Name
+}
+
+func (m *model) beginContextName(index int) {
+	if !m.contextsReady() || index < 0 || index >= len(m.contexts) || m.contextAlreadyAdded(index) {
+		return
+	}
+	m.toolSetup.Picker, m.toolSetup.NameIndex = m.form, index
+	m.form = &appsettings.Form{Kind: "contextname", Title: "Name This Connection", Note: "Context: " + ui.OneLine(m.contexts[index].Name) + "\nThis name is used in Plous. The kubeconfig context stays unchanged. Leave Name blank to use the context name.", Fields: []appsettings.Field{{Key: "name", Label: "Name", Value: textview.NewField(m.toolSetup.Names[index])}}}
+	m.status = ""
+}
+
+func (m *model) finishContextName(save bool) {
+	if save {
+		name := strings.TrimSpace(m.form.Fields[0].Value.Text)
+		if strings.IndexFunc(name, unicode.IsControl) >= 0 {
+			m.status = "Connection names cannot contain control characters."
+			return
+		}
+		m.toolSetup.Names[m.toolSetup.NameIndex] = name
+	}
+	m.form, m.toolSetup.Picker = m.toolSetup.Picker, nil
+	m.form.Index = m.toolSetup.NameIndex + 2
+	m.status = ""
 }
 
 func (m *model) updateContextPicker(k tea.KeyPressMsg) {
@@ -110,94 +184,111 @@ func (m *model) updateContextPicker(k tea.KeyPressMsg) {
 	case "esc":
 		m.backFromToolSetup()
 	case "up":
-		f.index = max(0, f.index-1)
+		f.Index = max(0, f.Index-1)
 	case "down":
-		f.index = min(n+3, f.index+1)
+		f.Index = min(n+3, f.Index+1)
+	case "right":
+		if f.Index >= 2 && f.Index < n+2 {
+			m.beginContextName(f.Index - 2)
+		} else if f.Index == 0 {
+			f.Fields[0].Value.Key(k, false)
+		}
 	case "enter":
 		switch {
-		case f.index == 0:
-			f.index = 1
-		case f.index == 1:
+		case f.Index == 0:
+			f.Index = 1
+		case f.Index == 1:
 			m.loadKubecontexts()
-		case f.index == n+2:
+		case f.Index == n+2:
 			m.addContexts()
-		case f.index == n+3:
+		case f.Index == n+3:
 			m.backFromToolSetup()
 		default:
-			if m.contextsReady() && !m.contextAlreadyAdded(f.index-2) {
-				m.chosen[f.index-2] = !m.chosen[f.index-2]
+			if m.contextsReady() && !m.contextAlreadyAdded(f.Index-2) {
+				m.chosen[f.Index-2] = !m.chosen[f.Index-2]
 			}
 		}
 	default:
-		if f.index == 0 {
-			before := f.fields[0].value.text
-			f.fields[0].value.key(k, false)
-			if f.fields[0].value.text != before {
+		if f.Index == 0 {
+			before := f.Fields[0].Value.Text
+			f.Fields[0].Value.Key(k, false)
+			if f.Fields[0].Value.Text != before {
 				m.invalidateContexts()
 			}
 		} else if key == "home" {
-			f.index = 0
+			f.Index = 0
 		} else if key == "end" {
-			f.index = n + 3
-		} else if key == "space" && f.index >= 2 && f.index < n+2 && m.contextsReady() && !m.contextAlreadyAdded(f.index-2) {
-			m.chosen[f.index-2] = !m.chosen[f.index-2]
+			f.Index = n + 3
+		} else if key == "space" && f.Index >= 2 && f.Index < n+2 && m.contextsReady() && !m.contextAlreadyAdded(f.Index-2) {
+			m.chosen[f.Index-2] = !m.chosen[f.Index-2]
 		}
 	}
 }
 
 func (m *model) contextPickerBody(width, height int) string {
 	f := m.form
-	pathStyle := canvasStyle.Width(width).Padding(0, 1)
-	if f.index == 0 {
-		pathStyle = pathStyle.Background(highlight)
+	pathStyle := ui.CanvasStyle.Width(width).Padding(0, 1)
+	if f.Index == 0 {
+		pathStyle = pathStyle.Background(ui.Highlight)
 	}
 	lines := []string{
-		sectionHeadingStyle.Render("Kubeconfig file"),
-		pathStyle.Render(editorLine(f.fields[0].value, width-2, f.index == 0)),
-		settingsChoiceLine("[ Refresh contexts ]", f.index == 1, width),
+		ui.SectionHeadingStyle.Render("Kubeconfig File"),
+		ui.MouseTarget(pathStyle.Render(ui.EditorLine(f.Fields[0].Value, width-2, f.Index == 0, "field/"+f.Fields[0].Key)), "field/"+f.Fields[0].Key),
+		ui.MouseTarget(ui.SettingsChoiceLine("[ Refresh Contexts ]", f.Index == 1, width), "context/1"),
 	}
 	message := ""
-	messageStyle := muted
-	if m.toolSetup.refreshRequired {
+	messageStyle := ui.Muted
+	if m.toolSetup.RefreshRequired {
 		message = "Refresh required"
-		messageStyle = changedStyle
+		messageStyle = ui.ChangedStyle
 	}
-	if m.toolSetup.err != "" {
-		message = m.toolSetup.err
-		messageStyle = removedStyle
+	if m.toolSetup.Err != "" {
+		message = m.toolSetup.Err
+		messageStyle = ui.RemovedStyle
 	}
-	lines = append(lines, messageStyle.Render(clipped(oneLine(message), width)))
+	lines = append(lines, messageStyle.Render(ui.Clipped(ui.OneLine(message), width)))
 	if height >= 12 {
 		lines = append(lines, "")
 	}
-	lines = append(lines, sectionHeadingStyle.Render("Contexts"))
+	lines = append(lines, ui.SectionHeadingStyle.Render("Contexts"))
 	items := []string{}
-	for i, c := range m.contexts {
-		label := "[ ] " + c.Name
-		if m.contextAlreadyAdded(i) {
-			label = "[✓] " + c.Name + " · Already added"
+	for i := range m.contexts {
+		label := "[ ] " + m.pendingContextName(i)
+		existing := m.existingContext(i)
+		added := existing != nil
+		if added {
+			suffix := " · Already added"
+			label = ansi.Truncate("[✓] "+ui.OneLine(existing.Name), max(1, width-2-ansi.StringWidth(suffix)), "...") + suffix
 		} else if m.chosen[i] {
-			label = "[x] " + c.Name
+			label = "[x] " + m.pendingContextName(i)
 		}
-		items = append(items, settingsChoiceLine(label, f.index == i+2, width))
+		rowWidth := width
+		if !added {
+			rowWidth = max(1, width-9)
+		}
+		row := ui.MouseTarget(ui.SettingsChoiceLine(label, f.Index == i+2, rowWidth), fmt.Sprintf("context/%d", i+2))
+		if !added {
+			row += " " + ui.MouseTarget(ui.ShortcutStyle.Render("[→ Name]"), fmt.Sprintf("contextname/%d", i))
+		}
+		items = append(items, row)
 	}
 	if len(items) == 0 {
-		items = append(items, muted.Render("  No contexts loaded"))
+		items = append(items, ui.Muted.Render("  No contexts loaded"))
 	}
-	actions := []string{settingsChoiceLine("[ Add selected contexts ]", f.index == len(m.contexts)+2, width), settingsChoiceLine("[ Cancel ]", f.index == len(m.contexts)+3, width)}
+	actions := []string{ui.MouseTarget(ui.SettingsChoiceLine("[ Add Selected Contexts ]", f.Index == len(m.contexts)+2, width), fmt.Sprintf("context/%d", len(m.contexts)+2)), ui.MouseTarget(ui.SettingsChoiceLine("[ Cancel ]", f.Index == len(m.contexts)+3, width), fmt.Sprintf("context/%d", len(m.contexts)+3))}
 	if !m.contextsReady() {
-		actions[0] = settingsChoiceLine("[ Add selected contexts ] · disabled", f.index == len(m.contexts)+2, width)
+		actions[0] = ui.SettingsChoiceLine("[ Add Selected Contexts ] · disabled", f.Index == len(m.contexts)+2, width)
 	}
-	selectedRow := f.index + 1
-	if f.index >= 2 {
-		selectedRow = len(lines) + f.index - 2
+	selectedRow := f.Index + 1
+	if f.Index >= 2 {
+		selectedRow = len(lines) + f.Index - 2
 		if len(m.contexts) == 0 {
 			selectedRow++
 		}
 	}
 	available := height - len(lines) - len(actions)
 	if available < 1 {
-		return scrollSelection(append(append(lines, items...), actions...), selectedRow, height)
+		return ui.ScrollSelection(append(append(lines, items...), actions...), selectedRow, height)
 	}
-	return strings.Join(lines, "\n") + "\n" + lipgloss.NewStyle().Height(available).Render(scrollSelection(items, f.index-2, available)) + "\n" + strings.Join(actions, "\n")
+	return strings.Join(lines, "\n") + "\n" + lipgloss.NewStyle().Height(available).Render(ui.ScrollSelection(items, f.Index-2, available)) + "\n" + strings.Join(actions, "\n")
 }

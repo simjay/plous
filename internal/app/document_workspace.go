@@ -1,129 +1,94 @@
 package app
 
 import (
-	"strings"
-
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
-	docedit "github.com/simjay/plous/internal/editor"
-	"github.com/simjay/plous/internal/kubernetes"
-	"github.com/simjay/plous/internal/textview"
+	lipgloss "charm.land/lipgloss/v2"
+	"github.com/simjay/plous/internal/ui"
+	docedit "github.com/simjay/plous/internal/ui/editor"
+	textview "github.com/simjay/plous/internal/ui/text"
+	"strconv"
+	"strings"
 )
 
-func workspaceTheme() textview.Theme {
-	t := textview.DefaultTheme()
-	t.Text, t.Muted, t.Accent = canvasStyle, muted, lipgloss.NewStyle().Foreground(accent).Bold(true)
-	t.Added, t.Removed = addedStyle, removedStyle
-	t.Selection = lipgloss.NewStyle().Background(highlight)
-	return t
-}
-
-func (a *resourceActionState) initDocument() {
-	a.document = docedit.New(kubernetes.YAML(*a.object, true))
-	a.document.Syntax = "yaml"
-	a.document.Name = a.resource.Kind + " / " + a.object.GetName()
-	a.document.Target = a.context + " · " + a.object.GetNamespace() + "\nUID " + string(a.object.GetUID())
-}
-func (a *resourceActionState) showDiagnostic(message string) {
-	a.diagnostic = &textview.Viewer{Wrap: true}
-	rows := []textview.Line{}
-	for _, line := range strings.Split(message, "\n") {
-		rows = append(rows, textview.Line{Text: line})
-	}
-	a.diagnostic.SetLines(rows)
-}
-
-func (a *resourceActionState) failDocument(title, message string) {
-	a.err, a.documentErrorTitle = message, title
-	a.pending, a.runningJob, a.confirmedID = "", "", ""
-	a.saveRequested, a.closeAfterApply = false, false
-	a.diagnostic = nil
-	if a.review != nil {
-		a.review.Invalidate()
-	}
-	if a.document != nil {
-		a.stage = "edit"
-		a.document.Controls = false
-		a.document.Diagnostic = title + " · ! Error details\n" + message
-	}
-}
 func (m *model) documentActive() bool {
-	return m.explore != nil && m.explore.action != nil && (m.explore.action.stage == "edit" || m.explore.action.stage == "review")
+	return m.explore != nil && m.explore.Action != nil && (m.explore.Action.Stage == "edit" || m.explore.Action.Stage == "review")
 }
+
 func (m *model) closeDocument() {
-	a := m.explore.action
-	if a.document != nil && a.document.Dirty() {
-		a.discard, a.documentAction = true, 0
+	a := m.explore.Action
+	if a.Document != nil && a.Document.Dirty() {
+		a.Discard, a.DocumentAction = true, 0
 		return
 	}
 	m.stopResourceAction()
 }
+
 func (m *model) validateDocument() {
-	a := m.explore.action
-	if a.busy || a.pending != "" {
+	a := m.explore.Action
+	if a.Busy || a.Pending != "" {
 		return
 	}
-	a.diagnostic, a.err, a.confirmedID = nil, "", ""
-	a.documentErrorTitle = ""
-	if a.document != nil {
-		a.document.Notice, a.document.Diagnostic = "", ""
+	a.Diagnostic, a.Err, a.ConfirmedID = nil, "", ""
+	a.DocumentErrorTitle = ""
+	if a.Document != nil {
+		a.Document.Notice, a.Document.Diagnostic = "", ""
 	}
-	a.closeAfterApply, a.saveRequested = false, false
-	a.review, a.proposed = nil, nil
-	a.stage = "edit"
-	a.pending = "validate"
+	a.CloseAfterApply, a.SaveRequested = false, false
+	a.Review, a.Proposed = nil, nil
+	a.Stage = "edit"
+	a.Pending = "validate"
 }
 
 func (m *model) saveDocument(closeAfter bool) {
-	a := m.explore.action
-	if a.busy || a.pending != "" || a.document == nil {
+	a := m.explore.Action
+	if a.Busy || a.Pending != "" || a.Document == nil {
 		return
 	}
-	if !a.document.Dirty() {
+	if !a.Document.Dirty() {
 		if closeAfter {
 			m.stopResourceAction()
 		} else {
-			a.document.SavedStatus = "No unsaved changes"
+			a.Document.SavedStatus = "No unsaved changes"
 		}
 		return
 	}
-	if a.stage == "review" && a.review != nil {
-		m.confirmDocument(a.review.ID)
+	if a.Stage == "review" && a.Review != nil {
+		m.confirmDocument(a.Review.ID)
 	} else {
 		m.validateDocument()
-		a.saveRequested = true
-		a.saveRevision = a.document.Revision
+		a.SaveRequested = true
+		a.SaveRevision = a.Document.Revision
 	}
-	if a.saveRequested {
-		a.discard = false
-		a.closeAfterApply = closeAfter
+	if a.SaveRequested {
+		a.Discard = false
+		a.CloseAfterApply = closeAfter
 	}
 }
 
 func (m *model) confirmDocument(id string) {
-	a := m.explore.action
-	if a.busy || a.pending != "" || a.review == nil || a.document == nil {
+	a := m.explore.Action
+	if a.Busy || a.Pending != "" || a.Review == nil || a.Document == nil {
 		return
 	}
-	if id != a.review.ID || a.review.Stale || a.proposed == nil || a.validatedRevision != a.document.Revision {
-		a.failDocument("Save stopped", "The draft changed after review. Check it in the editor before saving.")
+	if id != a.Review.ID || a.Review.Stale || a.Proposed == nil || a.ValidatedRevision != a.Document.Revision {
+		a.FailDocument("Save stopped", "The draft changed after review. Check it in the editor before saving.")
 		return
 	}
-	a.confirmedID, a.pending = id, "apply"
-	a.saveRequested, a.saveRevision = true, a.document.Revision
+	a.ConfirmedID, a.Pending = id, "apply"
+	a.SaveRequested, a.SaveRevision = true, a.Document.Revision
 }
 
 // Document commands apply only to the focused editable workflow.
 func (m *model) editorLocalCommand(command string) bool {
-	if !m.documentActive() || m.focus != 1 || m.help != nil || m.settingsOverlay != nil {
+	if !m.documentActive() || m.focus != 1 || m.helpVisible() || m.settingsOverlay != nil {
 		return false
 	}
-	a := m.explore.action
+	a := m.explore.Action
 	switch command {
 	case "w", "wq":
 		m.saveDocument(command == "wq")
 	case "q", "q!":
-		if !a.busy {
+		if !a.Busy {
 			if command == "q!" {
 				m.stopResourceAction()
 			} else {
@@ -131,18 +96,18 @@ func (m *model) editorLocalCommand(command string) bool {
 			}
 		}
 	case "v", "review":
-		if a.stage == "edit" {
+		if a.Stage == "edit" {
 			m.validateDocument()
 		}
 	case "u", "undo", "U", "redo":
-		if a.stage == "edit" && !a.busy && a.document != nil {
+		if a.Stage == "edit" && !a.Busy && a.Document != nil {
 			if command == "u" || command == "undo" {
-				a.document.Undo()
+				a.Document.Undo()
 			} else {
-				a.document.Redo()
+				a.Document.Redo()
 			}
-			if a.review != nil {
-				a.review.Invalidate()
+			if a.Review != nil {
+				a.Review.Invalidate()
 			}
 		}
 	default:
@@ -152,59 +117,59 @@ func (m *model) editorLocalCommand(command string) bool {
 }
 
 func (m *model) updateDocumentKey(msg tea.KeyPressMsg) tea.Cmd {
-	a := m.explore.action
+	a := m.explore.Action
 	key := msg.String()
-	if a.document == nil {
-		a.initDocument()
+	if a.Document == nil {
+		a.InitDocument()
 	}
-	if a.discard {
+	if a.Discard {
 		switch key {
 		case "left", "right":
-			a.documentAction = 1 - a.documentAction
+			a.DocumentAction = 1 - a.DocumentAction
 		case "esc":
-			a.discard = false
+			a.Discard = false
 		case "enter":
-			if a.documentAction == 1 {
+			if a.DocumentAction == 1 {
 				m.stopResourceAction()
 			} else {
-				a.discard = false
+				a.Discard = false
 			}
 		}
 		return nil
 	}
-	if a.diagnostic != nil {
-		handled, copy := a.diagnostic.Key(key, msg.Text)
+	if a.Diagnostic != nil {
+		handled, copy := a.Diagnostic.Key(key, msg.Text)
 		if key == "esc" && !handled {
-			a.diagnostic = nil
+			a.Diagnostic = nil
 		}
 		return m.copyWorkspaceText(copy)
 	}
-	if a.stage == "review" && a.review != nil {
-		decision, copy := a.review.Key(key, msg.Text)
+	if a.Stage == "review" && a.Review != nil {
+		decision, copy := a.Review.Key(key, msg.Text)
 		switch decision.Action {
 		case "back", "close":
-			a.stage = "edit"
-			a.closeAfterApply = false
+			a.Stage = "edit"
+			a.CloseAfterApply = false
 		case "confirm":
 			m.confirmDocument(decision.ID)
 		}
 		return m.copyWorkspaceText(copy)
 	}
-	d := a.document
-	if key == "!" && a.err != "" && !d.Searching && (d.Controls || d.Mode == docedit.Normal) {
-		a.showDiagnostic(a.err)
+	d := a.Document
+	if key == "!" && a.Err != "" && !d.Searching && (d.Controls || d.Mode == docedit.Normal) {
+		a.ShowDiagnostic(a.Err)
 		return nil
 	}
 	if d.Controls {
 		switch key {
 		case "left":
-			a.documentAction = (a.documentAction + 5) % 6
+			a.DocumentAction = (a.DocumentAction + 5) % 6
 		case "right":
-			a.documentAction = (a.documentAction + 1) % 6
+			a.DocumentAction = (a.DocumentAction + 1) % 6
 		case "esc":
 			m.closeDocument()
 		case "enter":
-			switch a.documentAction {
+			switch a.DocumentAction {
 			case 0:
 				d.Controls = false
 				d.Mode = docedit.Insert
@@ -225,72 +190,65 @@ func (m *model) updateDocumentKey(msg tea.KeyPressMsg) tea.Cmd {
 	revision := d.Revision
 	event := d.Key(key, msg.Text)
 	if event.Copy != "" {
-		a.yank = event.Copy
+		a.Yank = event.Copy
 	}
 	switch event.Action {
 	case "paste":
-		if a.yank != "" {
-			d.Paste(a.yank)
+		if a.Yank != "" {
+			d.Paste(a.Yank)
 		}
 	}
-	if revision != d.Revision && a.review != nil {
-		a.review.Invalidate()
+	if revision != d.Revision && a.Review != nil {
+		a.Review.Invalidate()
 	}
 	return m.copyWorkspaceText(event.Copy)
 }
-func (m *model) copyWorkspaceText(text string) tea.Cmd {
-	if text == "" {
-		return nil
-	}
-	m.status = "Copied to the terminal clipboard. Clipboard support depends on your terminal."
-	return tea.SetClipboard(text)
-}
 
 func (m *model) documentBody(width, height int) string {
-	a := m.explore.action
-	if a.document == nil {
-		a.initDocument()
+	a := m.explore.Action
+	if a.Document == nil {
+		a.InitDocument()
 	}
-	if a.discard {
-		actions := []textview.Action{{Label: "Keep editing", Focused: a.documentAction == 0}, {Label: "Discard changes", Focused: a.documentAction == 1}}
-		actions[a.documentAction].Key = "Enter"
-		return titleStyle.Render("Unsaved document") + "\n" + clipped(a.document.Name, width) + "\n\n" + textview.ActionBar([]textview.ActionGroup{{Actions: actions}}, width, max(1, height-5), workspaceTheme()) + "\n\n" + muted.Render("←→ choose · Enter confirm · Esc keep editing")
+	if a.Discard {
+		actions := []textview.Action{{Mouse: "confirm/0", Label: "Keep Editing", Focused: a.DocumentAction == 0}, {Mouse: "confirm/1", Label: "Discard Changes", Focused: a.DocumentAction == 1}}
+		actions[a.DocumentAction].Key = "Enter"
+		return ui.TitleStyle.Render("Unsaved document") + "\n" + ui.Clipped(a.Document.Name, width) + "\n\n" + textview.ActionBar([]textview.ActionGroup{{Actions: actions}}, width, max(1, height-5), ui.WorkspaceTheme()) + "\n\n" + ui.Muted.Render("←→ choose · Enter confirm · Esc keep editing")
 	}
-	if a.diagnostic != nil {
+	if a.Diagnostic != nil {
 		controls := []textview.ActionGroup{{Label: "Read", Actions: []textview.Action{{Key: "Esc", Label: m.documentEscapeLabel()}, {Key: ":h", Label: "Help"}, {Key: "/", Label: "Search"}, {Key: "v", Label: "Select"}, {Key: "y", Label: "Copy"}}}}
-		title := a.documentErrorTitle
+		title := a.DocumentErrorTitle
 		if title == "" {
 			title = "Error details"
 		}
-		header := removedStyle.Render(title) + "\n" + clipped(a.document.Name, width) + "\n" + muted.Render("Esc returns to your draft.")
-		header += "\n" + textview.ActionBar(controls, width, max(1, min(3, height-lipgloss.Height(header)-3)), workspaceTheme())
-		return textview.Fit(header+"\n"+a.diagnostic.View(width, max(0, height-lipgloss.Height(header)-1), workspaceTheme()), width, height)
+		header := ui.RemovedStyle.Render(title) + "\n" + ui.Clipped(a.Document.Name, width) + "\n" + ui.Muted.Render("Esc returns to your draft.")
+		header += "\n" + textview.ActionBar(controls, width, max(1, min(3, height-lipgloss.Height(header)-3)), ui.WorkspaceTheme())
+		return textview.Fit(header+"\n"+a.Diagnostic.View(width, max(0, height-lipgloss.Height(header)-1), ui.WorkspaceTheme()), width, height)
 	}
-	if a.stage == "review" && a.review != nil {
-		a.review.CanConfirm = !a.busy && a.pending == "" && !a.review.Stale && a.document.Dirty()
-		a.review.Notice = "Review only. Nothing saved.\n:w saves to Kubernetes. Esc returns to editing."
+	if a.Stage == "review" && a.Review != nil {
+		a.Review.CanConfirm = !a.Busy && a.Pending == "" && !a.Review.Stale && a.Document.Dirty()
+		a.Review.Notice = "Review only. Nothing saved.\n:w saves to Kubernetes. Esc returns to editing."
 		switch {
-		case a.busy || a.pending == "apply":
-			a.review.Notice = "Saving to Kubernetes. Waiting for confirmation."
-		case a.review.Stale:
-			a.review.Notice = "Draft changed. Return to the editor before saving."
-		case a.review.Added+a.review.Removed == 0:
-			a.review.Notice = "No manifest differences. Esc returns to editing."
+		case a.Busy || a.Pending == "apply":
+			a.Review.Notice = "Saving to Kubernetes. Waiting for confirmation."
+		case a.Review.Stale:
+			a.Review.Notice = "Draft changed. Return to the editor before saving."
+		case a.Review.Added+a.Review.Removed == 0:
+			a.Review.Notice = "No manifest differences. Esc returns to editing."
 		}
-		a.review.EscapeOverride = m.documentEscapeLabel()
-		a.review.ViewActions = []textview.ActionGroup{{Label: "View", Actions: []textview.Action{{Key: ":h", Label: "Help"}, m.expandAction()}}}
-		return a.review.View(width, height, workspaceTheme())
+		a.Review.EscapeOverride = m.documentEscapeLabel()
+		a.Review.ViewActions = []textview.ActionGroup{{Label: "View", Actions: []textview.Action{{Key: ":h", Label: "Help"}, m.expandAction()}}}
+		return a.Review.View(width, height, ui.WorkspaceTheme())
 	}
 	labels := []string{"Insert", "Save", "Review changes", "Undo", "Redo", "Close"}
 	keys := []string{"i", ":w", ":v", "u", "U", ":q"}
 	buttons := []textview.Action{}
 	for i, label := range labels {
-		button := textview.Action{Key: keys[i], Label: label, Primary: i == 1}
-		if a.document.Controls {
+		button := textview.Action{Mouse: "documentaction/" + strconv.Itoa(i), Key: keys[i], Label: label, Primary: i == 1}
+		if a.Document.Controls {
 			if !strings.HasPrefix(button.Key, ":") {
 				button.Key = ""
 			}
-			button.Focused = a.documentAction == i
+			button.Focused = a.DocumentAction == i
 			if button.Focused {
 				button.Key = "Enter"
 			}
@@ -298,73 +256,74 @@ func (m *model) documentBody(width, height int) string {
 		buttons = append(buttons, button)
 	}
 	actions := []textview.ActionGroup{{Label: "Document", Actions: buttons}}
-	if !a.document.Controls && a.document.Mode != docedit.Normal {
+	if !a.Document.Controls && a.Document.Mode != docedit.Normal {
 		actions = []textview.ActionGroup{{Label: "Editing", Actions: []textview.Action{{Key: "Esc", Label: "Normal mode"}}}}
 	}
-	if a.busy {
+	if a.Busy {
 		label := "Validating"
-		if a.saveRequested {
+		if a.SaveRequested {
 			label = "Saving"
 		}
 		actions = []textview.ActionGroup{{Label: label, Actions: []textview.Action{{Key: "Esc", Label: "Cancel"}}}}
 	}
-	a.document.Actions = actions
-	if !a.busy && a.document.Mode == docedit.Normal {
-		display := m.documentDisplayActions(a.document)
+	a.Document.Actions = actions
+	if !a.Busy && a.Document.Mode == docedit.Normal {
+		display := m.documentDisplayActions(a.Document)
 		display.Actions = append([]textview.Action{{Key: ":h", Label: "Editor help"}}, display.Actions...)
-		a.document.Actions = append(a.document.Actions, textview.ActionGroup{Label: "Close", Actions: []textview.Action{{Key: ":wq", Label: "Save and close"}, {Key: ":q!", Label: "Discard"}}}, display)
+		a.Document.Actions = append(a.Document.Actions, textview.ActionGroup{Label: "Close", Actions: []textview.Action{{Key: ":wq", Label: "Save and close"}, {Key: ":q!", Label: "Discard"}}}, display)
 	}
-	return a.document.View(width, height, workspaceTheme())
+	return a.Document.View(width, height, ui.WorkspaceTheme())
 }
+
 func (m *model) documentHint() string {
-	a := m.explore.action
-	if a.busy {
+	a := m.explore.Action
+	if a.Busy {
 		return "Esc Cancel request"
 	}
-	if a.discard {
-		return "←→ Choose · Enter Confirm · Esc Keep editing"
+	if a.Discard {
+		return "←→ Choose · Enter Confirm · Esc Keep Editing"
 	}
-	if a.diagnostic != nil {
-		if a.diagnostic.Searching {
+	if a.Diagnostic != nil {
+		if a.Diagnostic.Searching {
 			return "Enter Finish search · Esc Cancel search"
 		}
 		return "↑↓ Scroll · / Find · Esc " + m.documentEscapeLabel() + " · :h Help"
 	}
-	if a.stage == "review" {
-		if a.review != nil && (a.review.Reader.Searching || a.review.ErrorActive && a.review.ErrorReader.Searching) {
+	if a.Stage == "review" {
+		if a.Review != nil && (a.Review.Reader.Searching || a.Review.ErrorActive && a.Review.ErrorReader.Searching) {
 			return "Enter Finish search · Esc Cancel search"
 		}
 		return ":w Save · Esc " + m.documentEscapeLabel() + " · :h Help"
 	}
-	if a.document == nil {
+	if a.Document == nil {
 		return "i Insert · :w Save · Esc Actions · :h Help"
 	}
-	if a.document.Controls {
+	if a.Document.Controls {
 		return ":w Save · ←→ Choose action · Enter Activate · Esc Close editor · :h Help"
 	}
-	if a.document.Searching {
+	if a.Document.Searching {
 		return "Enter Finish search · Esc Cancel search"
 	}
-	if a.document.Mode == docedit.Insert {
+	if a.Document.Mode == docedit.Insert {
 		return "Tab Indent · Esc Normal mode"
 	}
-	if a.document.Mode == docedit.Select {
+	if a.Document.Mode == docedit.Select {
 		return "↑↓←→ Select text · y Copy · Esc Normal mode · :h Help"
 	}
-	return "i Insert · :w Save · Esc " + documentBackHint(a.document, "Actions") + " · :h Help"
+	return "i Insert · :w Save · Esc " + documentBackHint(a.Document, "Actions") + " · :h Help"
 }
 
 func (m *model) documentEscapeLabel() string {
-	a := m.explore.action
-	if a.busy {
+	a := m.explore.Action
+	if a.Busy {
 		return "Cancel request"
 	}
-	if a.diagnostic != nil {
-		return a.diagnostic.EscapeLabel("Back to editor")
+	if a.Diagnostic != nil {
+		return a.Diagnostic.EscapeLabel("Back to editor")
 	}
-	if a.review != nil && a.stage == "review" {
-		label := a.review.EscapeLabel()
-		if label == a.review.BackLabel && m.viewExpanded() {
+	if a.Review != nil && a.Stage == "review" {
+		label := a.Review.EscapeLabel()
+		if label == a.Review.BackLabel && m.viewExpanded() {
 			return "Restore layout"
 		}
 		return label
@@ -374,15 +333,15 @@ func (m *model) documentEscapeLabel() string {
 
 // Local editors consume text before the global command and shortcut router.
 func (m *model) workspaceKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
-	if m.focus != 1 || m.help != nil || m.settingsOverlay != nil || m.command != nil || m.tooSmall() && !(m.resourceTerminalVisible() && m.explore.terminal.captured) {
+	if m.focus != 1 || m.helpVisible() || m.settingsOverlay != nil || m.commandFocused() || m.tooSmall() && !(m.resourceTerminalVisible() && m.explore.Terminal.Captured) {
 		return false, nil
 	}
 	key := msg.String()
 	if m.resourceTerminalVisible() {
-		t := m.explore.terminal
-		local := t.captured || t.review != nil && t.review.viewer.Reader.Searching
+		t := m.explore.Terminal
+		local := t.Captured || t.Review != nil && t.Review.Viewer.Reader.Searching
 		if !local {
-			if key == "tab" || key == "shift+tab" || key == ":" {
+			if key == ":" || key == "tab" {
 				return false, nil
 			}
 			if m.updateShortcut(msg) {
@@ -394,19 +353,18 @@ func (m *model) workspaceKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		return true, m.updateResourceTerminalKey(msg)
 	}
 	if m.documentActive() {
-		a := m.explore.action
-		if a.busy {
+		a := m.explore.Action
+		if a.Busy {
 			return true, m.updateResourceActionKey(msg)
 		}
-		if a.document == nil {
-			a.initDocument()
+		if a.Document == nil {
+			a.InitDocument()
 		}
-		d := a.document
-		typing := !a.discard && a.diagnostic == nil && a.stage == "edit" && !d.Controls
-		search := d.Searching && typing || a.diagnostic != nil && a.diagnostic.Searching || a.stage == "review" && a.review != nil && (a.review.Reader.Searching || a.review.ErrorActive && a.review.ErrorReader.Searching)
-		if !search && !a.discard {
-			if key == "shift+tab" || key == "tab" && !(typing && d.Mode == docedit.Insert) {
-				d.ClearPrefix()
+		d := a.Document
+		typing := !a.Discard && a.Diagnostic == nil && a.Stage == "edit" && !d.Controls
+		search := d.Searching && typing || a.Diagnostic != nil && a.Diagnostic.Searching || a.Stage == "review" && a.Review != nil && (a.Review.Reader.Searching || a.Review.ErrorActive && a.Review.ErrorReader.Searching)
+		if !search && !a.Discard {
+			if key == "tab" && !typing {
 				return false, nil
 			}
 			if key == ":" && !(typing && d.Mode == docedit.Insert) {
@@ -414,7 +372,7 @@ func (m *model) workspaceKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 				return false, nil
 			}
 		}
-		if !typing && !search && !a.discard && m.updateShortcut(msg) {
+		if !typing && !search && !a.Discard && m.updateShortcut(msg) {
 			m.persist()
 			return true, nil
 		}
@@ -426,47 +384,48 @@ func (m *model) workspaceKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	}
 	return m.logWorkspaceKey(msg)
 }
+
 func (m *model) workspacePaste(text string) bool {
-	if m.focus != 1 || m.help != nil || m.settingsOverlay != nil || m.command != nil || m.tooSmall() {
+	if m.focus != 1 || m.helpVisible() || m.settingsOverlay != nil || m.commandFocused() || m.tooSmall() {
 		return false
 	}
 	if m.activityReviewPaste(text) || m.yamlDocumentPaste(text) {
 		return true
 	}
 	if m.valueDocumentActive() {
-		m.explore.action.valueDocument.Paste(text)
+		m.explore.Action.ValueDocument.Paste(text)
 		return true
 	}
 	if m.documentActive() {
-		a := m.explore.action
-		if a.busy || a.discard {
+		a := m.explore.Action
+		if a.Busy || a.Discard {
 			return true
 		}
-		if a.diagnostic != nil {
-			a.diagnostic.Paste(text)
+		if a.Diagnostic != nil {
+			a.Diagnostic.Paste(text)
 			return true
 		}
-		if a.stage == "review" && a.review != nil {
-			if a.review.ErrorActive {
-				a.review.ErrorReader.Paste(text)
+		if a.Stage == "review" && a.Review != nil {
+			if a.Review.ErrorActive {
+				a.Review.ErrorReader.Paste(text)
 			} else {
-				a.review.Reader.Paste(text)
+				a.Review.Reader.Paste(text)
 			}
 			return true
 		}
-		if a.document == nil {
-			a.initDocument()
+		if a.Document == nil {
+			a.InitDocument()
 		}
-		if !a.document.Controls {
-			a.document.Paste(text)
-			if a.review != nil {
-				a.review.Invalidate()
+		if !a.Document.Controls {
+			a.Document.Paste(text)
+			if a.Review != nil {
+				a.Review.Invalidate()
 			}
 		}
 		return true
 	}
-	if m.resourceTerminalVisible() && !m.explore.terminal.captured {
-		m.explore.terminal.review.viewer.Reader.Paste(text)
+	if m.resourceTerminalVisible() && !m.explore.Terminal.Captured {
+		m.explore.Terminal.Review.Viewer.Reader.Paste(text)
 		return true
 	}
 	if m.logWorkspaceActive() {
@@ -476,8 +435,17 @@ func (m *model) workspacePaste(text string) bool {
 	return false
 }
 
-func (m *model) clearDocumentPrefix() {
-	if m.documentActive() && m.explore.action.document != nil {
-		m.explore.action.document.ClearPrefix()
+func (m *model) clearDocumentPrefix() (changed bool) {
+	if m.codeActive() {
+		if d := m.coder().Document; d != nil {
+			changed = d.Prefix() != ""
+			d.ClearPrefix()
+		}
 	}
+
+	if m.documentActive() && m.explore.Action.Document != nil {
+		changed = changed || m.explore.Action.Document.Prefix() != ""
+		m.explore.Action.Document.ClearPrefix()
+	}
+	return changed
 }

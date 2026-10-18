@@ -1,12 +1,14 @@
 """Exercise Explore against a temporary Kubernetes API, never a real cluster."""
 
 from copy import deepcopy
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import queue
 from pathlib import Path
 import tempfile
 import threading
+import time
 import unittest
 from urllib.parse import parse_qs, urlsplit
 
@@ -36,6 +38,13 @@ class ExploreFixture(unittest.TestCase):
         self.previous_logs_missing = False
         self.exec_error = "fixture: executable not found; choose another shell"
         self.secret = None
+        self.metrics_enabled = False
+        self.metrics_denied = False
+        self.metrics_reads = 0
+        self.metrics_times = []
+        self.container_metrics = None
+        self.node = None
+        self.quota = None
         self.pod = {
             "apiVersion": "v1", "kind": "Pod",
             "metadata": {"name": "checkout-test", "namespace": "shop", "uid": "pod-id", "resourceVersion": "10",
@@ -101,7 +110,33 @@ class ExploreFixture(unittest.TestCase):
                         {"name": "apps", "preferredVersion": {"groupVersion": "apps/v1", "version": "v1"}},
                         {"name": "networking.k8s.io", "preferredVersion": {"groupVersion": "networking.k8s.io/v1", "version": "v1"}}
                     ] + [{"name": group, "preferredVersion": {"groupVersion": group + "/v1", "version": "v1"}}
-                         for group in test.extra_api_groups]})
+                         for group in test.extra_api_groups + (["metrics.k8s.io"] if test.metrics_enabled else [])]})
+                elif path == "/apis/metrics.k8s.io/v1":
+                    self.respond({"kind": "APIResourceList", "apiVersion": "v1", "groupVersion": "metrics.k8s.io/v1",
+                                  "resources": [{"name": "pods", "kind": "PodMetrics", "namespaced": True, "verbs": ["get", "list"]}] +
+                                  ([{"name": "nodes", "kind": "NodeMetrics", "namespaced": False, "verbs": ["get", "list"]}] if test.node is not None else [])})
+                elif path.startswith("/apis/metrics.k8s.io/v1/"):
+                    test.metrics_reads += 1
+                    test.metrics_times.append((path, time.monotonic()))
+                    if test.metrics_denied:
+                        self.failure("Forbidden", 403)
+                        return
+                    metrics = {"apiVersion": "metrics.k8s.io/v1", "kind": "PodMetrics",
+                               "metadata": {"name": test.pod["metadata"]["name"], "namespace": "shop"},
+                               "timestamp": datetime.now(timezone.utc).isoformat(), "window": "15s",
+                               "containers": [{"name": "checkout", "usage": {"cpu": f"{test.metrics_reads * 25}m", "memory": "32Mi"}}]}
+                    if test.container_metrics is not None:
+                        metrics["containers"] = test.container_metrics
+                    if "/nodes" in path and test.node is not None:
+                        metrics["kind"] = "NodeMetrics"
+                        metrics["metadata"] = {"name": test.node["metadata"]["name"]}
+                        metrics["usage"] = {"cpu": "500m", "memory": "512Mi"}
+                        metrics.pop("containers")
+                    if path.endswith("/nodes"):
+                        metrics = {"apiVersion": "metrics.k8s.io/v1", "kind": "NodeMetricsList", "metadata": {}, "items": [metrics]}
+                    if path.endswith("/pods"):
+                        metrics = {"apiVersion": "metrics.k8s.io/v1", "kind": "PodMetricsList", "metadata": {}, "items": [metrics]}
+                    self.respond(metrics)
                 elif path.startswith("/apis/fixture-"):
                     self.respond({"kind": "APIResourceList", "apiVersion": "v1", "resources": []})
                 elif path in ("/api/v1", "/apis/apps/v1", "/apis/networking.k8s.io/v1"):
@@ -114,7 +149,11 @@ class ExploreFixture(unittest.TestCase):
                         kinds = [("ingresses", "Ingress", ["ing"])]
                     if path == "/api/v1" and test.secret is not None:
                         kinds.append(("secrets", "Secret", []))
-                    resources = [{"name": name, "kind": kind, "namespaced": name != "namespaces",
+                    if path == "/api/v1" and test.node is not None:
+                        kinds.append(("nodes", "Node", ["no"]))
+                    if path == "/api/v1" and test.quota is not None:
+                        kinds.append(("resourcequotas", "ResourceQuota", ["quota"]))
+                    resources = [{"name": name, "kind": kind, "namespaced": name not in ("namespaces", "nodes"),
                                   "verbs": ["get", "list", "watch", "update", "patch", "delete"], "shortNames": aliases}
                                  for name, kind, aliases in kinds]
                     subresources = [("pods/log", "Pod", ["get"]), ("pods/exec", "PodExecOptions", ["create", "get"])] if path == "/api/v1" else [
@@ -196,11 +235,18 @@ class ExploreFixture(unittest.TestCase):
                     elif name == "services":
                         kind = "Service"
                         items = [test.service]
+                    elif name == "nodes" and test.node is not None:
+                        kind, items = "Node", [test.node]
+                    elif name == "resourcequotas" and test.quota is not None:
+                        kind, items = "ResourceQuota", [test.quota]
                     elif name == "secrets" and test.secret is not None:
                         kind, items = "Secret", [test.secret]
                     self.respond({"apiVersion": version, "kind": kind + "List", "metadata": {"resourceVersion": "10"}, "items": items})
 
             def object_for(self, path):
+                for resource, obj in [("nodes", test.node), ("resourcequotas", test.quota)]:
+                    if obj is not None and path.endswith("/" + resource + "/" + obj["metadata"]["name"]):
+                        return obj
                 for pod in test.extra_pods:
                     if path.endswith("/pods/" + pod["metadata"]["name"]):
                         return pod
@@ -322,7 +368,7 @@ class ExploreFixture(unittest.TestCase):
         self.config.write_bytes(self.original)
 
     def start(self):
-        app = Terminal(self.state, self.config, width=160, height=40)
+        app = Terminal(self.state, self.config, width=160, height=40, env_overrides=getattr(self, "terminal_env", None))
         self.addCleanup(app.close)
         app.expect("AI assistant")
         return app
@@ -330,9 +376,9 @@ class ExploreFixture(unittest.TestCase):
     def open_resource(self, resource="pods"):
         app = self.start()
         app.send(":new\rShop\r\r")
-        app.expect("Add tool")
+        app.expect("Add Connection")
         app.send("\r")
-        app.expect("Add Kubernetes contexts")
+        app.expect("Add Context")
         app.send(" \x1b[B\r")
         app.expect("Added 1 Kubernetes")
         app.send(":" + resource + "\r")
@@ -343,34 +389,78 @@ class ExploreFixture(unittest.TestCase):
 
 
 class ExploreTests(ExploreFixture):
-    def test_workspace_and_tool_folding_use_the_same_controls(self):
+    def test_connection_discovery_keeps_tool_branches_collapsed(self):
+        app = self.start()
+        app.send(":new\rShop\r\r\r")
+        app.expect_screen("Add Context")
+        app.send(" \x1b[B\r")
+        app.expect_screen("Added 1 Kubernetes")
+        app.send(":2\r")
+        app.send("\x1b")
+        app.send("/local-test\r")
+        app.expect_screen("checkout-test")
+        app.expect_screen("▸ Kubernetes")
+        self.assertNotIn("Helm", "\n".join(row[:30] for row in app.screen()["rows"]))
+        app.send("\x1b[1;3C:g\r")
+        app.expect_screen("checkout-test")
+        app.resize(140, 36)
+        app.expect_screen("▸ Kubernetes")
+        self.assertNotIn("Helm", "\n".join(row[:30] for row in app.screen()["rows"]))
+        app.send("\x03")
+        app.assert_exit()
+        app.close()
+
+        requests_before_restart = len(self.requests)
+        restarted = self.start()
+        restarted.expect_screen("Current Workspace")
+        self.assertEqual(len(self.requests), requests_before_restart)
+        restarted.send("\x1b[1;3D/local-test\r")
+        restarted.expect_screen("checkout-test")
+        restarted.expect_screen("▸ Kubernetes")
+        self.assertNotIn("Helm", "\n".join(row[:30] for row in restarted.screen()["rows"]))
+        restarted.send(":pods\r")
+        restarted.expect_screen("checkout-test")
+        restarted.expect_screen("▸ Kubernetes")
+        self.assertNotIn("Helm", "\n".join(row[:30] for row in restarted.screen()["rows"]))
+        restarted.send("\x1b")
+        restarted.send("/pods\r")
+        restarted.expect_screen("▾ Kubernetes")
+        restarted.expect_screen("▾ Workloads")
+        self.assertNotIn("Helm", "\n".join(row[:30] for row in restarted.screen()["rows"]))
+        restarted.send("\x03")
+        restarted.assert_exit()
+        self.assertEqual(self.config.read_bytes(), self.original)
+
+    def test_workspace_area_and_connection_folding_use_the_same_controls(self):
         app = self.open_resource()
-        app.send("\x1b[Z/local-test\r")
+        app.send("\x1b[1;3D/local-test\r")
         saved = app.wait_json(self.state / "session.json", lambda data: data["focus"] == 0 and data["expanded"].get(data["connection"]))
         workspace, connection = saved["workspace"], saved["connection"]
-        tool = workspace + "/kubernetes"
+        area = workspace + "/monitor"
 
         app.send("\x1b[D\x1b[D\r")
-        app.wait_json(self.state / "session.json", lambda data: data["expanded"].get(tool) is False and data["tool"] == "kubernetes" and not data["connection"])
+        app.wait_json(self.state / "session.json", lambda data: data["expanded"].get(area) is False and data["tool"] == "monitor" and not data["connection"])
         app.send("\x1b[D\r")
         app.wait_json(self.state / "session.json", lambda data: data["expanded"].get(workspace) is False and not data["tool"])
 
         app.send("\x1b[C\x1b[B\x1b[C\x1b[B\x1b[C")
-        saved = app.wait_json(self.state / "session.json", lambda data: all(data["expanded"].get(key) for key in [workspace, tool, connection]))
+        saved = app.wait_json(self.state / "session.json", lambda data: all(data["expanded"].get(key) for key in [workspace, area, connection]))
         self.assertEqual(saved["focus"], 0)
         self.assertEqual(saved["mode"], 1)
         self.assertFalse(saved["tool"])
         self.assertFalse(saved["connection"])
 
         app.send("\r")
-        app.wait_json(self.state / "session.json", lambda data: data["connection"] == connection and data["expanded"].get(connection) is False)
+        app.wait_json(self.state / "session.json", lambda data: data["connection"] == connection and data["expanded"].get(connection) is True)
+        app.send("\r")
+        app.wait_json(self.state / "session.json", lambda data: data["expanded"].get(connection) is False)
         app.send("\x03")
         app.assert_exit()
         self.assertEqual(self.config.read_bytes(), self.original)
 
     def test_connection_collapse_survives_refresh_and_restart(self):
         app = self.open_resource()
-        app.send("\x1b[Z/local-test\r")
+        app.send("\x1b[1;3D/local-test\r")
         saved = app.wait_json(self.state / "session.json", lambda data: data["focus"] == 0 and data["expanded"].get(data["connection"]))
         connection = saved["connection"]
         start = len(app.output)
@@ -387,13 +477,14 @@ class ExploreTests(ExploreFixture):
         saved = json.loads((self.state / "session.json").read_text())
         self.assertFalse(saved["expanded"][connection])
         self.assertEqual(saved["connection"], connection)
+        self.assertEqual(saved["focus"], 0)
 
         app = self.start()
-        app.expect("checkout-test")
-        app.expect("▸ local-test")
-        app.send("\x1b[Z\x1b[C")
+        app.expect_screen("Current Workspace")
+        app.expect_screen("▸ local-test")
+        app.send("\x1b[1;3D\x1b[C")
         app.wait_json(self.state / "session.json", lambda data: data["focus"] == 0 and data["expanded"].get(connection))
-        app.send("\r")
+        app.send("\x1b[D")
         app.wait_json(self.state / "session.json", lambda data: data["expanded"].get(connection) is False)
         app.send("\x03")
         app.assert_exit()
@@ -404,7 +495,7 @@ class ExploreTests(ExploreFixture):
         self.addCleanup(self.pod_list_gate.set)
         app = self.start()
         app.send(":new\rShop\r\r\r")
-        app.expect("Add Kubernetes contexts")
+        app.expect("Add Context")
         app.send(" \x1b[B\r")
         app.expect("Added 1 Kubernetes")
         app.send(":pods\r")
@@ -416,7 +507,7 @@ class ExploreTests(ExploreFixture):
         lists = [r for r in self.requests if r[1].endswith("/pods") and r[2].get("watch") != ["true"]]
         self.assertEqual(len(lists), 1)
         app.send(":h\r")
-        app.expect("4 Global")
+        app.expect("Global · Navigation")
         app.send("\x1b")
         self.pod_list_gate.set()
         app.expect("checkout-test")
@@ -426,6 +517,31 @@ class ExploreTests(ExploreFixture):
         self.assertNotIn("●", app.text(start))
         app.send("\x03")
         app.assert_exit()
+
+    def test_log_backlog_keeps_navigation_responsive(self):
+        self.log_chunks = queue.Queue()
+        self.addCleanup(lambda: self.log_chunks.put(None))
+        app = self.open_resource()
+        app.send("\r")
+        app.expect("Pod overview")
+        app.send("l")
+        app.wait(lambda: any(path.endswith("/log") for _, path, _ in self.requests), "log request")
+        self.log_chunks.put(b"".join(f"backlog {i:05d} received request\n".encode() for i in range(10000)) + b"backlog finished\n")
+        app.wait(lambda: "backlog finished" in "\n".join(app.screen()["rows"]), "large log backlog", timeout=5)
+        app.expect("older lines removed")
+        app.send(" ")
+        app.expect("Reading")
+        # Keep another backlog arriving while Help opens and Logs closes.
+        self.log_chunks.put(b"streaming request\n" * 100000)
+        app.send(":h\r")
+        app.wait(lambda: "Global" in "\n".join(app.screen()["rows"]), "Help during log burst", timeout=3)
+        app.send("\x1b")
+        app.send("\x1b")
+        app.wait(lambda: "[d Describe]" in "\n".join(app.screen()["rows"]), "leave streaming logs", timeout=3)
+        app.send("\x03")
+        app.assert_exit()
+        self.assertFalse(self.mutations)
+        self.assertEqual(self.config.read_bytes(), self.original)
 
     def test_logs_keep_collecting_while_reading_and_resume_without_refetch(self):
         self.log_chunks = queue.Queue()
@@ -468,9 +584,9 @@ class ExploreTests(ExploreFixture):
         self.pod["status"]["containerStatuses"][1]["lastState"] = {"terminated": {"reason": "OOMKilled", "exitCode": 137}}
         app = self.start()
         app.send(":new\rShop\r\r")
-        app.expect("Add tool")
+        app.expect("Add Connection")
         app.send("\r")
-        app.expect("Add Kubernetes contexts")
+        app.expect("Add Context")
         app.send(" \x1b[B\r")
         app.expect("Added 1 Kubernetes")
         app.send(":pods\r")
@@ -510,20 +626,28 @@ class ExploreTests(ExploreFixture):
         self.config.write_bytes(self.original)
         app = self.start()
         app.send(":new\rMinikube test\r\r")
-        app.expect("Add tool")
+        app.expect("Add Connection")
         app.send("\r")
-        app.expect("Add Kubernetes contexts")
+        app.expect("Add Context")
         app.send(" \x1b[B\r")
         app.expect("Added 1 Kubernetes")
         app.send(":pods\r\r")
-        app.expect("No Pods in namespace default.")
-        app.expect(":N *  Show all namespaces")
+        app.expect_screen("No Pods in namespace default.")
+        app.expect_screen("[n] Choose namespace")
+        app.expect_screen("[g] Refresh")
+        screen = app.capture_screen("empty-pods-namespace")
+        self.assertIn("+------+ |", "\n".join(screen))
+        self.assertNotIn(":k Resource types", "\n".join(screen))
         output = app.text()
         self.assertNotIn("Waited before sending request", output)
         self.assertNotIn("fixture API warning", output)
         self.assertNotIn("request.go:", output)
 
-        app.send(":N *\r")
+        row = next(i for i, line in enumerate(screen) if "[n] Choose namespace" in line)
+        column = screen[row].index("[n] Choose namespace")
+        app.mouse_click(column, row)
+        app.expect_screen("All namespaces")
+        app.send("\x1b[H\r")
         app.expect("checkout-test")
         app.expect("kube-system")
         app.send(":N platform\r")
@@ -535,9 +659,9 @@ class ExploreTests(ExploreFixture):
     def test_live_resources_details_logs_commands_and_restart(self):
         app = self.start()
         app.send(":new\rShop\r\r")
-        app.expect("Add tool")
+        app.expect("Add Connection")
         app.send("\r")
-        app.expect("Add Kubernetes contexts")
+        app.expect("Add Context")
         app.send(" \x1b[B\r")
         app.expect("Added 1 Kubernetes")
         app.send(":pods\r")
@@ -566,16 +690,16 @@ class ExploreTests(ExploreFixture):
         start = len(app.output)
         app.send("\x1b")
         app.expect("Filter resources", start)
-        app.send(":kinds\r")
-        app.expect("Resource kinds")
-        app.send("deployments\r")
+        app.send("\x1b")
+        app.wait_json(self.state / "session.json", lambda data: data["focus"] == 0)
+        app.send("/deployments\r")
         app.wait(lambda: any(path.endswith("/deployments") for _, path, _ in self.requests), "deployment list")
         app.send("\r")
         app.expect("checkout-deployment")
         app.send("\x1b")
         app.send(":pods\r")
         app.send("/bb cc :quit\r")
-        app.expect("No resources match this filter")
+        app.expect("No matching Pods.")
         app.expect("Backspace clear")
         app.send("\x1b")
         app.wait_json(self.state / "session.json", lambda data: data["focus"] == 0)
@@ -595,13 +719,16 @@ class ExploreTests(ExploreFixture):
         saved = json.loads((self.state / "session.json").read_text())
         key = saved["workspace"] + "/" + saved["connection"]
         self.assertEqual(saved["explore"][key]["namespace"], "platform")
-        self.assertEqual(saved["drafts"][saved["workspace"]], "Keep this draft")
+        self.assertIn("Keep this draft", saved["drafts"].values())
         self.assertEqual(self.config.read_bytes(), self.original)
         for path in self.state.rglob("*.json"):
             self.assertNotIn("missing database setting", path.read_text())
             self.assertNotIn("pod-id", path.read_text())
 
         restarted = self.start()
+        restarted.expect_screen("Current Workspace")
+        restarted.send("\x1b[1;3D/local-test\r")
+        restarted.send(":2\r")
         restarted.expect("Access denied by Kubernetes RBAC")
         restarted.send(":N shop\r")
         restarted.expect("checkout-test")

@@ -10,7 +10,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/simjay/plous/internal/kubernetes"
+	"github.com/simjay/plous/internal/app/monitor"
+	kubecommon "github.com/simjay/plous/internal/integrations/kubernetes/common"
+	kubernetes "github.com/simjay/plous/internal/integrations/kubernetes/monitor"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -30,7 +32,7 @@ func usabilityObjects(t *testing.T) []unstructured.Unstructured {
 func usabilityModel(t *testing.T, object unstructured.Unstructured) *model {
 	t.Helper()
 	m := exploreModel(t)
-	resource := kubernetes.Resource{Name: map[string]string{"Pod": "pods", "Deployment": "deployments", "StatefulSet": "statefulsets", "Service": "services", "Ingress": "ingresses"}[object.GetKind()], Kind: object.GetKind(), Version: "v1", Namespaced: true, Verbs: []string{"get", "list", "watch", "update", "patch", "delete"}}
+	resource := kubecommon.Resource{Name: map[string]string{"Pod": "pods", "Deployment": "deployments", "StatefulSet": "statefulsets", "Service": "services", "Ingress": "ingresses"}[object.GetKind()], Kind: object.GetKind(), Version: "v1", Namespaced: true, Verbs: []string{"get", "list", "watch", "update", "patch", "delete"}}
 	if group, _, ok := strings.Cut(object.GetAPIVersion(), "/"); ok {
 		resource.Group = group
 	}
@@ -38,20 +40,20 @@ func usabilityModel(t *testing.T, object unstructured.Unstructured) *model {
 		resource.Subresources = map[string][]string{"scale": {"get", "update", "patch"}}
 	}
 	replaced := false
-	for i, existing := range m.explore.resources {
+	for i, existing := range m.explore.Resources {
 		if existing.Key() == resource.Key() {
-			m.explore.resources[i], replaced = resource, true
+			m.explore.Resources[i], replaced = resource, true
 		}
 	}
 	if !replaced {
-		m.explore.resources = append(m.explore.resources, resource)
+		m.explore.Resources = append(m.explore.Resources, resource)
 	}
-	m.explore.resource = resource
-	m.explore.preference.Resource, m.explore.preference.Namespace = resource.Key(), object.GetNamespace()
-	m.explore.collection = kubernetes.Collection{Objects: []unstructured.Unstructured{object}}
-	m.explore.selected = kubernetes.Identity(object)
+	m.explore.Resource = resource
+	m.explore.Preference.Resource, m.explore.Preference.Namespace = resource.Key(), object.GetNamespace()
+	m.explore.Collection = kubernetes.Collection{Objects: []unstructured.Unstructured{object}}
+	m.explore.Selected = kubernetes.Identity(object)
 	m.openExploreSelection(0)
-	m.explore.detailValid = true
+	m.explore.DetailValid = true
 	m.status = ""
 	m.syncExploreTree()
 	return m
@@ -81,7 +83,7 @@ func TestUsabilityResourceViewsFitAndRetainEssentialContent(t *testing.T) {
 				}
 				m.updateExplore("end")
 				if !strings.Contains(ansi.Strip(m.render()), "Finalizers") {
-					t.Fatalf("End cannot reach metadata at %dx%d (scroll %d, limit %d)", m.width, m.height, m.explore.scroll, m.exploreDetailScrollLimit())
+					t.Fatalf("End cannot reach metadata at %dx%d (scroll %d, limit %d)", m.width, m.height, m.explore.Scroll, m.exploreDetailScrollLimit())
 				}
 				m.updateExplore("home")
 				if dir := os.Getenv("PLOUS_REVIEW_DIR"); dir != "" {
@@ -94,12 +96,12 @@ func TestUsabilityResourceViewsFitAndRetainEssentialContent(t *testing.T) {
 						}
 						if scene != "summary" {
 							m.openExploreSelection(4)
-							m.explore.detailValid = true
-							m.explore.container, m.explore.logKey = "checkout", "fixture-stream"
+							m.explore.DetailValid = true
+							m.explore.Container, m.explore.LogKey = "checkout", "fixture-stream"
 							m.podLogViewer().Reset()
 							m.podLogViewer().Append("ERROR database connection refused\n" + strings.Repeat("INFO retrying connection to checkout-db:5432\n", 30))
 							if scene == "error" {
-								m.explore.logError = "Permission denied by Kubernetes RBAC."
+								m.explore.LogError = "Permission denied by Kubernetes RBAC."
 							}
 						}
 						if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("%s-%s-%d.ansi", object.GetKind(), scene, m.width)), []byte(m.render()), 0600); err != nil {
@@ -117,12 +119,12 @@ func TestUsabilityDetailActionsAndYAMLReturnAcrossResourceTypes(t *testing.T) {
 		t.Run(object.GetKind(), func(t *testing.T) {
 			m := usabilityModel(t, object)
 			e := m.explore
-			e.preference.Filter, e.preference.Selector, e.preference.Sort = "checkout", "app=checkout", 1
-			e.scroll = 7
-			preference, selection := e.preference, e.selected
+			e.Preference.Filter, e.Preference.Selector, e.Preference.Sort = "checkout", "app=checkout", 1
+			e.Scroll = 7
+			preference, selection := e.Preference, e.Selected
 			actions := map[string]bool{}
-			for _, action := range actionsFor(e.resource, e.detail) {
-				actions[action.id] = true
+			for _, action := range monitor.ActionsFor(e.Resource, e.Detail) {
+				actions[action.Id] = true
 			}
 			workload := object.GetKind() == "Deployment" || object.GetKind() == "StatefulSet"
 			for action, want := range map[string]bool{"logs": workload || object.GetKind() == "Pod", "exec": workload || object.GetKind() == "Pod", "scale": workload, "restart": workload, "edit": true, "delete": true} {
@@ -134,7 +136,7 @@ func TestUsabilityDetailActionsAndYAMLReturnAcrossResourceTypes(t *testing.T) {
 			m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 			m.Update(tea.WindowSizeMsg{Width: 240, Height: 50})
 			press(t, m, "esc")
-			if e.detail == nil || e.detail.GetUID() != object.GetUID() || e.tab != 0 || e.scroll != 7 || e.preference != preference || e.selected != selection {
+			if e.Detail == nil || e.Detail.GetUID() != object.GetUID() || e.Tab != 0 || e.Scroll != 7 || e.Preference != preference || e.Selected != selection {
 				t.Fatal("YAML and resize lost the resource or its browsing state")
 			}
 		})
@@ -145,14 +147,14 @@ func TestUsabilityDetailErrorCanBeReadToTheEnd(t *testing.T) {
 	m := usabilityModel(t, usabilityObjects(t)[0])
 	m.width, m.height = 120, 32
 	e := m.explore
-	e.detailValid = false
-	e.detailText = strings.Repeat("The requested object could not be read.\n", 40) + "Recovery instruction at end"
+	e.DetailValid = false
+	e.DetailText = strings.Repeat("The requested object could not be read.\n", 40) + "Recovery instruction at end"
 	if strings.Contains(ansi.Strip(m.render()), "Recovery instruction at end") {
 		t.Fatal("fixture does not require scrolling")
 	}
 	m.updateExplore("end")
 	if !strings.Contains(ansi.Strip(m.render()), "Recovery instruction at end") {
-		t.Fatalf("long detail error cannot be read: scroll=%d limit=%d\n%s", e.scroll, m.exploreDetailScrollLimit(), ansi.Strip(m.render()))
+		t.Fatalf("long detail error cannot be read: scroll=%d limit=%d\n%s", e.Scroll, m.exploreDetailScrollLimit(), ansi.Strip(m.render()))
 	}
 	m.updateExplore("home")
 	if strings.Contains(ansi.Strip(m.render()), "Recovery instruction at end") {
@@ -163,12 +165,12 @@ func TestUsabilityDetailErrorCanBeReadToTheEnd(t *testing.T) {
 func TestUsabilityCompactLogSourceAndExpansionStayVisible(t *testing.T) {
 	m := usabilityModel(t, usabilityObjects(t)[0])
 	m.openExploreSelection(4)
-	m.explore.detailValid, m.explore.previous = true, true
-	m.explore.logKey = "fixture-stream"
+	m.explore.DetailValid, m.explore.Previous = true, true
+	m.explore.LogKey = "fixture-stream"
 	m.podLogViewer().Append("latest evidence")
 	for _, width := range []int{28, 48, 60} {
 		text := ansi.Strip(m.exploreLogBody(width, 18))
-		for _, want := range []string{"Logs · checkout", "Previous", "Latest 200 lines", "[ z Expand ]", "latest evidence"} {
+		for _, want := range []string{"Logs · checkout", "Previous", "Latest 200 lines", "[ff] Fullscreen", "latest evidence"} {
 			if !strings.Contains(text, want) {
 				t.Fatalf("width %d hides %q: %s", width, want, text)
 			}
@@ -179,11 +181,11 @@ func TestUsabilityCompactLogSourceAndExpansionStayVisible(t *testing.T) {
 func TestUsabilityExecFailureAndEditCommandStayVisible(t *testing.T) {
 	m := usabilityModel(t, usabilityObjects(t)[0])
 	tm := reviewTerminal(t, 28, 8)
-	m.explore.terminal = tm
-	tm.done, tm.captured, tm.err = true, false, "The executable is unavailable. Choose another command."
-	tm.beginReview()
+	m.explore.Terminal = tm
+	tm.Done, tm.Captured, tm.Err = true, false, "The executable is unavailable. Choose another command."
+	tm.BeginReview()
 	text := ansi.Strip(m.terminalBody(28, 18))
-	if !strings.Contains(text, "Session failed") || !strings.Contains(text, "e Edit command") {
+	if !strings.Contains(text, "Session failed") || !strings.Contains(text, "[e] Edit command") {
 		t.Fatalf("failure recovery hidden in compact Exec: %s", text)
 	}
 }

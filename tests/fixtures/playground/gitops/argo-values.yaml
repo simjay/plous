@@ -1,0 +1,26 @@
+crds:
+  keep: true
+configs:
+  cm:
+    timeout.reconciliation: 30s
+    timeout.reconciliation.jitter: 0s
+controller:
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {memory: 512Mi}
+repoServer:
+  resources:
+    requests: {cpu: 50m, memory: 64Mi}
+    limits: {memory: 256Mi}
+redis:
+  resources:
+    requests: {cpu: 25m, memory: 32Mi}
+    limits: {memory: 128Mi}
+server:
+  replicas: 0
+dex:
+  enabled: false
+applicationSet:
+  replicas: 0
+notifications:
+  enabled: false

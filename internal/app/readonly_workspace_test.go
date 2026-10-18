@@ -1,12 +1,12 @@
 package app
 
 import (
-	"strings"
-	"testing"
-
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-	docedit "github.com/simjay/plous/internal/editor"
+	"github.com/simjay/plous/internal/app/monitor"
+	docedit "github.com/simjay/plous/internal/ui/editor"
+	"strings"
+	"testing"
 )
 
 func TestReadOnlyActivityRoutesLiteralSearchAndGlobalNavigation(t *testing.T) {
@@ -20,7 +20,7 @@ func TestReadOnlyActivityRoutesLiteralSearchAndGlobalNavigation(t *testing.T) {
 	if !m.activityReviewVisible() {
 		t.Fatal("visible View changes shortcut did not open shared comparison")
 	}
-	r := m.activityReview.comparison
+	r := m.activityReview.Comparison
 	typeText(m, "/bbii33:q")
 	m.Update(tea.PasteMsg{Content: "\n:settings"})
 	if r.Reader.Query != "bbii33:q:settings" || m.mode != 2 || m.leftHidden || m.rightHidden || m.command != nil || m.settingsOverlay != nil {
@@ -36,11 +36,11 @@ func TestReadOnlyActivityRoutesLiteralSearchAndGlobalNavigation(t *testing.T) {
 		t.Fatal("clearing a pending prefix also left comparison")
 	}
 	typeText(m, "v")
-	press(t, m, "tab")
+	press(t, m, "alt+right")
 	if m.focus != 2 || !r.Reader.Selecting {
 		t.Fatal("panel change lost comparison selection")
 	}
-	press(t, m, "shift+tab")
+	press(t, m, "alt+left")
 	mainCommand(t, m, "help")
 	press(t, m, "esc")
 	if !m.activityReviewVisible() || !r.Reader.Selecting {
@@ -56,7 +56,7 @@ func TestReadOnlyActivityRoutesLiteralSearchAndGlobalNavigation(t *testing.T) {
 		t.Fatal("named View changes command did not reopen comparison")
 	}
 	m.execute("applychange")
-	if r.CanConfirm || m.explore != nil && m.explore.action != nil {
+	if r.CanConfirm || m.explore != nil && m.explore.Action != nil {
 		t.Fatal("Activity exposed a resource write operation")
 	}
 }
@@ -64,33 +64,33 @@ func TestReadOnlyActivityRoutesLiteralSearchAndGlobalNavigation(t *testing.T) {
 func TestReadOnlyYAMLRoutesSearchSelectionAndExplicitEdit(t *testing.T) {
 	m := yamlViewModel(t)
 	m.syncExploreDetail()
-	run := m.explore.detailRun
-	run.cancel()
-	m.Update(exploreDetailResult{run: run, object: m.explore.detail.DeepCopy()})
+	run := m.explore.DetailRun
+	run.Cancel()
+	m.Update(monitor.ExploreDetailResult{Run: run, Object: m.explore.Detail.DeepCopy()})
 	m.exploreDetailBody(84, 28)
-	d := m.explore.yamlDocument
-	original := d.text
+	d := m.explore.YamlDocument
+	original := d.Text
 	typeText(m, "/bbii33:q")
 	m.Update(tea.PasteMsg{Content: "\n:settings"})
-	if d.document.Query != "bbii33:q:settings" || m.mode != 1 || m.leftHidden || m.rightHidden || m.command != nil {
+	if d.Document.Query != "bbii33:q:settings" || m.mode != 1 || m.leftHidden || m.rightHidden || m.command != nil {
 		t.Fatal("YAML search escaped into application navigation")
 	}
 	press(t, m, "esc")
 	typeText(m, "z")
-	press(t, m, "tab")
-	press(t, m, "shift+tab")
-	if d.document.Mode != docedit.Select || m.explore.yamlDocument != d {
+	press(t, m, "alt+right")
+	press(t, m, "alt+left")
+	if d.Document.Mode != docedit.Select || m.explore.YamlDocument != d {
 		t.Fatal("panel focus lost YAML selection")
 	}
 	mainCommand(t, m, "help")
 	press(t, m, "esc")
-	if d.document.Mode != docedit.Select || m.explore.yamlDocument != d {
+	if d.Document.Mode != docedit.Select || m.explore.YamlDocument != d {
 		t.Fatal("Help replaced the YAML reader")
 	}
 	press(t, m, "esc")
 	m.Update(tea.PasteMsg{Content: "kind: Secret\n"})
 	typeText(m, "ii")
-	if !m.rightHidden || d.text != original || m.explore.action != nil {
+	if m.assistantSize != assistantDouble || d.Text != original || m.explore.Action != nil {
 		t.Fatal("read-only navigation changed the document or blocked a global shortcut")
 	}
 	_, copied := m.Update(tea.KeyPressMsg{Code: 'y', Text: "y"})
@@ -98,7 +98,7 @@ func TestReadOnlyYAMLRoutesSearchSelectionAndExplicitEdit(t *testing.T) {
 		t.Fatal("YAML copy feedback was hidden")
 	}
 	typeText(m, "E")
-	if m.explore.action == nil || !m.explore.action.requested || m.explore.action.items[m.explore.action.cursor].id != "edit" {
+	if m.explore.Action == nil || !m.explore.Action.Requested || m.explore.Action.Items[m.explore.Action.Cursor].Id != "edit" {
 		t.Fatal("explicit Edit did not enter the resource edit workflow")
 	}
 }

@@ -1,12 +1,14 @@
 package app
 
 import (
+	"github.com/simjay/plous/internal/app/monitor"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -14,10 +16,10 @@ import (
 
 func TestCommandAliasesAreSingleLettersAndDoNotCollide(t *testing.T) {
 	commands := append([]commandDefinition(nil), applicationCommands...)
-	for _, action := range resourceActionDefinitions {
-		commands = append(commands, commandDefinition{action.alias, action.command})
+	for _, action := range monitor.ResourceActionDefinitions {
+		commands = append(commands, commandDefinition{action.Alias, action.Command})
 	}
-	keymap, err := os.ReadFile("../../docs/keymap.md")
+	keymap, err := os.ReadFile("../../docs/reference/keymap.md")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +33,7 @@ func TestCommandAliasesAreSingleLettersAndDoNotCollide(t *testing.T) {
 				t.Errorf("%s and %s both claim %q", previous, command.name, spelling)
 			}
 			seen[spelling] = command.name
-			if resource := resourceCommands[spelling]; resource != "" {
+			if resource := monitor.ResourceCommands[spelling]; resource != "" {
 				t.Errorf("%s shadows resource %s", spelling, resource)
 			}
 			if !strings.Contains(string(keymap), "`:"+spelling+"`") {
@@ -53,7 +55,7 @@ func TestNamespaceAndStorageResourceCommandsKeepTheirKubernetesMeaning(t *testin
 		t.Run(command, func(t *testing.T) {
 			m := exploreModel(t)
 			m.execute(command)
-			if m.explore.preference.Resource != resource || m.explore.picker != "" {
+			if m.explore.Preference.Resource != resource || m.explore.Picker != "" {
 				t.Fatalf(":%s did not open %s", command, resource)
 			}
 		})
@@ -64,24 +66,24 @@ func TestDocumentCommandOwnership(t *testing.T) {
 	for _, command := range []string{"u", "undo", "U", "redo", "v", "review"} {
 		t.Run(command, func(t *testing.T) {
 			m, a := documentModel(t)
-			a.document.Paste("# draft\n")
-			changed := a.document.Text()
+			a.Document.Paste("# draft\n")
+			changed := a.Document.Text()
 			m.focus = 2
 			m.execute(command)
-			if a.document.Text() != changed || a.pending != "" || m.explore.action != a {
+			if a.Document.Text() != changed || a.Pending != "" || m.explore.Action != a {
 				t.Fatal("a command from another panel changed the open document")
 			}
 			m.focus = 1
 			m.execute("u")
-			if a.document.Text() == changed {
+			if a.Document.Text() == changed {
 				t.Fatal("editor :u did not undo")
 			}
 			m.execute("U")
-			if a.document.Text() != changed {
+			if a.Document.Text() != changed {
 				t.Fatal("editor :U did not restore the draft")
 			}
 			m.execute("v")
-			if a.pending != "validate" || a.saveRequested || a.closeAfterApply {
+			if a.Pending != "validate" || a.SaveRequested || a.CloseAfterApply {
 				t.Fatal("optional review must validate without requesting a save")
 			}
 		})
@@ -94,18 +96,16 @@ func TestDisplayedColonCommandsAreRegistered(t *testing.T) {
 	for _, command := range applicationCommands {
 		known[command.key], known[command.name] = true, true
 	}
-	for _, action := range resourceActionDefinitions {
-		known[action.alias], known[action.command] = true, true
+	for _, action := range monitor.ResourceActionDefinitions {
+		known[action.Alias], known[action.Command] = true, true
 	}
-	for resource := range resourceCommands {
+	for resource := range monitor.ResourceCommands {
 		known[resource] = true
 	}
-	commandPattern := regexp.MustCompile("(?:^|[\\s\\[(/`]):([A-Za-z0-9][A-Za-z0-9.!_-]*)")
-	controlPattern := regexp.MustCompile(`(?i)\bctrl\+([a-z0-9]+|[^\s])`)
-	controlKeys := map[string]bool{"a": true, "c": true, "e": true, "j": true, "u": true, "]": true}
+	controlPattern := regexp.MustCompile(`(?i)\bctrl\+((?:[a-z]+\+)*(?:[a-z0-9]+|[^\s]))`)
+	controlKeys := map[string]bool{"a": true, "c": true, "e": true, "h": true, "j": true, "u": true, "]": true, "shift+c": true, "shift+v": true}
 	check := func(file, text string) {
-		for _, match := range commandPattern.FindAllStringSubmatch(text, -1) {
-			command := strings.TrimRight(match[1], ".")
+		for _, command := range displayedColonCommands(text) {
 			if command == "widgets.example.io" { // Documented API-qualified resource example.
 				continue
 			}
@@ -145,15 +145,52 @@ func TestDisplayedColonCommandsAreRegistered(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	docs, err := filepath.Glob("../../docs/*.md")
+	docs := []string{"../../README.md"}
+	err = filepath.WalkDir("../../docs", func(path string, entry os.DirEntry, err error) error {
+		if err == nil && !entry.IsDir() && strings.HasSuffix(path, ".md") {
+			docs = append(docs, path)
+		}
+		return err
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range append(docs, "../../README.md") {
+	for _, path := range docs {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatal(err)
 		}
 		check(path, string(data))
+	}
+}
+
+var displayedCommandPattern = regexp.MustCompile("(?:^|[\\s\\[(/`]):([A-Za-z0-9][A-Za-z0-9.!_-]*)")
+
+func displayedColonCommands(text string) []string {
+	var commands []string
+	for _, match := range displayedCommandPattern.FindAllStringSubmatchIndex(text, -1) {
+		end := match[3]
+		if end < len(text) && text[end] == '/' && (end+1 == len(text) || text[end+1] != ':') {
+			continue
+		}
+		commands = append(commands, strings.TrimRight(text[match[2]:end], "."))
+	}
+	return commands
+}
+
+func TestDisplayedCommandScannerDistinguishesPaths(t *testing.T) {
+	for _, tc := range []struct {
+		text string
+		want []string
+	}{
+		{"Use :s, :settings and :pods. See [:H].", []string{"s", "settings", "pods", "H"}},
+		{":refs/plous/source", nil},
+		{":refs/heads/main :s :q!", []string{"s", "q!"}},
+		{":s/:settings", []string{"s", "settings"}},
+		{":widgets.example.io", []string{"widgets.example.io"}},
+	} {
+		if got := displayedColonCommands(tc.text); !slices.Equal(got, tc.want) {
+			t.Errorf("%q: got %v, want %v", tc.text, got, tc.want)
+		}
 	}
 }

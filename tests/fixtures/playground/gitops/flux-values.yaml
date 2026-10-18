@@ -1,0 +1,23 @@
+crds:
+  annotations:
+    helm.sh/resource-policy: keep
+imageAutomationController:
+  create: false
+imageReflectionController:
+  create: false
+notificationController:
+  create: false
+sourceWatcher:
+  create: false
+helmController:
+  resources:
+    requests: {cpu: 50m, memory: 64Mi}
+    limits: {memory: 256Mi}
+kustomizeController:
+  resources:
+    requests: {cpu: 50m, memory: 64Mi}
+    limits: {memory: 256Mi}
+sourceController:
+  resources:
+    requests: {cpu: 50m, memory: 64Mi}
+    limits: {memory: 256Mi}

@@ -1,19 +1,20 @@
 package app
 
 import (
+	tea "charm.land/bubbletea/v2"
 	"context"
 	"fmt"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/simjay/plous/internal/ai/history"
+	ai "github.com/simjay/plous/internal/ai/model"
+	appchat "github.com/simjay/plous/internal/app/chat"
+
 	"strings"
 	"testing"
-
-	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
-	"github.com/simjay/plous/internal/ai"
-	"github.com/simjay/plous/internal/workspace"
 )
 
 func TestPanelToggleAliasesFromEveryPanel(t *testing.T) {
-	for _, command := range []string{"b", "sidebar", "i", "aiinteraction"} {
+	for _, command := range []string{"b", "sidebar"} {
 		for focus := 0; focus < 3; focus++ {
 			t.Run(fmt.Sprintf("%s/from%d", command, focus), func(t *testing.T) {
 				m, _ := testModel(t)
@@ -48,12 +49,12 @@ func TestHiddenPanelsAreSkippedByFocusAndRestoredAfterRestart(t *testing.T) {
 			mainCommand(t, m, "b")
 		}
 		if hidden[1] {
-			mainCommand(t, m, "i")
+			hideAssistant(t, m)
 		}
 		if err := m.saveSession(); err != nil {
 			t.Fatal(err)
 		}
-		restored, err := newModel(m.store, "test-version")
+		restored, err := newModel(m.store, m.history, "test-version")
 		if err != nil || restored.leftHidden != hidden[0] || restored.rightHidden != hidden[1] {
 			t.Fatalf("visibility did not survive restart: %v", err)
 		}
@@ -67,13 +68,13 @@ func TestHiddenPanelsAreSkippedByFocusAndRestoredAfterRestart(t *testing.T) {
 			restored.Update(tea.WindowSizeMsg{Width: size[0], Height: size[1]})
 			for i, panel := range visible {
 				restored.focus = panel
-				press(t, restored, "tab")
+				press(t, restored, "alt+right")
 				if restored.focus != visible[(i+1)%len(visible)] {
-					t.Fatal("Tab did not skip hidden panels")
+					t.Fatal("Alt+Right did not skip hidden panels")
 				}
-				press(t, restored, "shift+tab")
+				press(t, restored, "alt+left")
 				if restored.focus != panel {
-					t.Fatal("Shift+Tab did not skip hidden panels")
+					t.Fatal("Alt+Left did not skip hidden panels")
 				}
 			}
 		}
@@ -86,7 +87,7 @@ func TestHiddenPanelsAreSkippedByFocusAndRestoredAfterRestart(t *testing.T) {
 		if err := m.store.WriteSession([]byte(data)); err != nil {
 			t.Fatal(err)
 		}
-		restored, err := newModel(m.store, "test-version")
+		restored, err := newModel(m.store, m.history, "test-version")
 		if err != nil || restored.focus != 1 {
 			t.Fatalf("restored focus points at a hidden panel: %v", err)
 		}
@@ -118,7 +119,7 @@ func TestCollapsedPanelLayoutsFitAndKeepCommandBox(t *testing.T) {
 			if strings.Count(lines[1], "╭") != panels+2 || strings.Count(lines[len(lines)-2], "╰") != panels {
 				t.Fatal("hidden panels still occupy space")
 			}
-			if strings.Contains(lines[2], "Workspaces") == hidden[0] || strings.Contains(lines[2], "AI assistant") == hidden[1] {
+			if strings.Contains(lines[2], "Connections") == hidden[0] || strings.Contains(lines[2], "AI assistant") == hidden[1] {
 				t.Fatal("unexpected visible panel title")
 			}
 			if !strings.Contains(lines[len(lines)-4], ":help▏") || !strings.Contains(lines[len(lines)-1], "Enter Run") {
@@ -175,7 +176,7 @@ func TestResponsivePanelTogglesGiveFreedWidthToMain(t *testing.T) {
 		if got := m.panelWidths(); got != [3]int{0, original[0] + original[1], original[2]} {
 			t.Fatalf("hiding sidebar at %d columns changed the assistant width: %v", width, got)
 		}
-		mainCommand(t, m, "i")
+		hideAssistant(t, m)
 		if got := m.panelWidths(); got != [3]int{0, width, 0} {
 			t.Fatalf("hiding both sides at %d columns left unused space: %v", width, got)
 		}
@@ -196,14 +197,14 @@ func TestHelpRemainsAccessibleWithHiddenPanels(t *testing.T) {
 	typeText(m, ":h")
 	press(t, m, "enter")
 	mainCommand(t, m, "b")
-	mainCommand(t, m, "i")
+	hideAssistant(t, m)
 	for section := 0; section < 3; section++ {
 		for m.help.section != section {
 			press(t, m, "right")
 		}
 	}
 	view := ansi.Strip(m.render())
-	for _, text := range []string{"1 Workspaces", "2 Views", "3 AI chat", "4 Global", ":b / :sidebar", ":i / :aiinteraction"} {
+	for _, text := range []string{"Workspaces", "AI chat", "Global", "bb Sidebar", "ii AI panel"} {
 		if !strings.Contains(view, text) {
 			t.Fatalf("help lost %q when panels were hidden", text)
 		}
@@ -220,28 +221,30 @@ func TestPanelTogglesPreserveInputAndChatCommandsRevealChat(t *testing.T) {
 	startChat(t, m)
 	typeText(m, ":b :i :sidebar :aiinteraction")
 	m.Update(tea.PasteMsg{Content: " :b"})
-	draft := m.draft().text
+	draft := m.draft().Text
 	if m.leftHidden || m.rightHidden || draft != ":b :i :sidebar :aiinteraction :b" {
 		t.Fatal("chat input executed a toggle")
 	}
 	press(t, m, "esc")
 	for _, command := range []string{"c", "chat", "C", "newchat", "H", "openchat"} {
-		mainCommand(t, m, "i")
+		hideAssistant(t, m)
 		mainCommand(t, m, command)
-		if m.rightHidden || m.focus != 2 || m.draft().text != draft {
+		if m.rightHidden || m.focus != 2 || m.draft().Text != draft {
 			t.Fatalf(":%s failed to reveal chat and preserve the draft", command)
 		}
 		press(t, m, "esc")
 	}
-	openSettingsItem(t, m, "Rename workspace")
+	openSettingsItem(t, m, "Rename Workspace")
 	typeText(m, ":b :i")
 	f := m.form
-	if m.leftHidden || m.rightHidden || f.fields[0].value.text != "Payments:b :i" {
+	if m.leftHidden || m.rightHidden || f.Fields[0].Value.Text != "Payments:b :i" {
 		t.Fatal("form text executed a toggle")
 	}
 	press(t, m, "enter")
-	typeText(m, ":i")
-	press(t, m, "enter")
+	for range 2 {
+		typeText(m, ":i")
+		press(t, m, "enter")
+	}
 	typeText(m, ":b")
 	press(t, m, "enter")
 	if m.form != f || m.current().Name != "Payments" || m.focus != 1 || !m.leftHidden || !m.rightHidden {
@@ -253,29 +256,29 @@ func TestHidingChatKeepsReceivingAndSavingResponse(t *testing.T) {
 	m, _ := testModel(t)
 	id := createWorkspace(t, m, "Payments")
 	m.closeSettings()
-	conversation, err := m.store.NewConversation(id, "Test reply")
+	conversation, err := m.history.NewConversation(id, "Test reply")
 	if err != nil {
 		t.Fatal(err)
 	}
-	turn, err := m.store.StartTurn(id, conversation.ID, workspace.Request{Prompt: "hello", Agent: ai.DefaultConfig()})
+	turn, err := m.history.StartTurn(id, conversation.ID, history.Request{Prompt: "hello", Agent: ai.DefaultConfig()})
 	if err != nil {
 		t.Fatal(err)
 	}
 	c := m.chat()
-	c.conversation, c.turns = conversation, []workspace.Turn{turn}
+	c.Conversation, c.Turns = conversation, []history.Turn{turn}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	run := &chatRun{chat: c, cancel: cancel}
+	run := &appchat.ChatRun{Chat: c, Cancel: cancel}
 	m.run = run
-	mainCommand(t, m, "i")
-	m.Update(chatEvent{run: run, text: "Arrived while hidden"})
+	hideAssistant(t, m)
+	m.Update(appchat.ChatEvent{Run: run, Text: "Arrived while hidden"})
 	if ctx.Err() != nil || m.run != run || !m.rightHidden {
 		t.Fatal("hiding chat stopped the response or a response reopened chat")
 	}
 	if err := m.saveSession(); err != nil {
 		t.Fatal(err)
 	}
-	turns, err := m.store.Turns(id, conversation.ID)
+	turns, err := m.history.Turns(id, conversation.ID)
 	if err != nil || turns[0].Response.Text != "Arrived while hidden" {
 		t.Fatalf("hidden response was not saved: %v", err)
 	}
@@ -283,4 +286,16 @@ func TestHidingChatKeepsReceivingAndSavingResponse(t *testing.T) {
 	if m.chat() != c || !strings.Contains(ansi.Strip(m.render()), "Arrived while hidden") {
 		t.Fatal("restored chat lost its response")
 	}
+}
+
+func hideAssistant(t *testing.T, m *model) {
+	t.Helper()
+	for range 3 {
+		if m.rightHidden {
+			return
+		}
+		typeText(m, ":i")
+		press(t, m, "enter")
+	}
+	t.Fatal("assistant did not reach hidden stage")
 }

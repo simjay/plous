@@ -1,43 +1,21 @@
 package app
 
 import (
-	"strings"
-
 	tea "charm.land/bubbletea/v2"
-	docedit "github.com/simjay/plous/internal/editor"
-	"github.com/simjay/plous/internal/textview"
+	"github.com/simjay/plous/internal/app/monitor"
+	"github.com/simjay/plous/internal/ui"
+	docedit "github.com/simjay/plous/internal/ui/editor"
+	textview "github.com/simjay/plous/internal/ui/text"
+	"strconv"
 )
 
 func (m *model) valueDocumentActive() bool {
-	return m.explore != nil && m.exploreVisible() && m.explore.action != nil && m.explore.action.stage == "valueview" && m.explore.action.valueDocument != nil
-}
-
-func (a *resourceActionState) openValueDocument(value resourceValue) {
-	a.container, a.stage, a.cursor = value.label, "valueview", 0
-	d := docedit.New(value.text)
-	d.ReadOnly, d.Controls = true, true
-	d.Name = oneLine(a.object.GetName()) + " · " + oneLine(value.label)
-	d.Target = a.context + " · " + a.object.GetNamespace() + " · " + a.resource.Kind
-	if a.resource.Key() == "secrets" {
-		d.Target += " · Value revealed"
-	}
-	if strings.HasSuffix(value.label, ".yaml") || strings.HasSuffix(value.label, ".yml") {
-		d.Syntax = "yaml"
-	}
-	a.valueDocument = d
-}
-
-func (a *resourceActionState) clearValueDocument() {
-	if a.valueDocument != nil {
-		a.valueDocument.RefreshReadOnly("")
-		a.valueDocument = nil
-	}
-	a.exportText, a.exportValue = "", false
+	return m.explore != nil && m.exploreVisible() && m.explore.Action != nil && m.explore.Action.Stage == "valueview" && m.explore.Action.ValueDocument != nil
 }
 
 func (m *model) valueDocumentKey(msg tea.KeyPressMsg) tea.Cmd {
-	a := m.explore.action
-	d := a.valueDocument
+	a := m.explore.Action
+	d := a.ValueDocument
 	key := msg.String()
 	if !d.Searching && d.Mode != docedit.Select {
 		if key == "a" {
@@ -47,26 +25,26 @@ func (m *model) valueDocumentKey(msg tea.KeyPressMsg) tea.Cmd {
 		if d.Controls {
 			switch key {
 			case "left", "right":
-				count, step := len(valueControls(a.resource)), 1
+				count, step := len(monitor.ValueControls(a.Resource)), 1
 				if key == "left" {
 					step = count - 1
 				}
-				a.cursor = (a.cursor + step) % count
+				a.Cursor = (a.Cursor + step) % count
 				return nil
 			case "enter":
-				switch a.cursor {
+				switch a.Cursor {
 				case 0:
-					a.clearValueDocument()
-					a.stage, a.cursor = "values", 0
+					a.ClearValueDocument()
+					a.Stage, a.Cursor = "values", 0
 				case 1:
 					text := d.Text()
-					a.clearValueDocument()
-					a.stage, a.note = "done", "Selected value sent to the terminal clipboard."
-					return tea.SetClipboard(text)
+					a.ClearValueDocument()
+					a.Stage, a.Note = "done", "Selected value copy requested."
+					return m.copyWorkspaceText(text)
 				case 2:
-					a.exportValue, a.exportText = true, d.Text()
-					a.stage = "export"
-					a.input = newEditor(a.object.GetName() + "-" + a.container + ".pem")
+					a.ExportValue, a.ExportText = true, d.Text()
+					a.Stage = "export"
+					a.Input = textview.NewField(a.Object.GetName() + "-" + a.Container + ".pem")
 				}
 				return nil
 			}
@@ -87,18 +65,18 @@ func (m *model) valueDocumentKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 	event := d.Key(key, msg.Text)
 	if event.Action == "back" {
-		a.clearValueDocument()
-		a.stage, a.cursor = "values", 0
+		a.ClearValueDocument()
+		a.Stage, a.Cursor = "values", 0
 	}
 	return m.copyWorkspaceText(event.Copy)
 }
 
 func (m *model) valueDocumentBody(width, height int) string {
-	a := m.explore.action
-	d := a.valueDocument
+	a := m.explore.Action
+	d := a.ValueDocument
 	buttons := []textview.Action{}
-	for i, label := range valueControls(a.resource) {
-		button := textview.Action{Label: label, Focused: d.Controls && a.cursor == i}
+	for i, label := range monitor.ValueControls(a.Resource) {
+		button := textview.Action{Mouse: "valueaction/" + strconv.Itoa(i), Label: label, Focused: d.Controls && a.Cursor == i}
 		if button.Focused {
 			button.Key = "Enter"
 		}
@@ -113,5 +91,5 @@ func (m *model) valueDocumentBody(width, height int) string {
 		{Label: "Read", Actions: []textview.Action{{Key: "a", Label: label}, {Key: "/", Label: "Find"}, {Key: "v", Label: "Select"}, {Key: "y", Label: "Copy"}}},
 		m.documentDisplayActions(d),
 	}
-	return d.View(width, height, workspaceTheme())
+	return d.View(width, height, ui.WorkspaceTheme())
 }

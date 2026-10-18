@@ -2,46 +2,27 @@ package app
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
-	"github.com/simjay/plous/internal/kubernetes"
+	"github.com/simjay/plous/internal/app/monitor"
+	kubernetes "github.com/simjay/plous/internal/integrations/kubernetes/monitor"
 )
 
-const operationObservationLimit = 5 * time.Minute
-
-type resourceProgress struct {
-	target         kubernetes.OperationTarget
-	status         kubernetes.OperationProgress
-	deadline, next time.Time
-	checking       bool
-	serial         uint64
-}
-
-type resourceProgressResult struct {
-	action   *resourceActionState
-	progress *resourceProgress
-	serial   uint64
-	status   kubernetes.OperationProgress
-}
-
-func (m *model) syncResourceProgress(a *resourceActionState) tea.Cmd {
-	p := a.progress
-	if p == nil || p.checking || !p.status.Watching() {
+func (m *model) syncResourceProgress(a *monitor.ResourceActionState) tea.Cmd {
+	p := a.Progress
+	if p == nil || p.Checking || !p.Status.Watching() {
 		return nil
 	}
-	if !time.Now().Before(p.deadline) {
-		p.status = kubernetes.OperationProgress{State: "attention", Summary: "Still waiting after 5 minutes", Details: p.status.Details + "\nAutomatic checks stopped. This does not mean Kubernetes stopped the operation."}
+	if !time.Now().Before(p.Deadline) {
+		p.Status = kubernetes.OperationProgress{State: "attention", Summary: "Still waiting after 5 minutes", Details: p.Status.Details + "\nAutomatic checks stopped. This does not mean Kubernetes stopped the operation."}
 		return nil
 	}
-	p.checking = true
-	p.serial++
-	serial, target, client, delay := p.serial, p.target, a.client, max(time.Duration(0), time.Until(p.next))
+	p.Checking = true
+	p.Serial++
+	serial, target, client, delay := p.Serial, p.Target, a.Client, max(time.Duration(0), time.Until(p.Next))
 	ctx, cancel := context.WithCancel(context.Background())
-	a.cancel = cancel
+	a.Cancel = cancel
 	return func() tea.Msg {
 		defer cancel()
 		timer := time.NewTimer(delay)
@@ -54,47 +35,18 @@ func (m *model) syncResourceProgress(a *resourceActionState) tea.Cmd {
 		request, stop := context.WithTimeout(ctx, 10*time.Second)
 		defer stop()
 		object, err := client.Get(request, target.Resource, target.Object.GetNamespace(), target.Object.GetName())
-		return resourceProgressResult{a, p, serial, target.Progress(object, err)}
+		return monitor.ResourceProgressResult{Action: a, Progress: p, Serial: serial, Status: target.Progress(object, err)}
 	}
 }
 
-func (m *model) updateResourceProgress(msg resourceProgressResult) {
-	if m.explore == nil || m.explore.action != msg.action || msg.action.progress != msg.progress || msg.serial != msg.progress.serial {
+func (m *model) updateResourceProgress(msg monitor.ResourceProgressResult) {
+	if m.explore == nil || m.explore.Action != msg.Action || msg.Action.Progress != msg.Progress || msg.Serial != msg.Progress.Serial {
 		return
 	}
-	p := msg.progress
-	p.checking, p.status, p.next = false, msg.status, time.Now().Add(2*time.Second)
-	msg.action.cancel = nil
-	if !p.status.Watching() {
+	p := msg.Progress
+	p.Checking, p.Status, p.Next = false, msg.Status, time.Now().Add(2*time.Second)
+	msg.Action.Cancel = nil
+	if !p.Status.Watching() {
 		m.refreshExplore()
 	}
-}
-
-func renderOperationProgress(a *resourceActionState, width, height int) string {
-	p := a.progress
-	style := titleStyle
-	switch p.status.State {
-	case "complete":
-		style = addedStyle
-	case "attention", "unavailable":
-		style = changedStyle
-	}
-	body := muted.Render(a.note) + "\n\n" + style.Render(plain(p.status.Summary))
-	if p.status.Details != "" {
-		body += "\n" + plain(p.status.Details)
-	}
-	// Wrap before scrolling so long finalizers and controller reasons remain readable.
-	body = ansi.Wrap(body, max(1, width), "")
-	a.scroll = min(max(0, a.scroll), max(0, lipgloss.Height(body)-height))
-	return styledTextView(body, width, height, a.scroll)
-}
-
-func operationProgressFooter(p *resourceProgress, width int) string {
-	parts := []string{"Enter/Esc details", "↑↓ scroll"}
-	if p.status.Watching() {
-		parts = append(parts, "checking every 2s")
-	} else if p.status.State != "complete" {
-		parts = append(parts, "g check again")
-	}
-	return lipgloss.NewStyle().MaxWidth(width).Render(strings.Join(parts, " · "))
 }

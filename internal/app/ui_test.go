@@ -1,17 +1,18 @@
 package app
 
 import (
+	tea "charm.land/bubbletea/v2"
+	lipgloss "charm.land/lipgloss/v2"
 	"encoding/json"
 	"fmt"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/simjay/plous/internal/ai/history"
+	appsettings "github.com/simjay/plous/internal/app/settings"
+	"github.com/simjay/plous/internal/workspace"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
-	"github.com/simjay/plous/internal/workspace"
 )
 
 func testModel(t *testing.T) (*model, string) {
@@ -26,11 +27,12 @@ func testModel(t *testing.T) (*model, string) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { store.Close() })
-	m, err := newModel(store, "test-version")
+	m, err := newModel(store, openTestHistory(t, store), "test-version")
 	if err != nil {
 		t.Fatal(err)
 	}
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+	t.Cleanup(func() { m.quitting = true; m.drainPersistence() })
 	return m, root
 }
 
@@ -40,10 +42,13 @@ func press(t *testing.T, m *model, key string) tea.Cmd {
 		"backspace": {Code: tea.KeyBackspace},
 		"enter":     {Code: tea.KeyEnter}, "shift+enter": {Code: tea.KeyEnter, Mod: tea.ModShift}, "ctrl+j": {Code: 'j', Mod: tea.ModCtrl}, "ctrl+n": {Code: 'n', Mod: tea.ModCtrl}, "ctrl+o": {Code: 'o', Mod: tea.ModCtrl}, "tab": {Code: tea.KeyTab},
 		"shift+tab": {Code: tea.KeyTab, Mod: tea.ModShift},
+		"alt+left":  {Code: tea.KeyLeft, Mod: tea.ModAlt},
+		"alt+right": {Code: tea.KeyRight, Mod: tea.ModAlt},
 		"esc":       {Code: tea.KeyEscape}, "up": {Code: tea.KeyUp},
 		"down": {Code: tea.KeyDown}, "left": {Code: tea.KeyLeft},
 		"right": {Code: tea.KeyRight}, "home": {Code: tea.KeyHome},
 		"end": {Code: tea.KeyEnd}, "space": {Code: tea.KeySpace, Text: " "},
+		"ctrl+]": {Code: ']', Mod: tea.ModCtrl},
 		"ctrl+u": {Code: 'u', Mod: tea.ModCtrl}, "ctrl+c": {Code: 'c', Mod: tea.ModCtrl},
 	}
 	msg, ok := keys[key]
@@ -67,7 +72,7 @@ func focusPanel(t *testing.T, m *model, panel int) {
 		press(t, m, "esc")
 	}
 	for i := 0; i < 3 && m.focus != panel; i++ {
-		press(t, m, "tab")
+		press(t, m, "alt+right")
 	}
 	if m.focus != panel {
 		t.Fatalf("could not focus panel %d", panel)
@@ -80,12 +85,16 @@ func mainCommand(t *testing.T, m *model, command string) tea.Cmd {
 		focusPanel(t, m, 1)
 	}
 	typeText(m, ":"+command)
-	return press(t, m, "enter")
+	cmd := press(t, m, "enter")
+	if m.mode == 2 && m.page == "" && m.form == nil {
+		completeActivity(t, m)
+	}
+	return cmd
 }
 
 func completeForm(t *testing.T, m *model, values ...string) {
 	t.Helper()
-	if m.form == nil || len(m.form.fields) != len(values) {
+	if m.form == nil || len(m.form.Fields) != len(values) {
 		t.Fatalf("expected form with %d fields, got %#v; status: %s", len(values), m.form, m.status)
 	}
 	for _, value := range values {
@@ -116,6 +125,9 @@ func selectTree(t *testing.T, m *model, key string) {
 	for _, row := range m.treeRows() {
 		if row.key == key {
 			press(t, m, "enter")
+			if m.mode == 2 && m.page == "" && m.form == nil {
+				completeActivity(t, m)
+			}
 			return
 		}
 		press(t, m, "down")
@@ -125,8 +137,14 @@ func selectTree(t *testing.T, m *model, key string) {
 
 func openTool(t *testing.T, m *model, tool string) {
 	t.Helper()
-	openSettingsItem(t, m, "Add tool")
-	for _, name := range toolTypes {
+	openSettingsItem(t, m, "Add Connection")
+	// Legacy fixtures exercise persisted Kustomize records, which are still
+	// supported even though new setup creates general Code connections.
+	if tool == "kustomize" {
+		m.beginConnection(tool, nil)
+		return
+	}
+	for _, name := range appsettings.ToolTypes {
 		if name == tool {
 			press(t, m, "enter")
 			return
@@ -177,8 +195,8 @@ users:
 
 func TestWorkspaceCreationAndMultipleConnections(t *testing.T) {
 	m, _ := testModel(t)
-	if !strings.Contains(m.View().Content, "Create workspace") {
-		t.Fatal("fresh launch must offer workspace creation")
+	if !strings.Contains(m.View().Content, "Current Workspace") {
+		t.Fatal("fresh launch must offer Current Workspace")
 	}
 	first := createWorkspace(t, m, "Payments")
 	connections := addKubernetes(t, m)
@@ -195,6 +213,7 @@ func TestWorkspaceCreationAndMultipleConnections(t *testing.T) {
 		t.Fatal("tree selection should change scope, preserving mode and tree focus")
 	}
 	selectTree(t, m, second)
+	press(t, m, "right")
 	press(t, m, "left")
 	if m.expanded[second] {
 		t.Fatal("left should collapse a workspace")
@@ -226,9 +245,9 @@ func TestFocusedInputKeepsTextAndPasteLiteral(t *testing.T) {
 	if m.mode != 0 || m.command != nil {
 		t.Fatal("main navigation must not retain the old number or shifted mode shortcuts")
 	}
-	press(t, m, "shift+tab")
+	press(t, m, "alt+left")
 	if m.focus != 0 {
-		t.Fatal("Shift+Tab must move focus backward")
+		t.Fatal("Alt+Left must move focus backward")
 	}
 	focusPanel(t, m, 0)
 	typeText(m, "1234!@#$qjk")
@@ -239,8 +258,8 @@ func TestFocusedInputKeepsTextAndPasteLiteral(t *testing.T) {
 	typeText(m, ":1qjk!")
 	press(t, m, "shift+enter")
 	m.Update(tea.PasteMsg{Content: ":quit\n:4\n/etc/kubernetes"})
-	if m.draft().text != ":1qjk!\n:quit\n:4\n/etc/kubernetes" || m.mode != 0 || m.command != nil {
-		t.Fatalf("chat must preserve literal text: %q", m.draft().text)
+	if m.draft().Text != ":1qjk!\n:quit\n:4\n/etc/kubernetes" || m.mode != 0 || m.command != nil {
+		t.Fatalf("chat must preserve literal text: %q", m.draft().Text)
 	}
 	mainCommand(t, m, "new")
 	typeText(m, ":1qjk!")
@@ -248,7 +267,7 @@ func TestFocusedInputKeepsTextAndPasteLiteral(t *testing.T) {
 	form := m.form
 	press(t, m, "tab")
 	press(t, m, "shift+tab")
-	if m.focus != 1 || m.form != form || form.fields[0].value.text != ":1qjk! :quit" {
+	if m.focus != 1 || m.form != form || form.Fields[0].Value.Text != ":1qjk! :quit" {
 		t.Fatal("Tab must keep form focus and values")
 	}
 	press(t, m, "enter")
@@ -264,7 +283,9 @@ func TestFocusedInputKeepsTextAndPasteLiteral(t *testing.T) {
 	if cmd := press(t, m, "esc"); cmd != nil {
 		t.Fatal("cancel must not unexpectedly quit")
 	}
-	cmd := mainCommand(t, m, "quit")
+	mainCommand(t, m, "quit")
+	m.drainPersistence()
+	cmd := m.syncQuit()
 	if cmd == nil {
 		t.Fatal("explicit main-panel :quit must exit")
 	}
@@ -283,12 +304,12 @@ func TestModePositionsAndToolCommandScope(t *testing.T) {
 	mainCommand(t, m, "2")
 	selectTree(t, m, connections[0].ID)
 	mainCommand(t, m, "pod")
-	if m.explore == nil || m.explore.preference.Resource != "pods" {
+	if m.explore == nil || m.explore.Preference.Resource != "pods" {
 		t.Fatalf("Kubernetes Explore should select Pods: %s", m.status)
 	}
 	mainCommand(t, m, "1")
 	mainCommand(t, m, "pod")
-	if m.mode != 1 || m.explore.preference.Resource != "pods" {
+	if m.mode != 1 || m.explore.Preference.Resource != "pods" {
 		t.Fatalf(":pod should open Kubernetes Explore from Overview: %s", m.status)
 	}
 	selectTree(t, m, m.active)
@@ -311,14 +332,16 @@ func TestUndersizedTerminalDoesNotTriggerHiddenActions(t *testing.T) {
 	typeText(m, "ignored")
 	m.Update(tea.PasteMsg{Content: ":quit\n"})
 	press(t, m, "enter")
-	if len(m.workspaces) != 1 || m.form == nil || m.form.fields[0].value.text != "Unfinished" {
+	if len(m.workspaces) != 1 || m.form == nil || m.form.Fields[0].Value.Text != "Unfinished" {
 		t.Fatal("undersized layout must not accept unseen edits or form actions")
 	}
 	mainCommand(t, m, "new")
-	if len(m.workspaces) != 1 || m.form.fields[0].value.text != "Unfinished" {
+	if len(m.workspaces) != 1 || m.form.Fields[0].Value.Text != "Unfinished" {
 		t.Fatal("undersized layout must not execute configuration commands")
 	}
-	cmd := mainCommand(t, m, "quit")
+	mainCommand(t, m, "quit")
+	m.drainPersistence()
+	cmd := m.syncQuit()
 	if cmd == nil {
 		t.Fatal("must still be able to exit from an undersized terminal")
 	}
@@ -331,19 +354,19 @@ func TestConnectionSettingsAndActivityKeepExactHistory(t *testing.T) {
 	m, _ := testModel(t)
 	id := createWorkspace(t, m, "Payments")
 	connections := addKubernetes(t, m)
-	openSettingsItem(t, m, "Rename workspace")
+	openSettingsItem(t, m, "Rename Workspace")
 	completeForm(t, m, "Payments renamed")
 	if m.active != id {
 		t.Fatal("rename must preserve workspace identity")
 	}
 	openSettingsItem(t, m, "Edit Kubernetes / "+connections[0].Name)
-	completeForm(t, m, "Development renamed", connections[0].Settings["kubeconfig"], "new-context", "new-namespace")
+	completeForm(t, m, "Development renamed", connections[0].Settings["kubeconfig"], "new-context", "new-namespace", "secret", "", "", "")
 	if got := m.current().Connections[0]; got.ID != connections[0].ID || got.Settings["context"] != "new-context" {
 		t.Fatalf("editing lost identity/settings: %#v", got)
 	}
 	openRemove := func() {
 		openSettingsItem(t, m, "Edit Kubernetes / Development renamed")
-		for i := 0; i < len(m.form.fields)+2; i++ {
+		for i := 0; i < len(m.form.Fields)+2; i++ {
 			press(t, m, "down")
 		}
 		press(t, m, "enter")
@@ -380,39 +403,26 @@ func TestConnectionSettingsAndActivityKeepExactHistory(t *testing.T) {
 	}
 }
 
-func TestOtherToolsCanBeConfiguredThroughSettings(t *testing.T) {
-	cases := []struct {
-		tool       string
-		values     []string
-		key, value string
-	}{
-		{"helm", []string{"Charts", "", "local-cluster", "apps"}, "context", "local-cluster"},
-		{"kustomize", []string{"Overlay", "./overlays/dev"}, "path", "./overlays/dev"},
-		{"terraform", []string{"Infrastructure", "./infra", "dev"}, "workspace", "dev"},
-		{"argo", []string{"GitOps", "git@github.com:example/apps.git", "argocd.example", "main", "apps"}, "repo", "git@github.com:example/apps.git"},
-		{"kargo", []string{"Promotions", "", "local-cluster", "delivery"}, "namespace", "delivery"},
+func TestLocalSourceCanBeConfiguredThroughSettings(t *testing.T) {
+	directory := t.TempDir()
+	m, _ := testModel(t)
+	createWorkspace(t, m, "Workspace")
+	openTool(t, m, "code")
+	completeForm(t, m, "Source", "", directory)
+	if len(m.current().Connections) != 1 {
+		t.Fatalf("source not created: %s", m.status)
 	}
-	for _, tc := range cases {
-		t.Run(tc.tool, func(t *testing.T) {
-			m, _ := testModel(t)
-			createWorkspace(t, m, "Workspace")
-			openTool(t, m, tc.tool)
-			completeForm(t, m, tc.values...)
-			if len(m.current().Connections) != 1 {
-				t.Fatalf("connection not created: %s", m.status)
-			}
-			c := m.current().Connections[0]
-			if c.Tool != tc.tool || c.Name != tc.values[0] || c.Settings[tc.key] != tc.value {
-				t.Fatalf("wrong saved connection: %#v", c)
-			}
-		})
+	c := m.current().Connections[0]
+	if c.Tool != "code" || c.Name != "Source" || c.Settings["path"] != directory {
+		t.Fatalf("wrong saved source: %#v", c)
 	}
 }
 
-func TestRestartRestoresScopeModeAndSeparateDrafts(t *testing.T) {
+func TestRestartPreservesConnectionAndGeneralDrafts(t *testing.T) {
 	m, root := testModel(t)
 	first := createWorkspace(t, m, "Payments")
 	connections := addKubernetes(t, m)
+	selectTree(t, m, connections[0].ID)
 	startChat(t, m)
 	typeText(m, "Payments draft: :4 is text")
 	second := createWorkspace(t, m, "Platform")
@@ -424,6 +434,7 @@ func TestRestartRestoresScopeModeAndSeparateDrafts(t *testing.T) {
 	press(t, m, "down")
 	focusPanel(t, m, 2)
 	m.Update(autosaveMsg{})
+	m.drainPersistence()
 	if err := m.store.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -432,28 +443,29 @@ func TestRestartRestoresScopeModeAndSeparateDrafts(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	restored, err := newModel(store, "test-version")
+	restored, err := newModel(store, openTestHistory(t, store), "test-version")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if restored.active != first || restored.connection != connections[0].ID || restored.tool != "kubernetes" || restored.mode != 2 || restored.focus != 2 {
-		t.Fatal("restart lost selected scope, mode, or panel")
+	if restored.active != "" || !restored.currentRoot || restored.connection != "" || restored.tool != "" || restored.mode != 0 || restored.focus != 1 {
+		t.Fatal("restart did not select Current Workspace")
 	}
-	if restored.draft().text != "Payments draft: :4 is text" || restored.positions[restored.viewKey()] != 1 {
+	restored.selectScope(first, "kubernetes", connections[0].ID)
+	if restored.draft().Text != "Payments draft: :4 is text" || restored.positions[first+"/kubernetes/"+connections[0].ID+"/Activity"] != 1 {
 		t.Fatal("restart lost draft or Activity position")
 	}
 	selectTree(t, restored, second)
-	if restored.draft().text != "Platform draft" {
-		t.Fatal("workspace drafts must remain separate after restart")
+	if restored.draft().Text != "Platform draft" {
+		t.Fatal("connection and general drafts must remain separate after restart")
 	}
 }
 
-func TestSavedModesSurviveThreeModeTransition(t *testing.T) {
+func TestSavedModesStartAtCurrentContextAndKeepLegacyState(t *testing.T) {
 	for _, tc := range []struct {
-		version, before, after int
+		version, before int
 	}{
-		{1, 0, 0}, {1, 1, 1}, {1, 2, 0}, {1, 3, 2},
-		{2, 0, 0}, {2, 1, 1}, {2, 2, 2},
+		{1, 0}, {1, 1}, {1, 2}, {1, 3},
+		{2, 0}, {2, 1}, {2, 2},
 	} {
 		t.Run(fmt.Sprintf("v%d/mode%d", tc.version, tc.before), func(t *testing.T) {
 			m, _ := testModel(t)
@@ -475,12 +487,12 @@ func TestSavedModesSurviveThreeModeTransition(t *testing.T) {
 			if err := m.store.WriteSession(data); err != nil {
 				t.Fatal(err)
 			}
-			restored, err := newModel(m.store, "test-version")
+			restored, err := newModel(m.store, m.history, "test-version")
 			if err != nil {
 				t.Fatal(err)
 			}
 			for restart := 0; restart < 2; restart++ {
-				if restored.mode != tc.after || restored.active != id || restored.focus != 2 || restored.draft().text != "Keep this draft" {
+				if restored.mode != 0 || restored.active != "" || !restored.currentRoot || restored.focus != 1 || restored.drafts[id].Text != "Keep this draft" {
 					t.Fatalf("restart %d lost saved navigation or draft: mode=%d", restart, restored.mode)
 				}
 				if restored.positions[exploreKey] != 7 || restored.positions[activityKey] != 1 {
@@ -489,7 +501,7 @@ func TestSavedModesSurviveThreeModeTransition(t *testing.T) {
 				if err := restored.saveSession(); err != nil {
 					t.Fatal(err)
 				}
-				restored, err = newModel(m.store, "test-version")
+				restored, err = newModel(m.store, m.history, "test-version")
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -505,7 +517,7 @@ func TestLayoutFitsTerminalAcrossWorkspaceViews(t *testing.T) {
 		setup func()
 	}{
 		{"first launch", func() {}},
-		{"creation form", func() { press(t, m, "enter") }},
+		{"creation form", func() { mainCommand(t, m, "n") }},
 		{"tool picker", func() { completeForm(t, m, "Payments 日本語") }},
 		{"context picker", func() { press(t, m, "enter") }},
 		{"kubeconfig editing", func() { press(t, m, "home"); typeText(m, "-edited") }},
@@ -547,7 +559,7 @@ func TestLayoutFitsTerminalAcrossWorkspaceViews(t *testing.T) {
 							t.Errorf("panel borders lost alignment: %q", line)
 						}
 					}
-					for _, title := range []string{"Workspaces", "AI assistant"} {
+					for _, title := range []string{"Connections", "AI assistant"} {
 						if m.settingsOverlay == nil && !strings.Contains(text, title) {
 							t.Errorf("missing panel title %q", title)
 						}
@@ -561,14 +573,30 @@ func TestLayoutFitsTerminalAcrossWorkspaceViews(t *testing.T) {
 func openSettingsItem(t *testing.T, m *model, label string) {
 	t.Helper()
 	mainCommand(t, m, "settings")
-	for _, item := range m.settingsItems() {
-		if item == label {
+	for _, item := range m.settingsRows() {
+		if item.Label == label {
 			press(t, m, "enter")
 			return
 		}
 		press(t, m, "down")
 	}
 	t.Fatalf("settings item %q missing", label)
+}
+
+func openProviderItem(t *testing.T, m *model, label string) {
+	t.Helper()
+	openSettingsItem(t, m, "Agent: "+m.settings.MainAgent.Effective().Label())
+	for m.form.Fields[0].Value.Text != "Plous" {
+		press(t, m, "right")
+	}
+	for i, row := range m.form.Rows {
+		if row.Label == label {
+			m.form.Index = len(m.form.Fields) + i
+			press(t, m, "enter")
+			return
+		}
+	}
+	t.Fatalf("provider item %q missing", label)
 }
 
 func startChat(t *testing.T, m *model) {
@@ -580,5 +608,23 @@ func startChat(t *testing.T, m *model) {
 	press(t, m, "enter")
 	if m.focus != 2 || !m.chatEditing {
 		t.Fatalf("could not enter chat input: %s", m.status)
+	}
+}
+
+func openTestHistory(t *testing.T, profile *workspace.Store) *history.Store {
+	t.Helper()
+	archive, err := history.Open(profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return archive
+}
+
+func (m *model) selectSettingsItem(label string) {
+	for _, row := range m.settingsRows() {
+		if row.Label == label {
+			m.selectSettingsRow(row.ID)
+			return
+		}
 	}
 }

@@ -1,41 +1,37 @@
 package app
 
 import (
+	"github.com/charmbracelet/x/ansi"
+	agent "github.com/simjay/plous/internal/ai"
+	"github.com/simjay/plous/internal/ai/history"
+	ai "github.com/simjay/plous/internal/ai/model"
+	appchat "github.com/simjay/plous/internal/app/chat"
+	textview "github.com/simjay/plous/internal/ui/text"
+
 	"reflect"
 	"strings"
 	"testing"
-
-	"github.com/charmbracelet/x/ansi"
-	"github.com/simjay/plous/internal/ai"
-	"github.com/simjay/plous/internal/workspace"
 )
 
-func TestChatContextIncludesCompletedHistoryAndAutomaticWorkspaceDetails(t *testing.T) {
+func TestChatContextPinsTaskAndScopeWithoutReadingLegacyHistory(t *testing.T) {
 	m, _ := testModel(t)
 	createWorkspace(t, m, "Payments")
+	selectChatConnection(t, m)
+	m.settings.Agent = ai.DefaultConfig()
+	m.settings.Agent.Model = "gpt-5.4-mini"
 	m.settings.Agent.Instructions = "Keep answers concise."
-	m.chat().turns = []workspace.Turn{
-		{Request: workspace.Request{Prompt: "first question"}, Response: workspace.Response{Status: "completed", Text: "first answer"}},
-	}
-	for _, status := range []string{"error", "cancelled", "interrupted", "streaming"} {
-		m.chat().turns = append(m.chat().turns, workspace.Turn{Request: workspace.Request{Prompt: status}, Response: workspace.Response{Status: status, Text: "excluded"}})
-	}
 	messages, metadata := m.chatMessages("  next question  ", false)
-	if !strings.Contains(metadata, "Payments") || len(messages) != 4 || !strings.Contains(messages[0].Text, "Keep answers concise.") || strings.Count(messages[0].Text, metadata) != 1 {
+	if !strings.Contains(metadata, "Payments") || len(messages) != 2 || !strings.Contains(messages[0].Text, "Keep answers concise.") || !strings.Contains(messages[0].Text, metadata) {
 		t.Fatalf("unexpected context: %#v, %q", messages, metadata)
 	}
-	want := []ai.Message{{Role: "user", Text: "first question"}, {Role: "assistant", Text: "first answer"}, {Role: "user", Text: "next question"}}
-	if !reflect.DeepEqual(messages[1:], want) {
-		t.Fatalf("history changed: %#v", messages[1:])
+	if messages[1].Role != "user" || messages[1].Text != "  next question  " || strings.Contains(messages[0].Text, "first question") {
+		t.Fatalf("task or history boundary changed: %#v", messages)
 	}
-	preview, _ := m.chatMessages("next question", true)
+	preview, _ := m.chatMessages("  next question  ", true)
 	if !reflect.DeepEqual(messages, preview) {
 		t.Fatal("inactive preview must match the outgoing request")
 	}
-	withLegacyFlag, legacyMetadata := m.chatMessages("next question", false)
-	if !reflect.DeepEqual(messages, withLegacyFlag) || legacyMetadata != metadata {
-		t.Fatal("legacy context flag changed automatic workspace details")
-	}
+
 }
 
 func TestContextMeterTracksDraftRepliesAndModelWithoutCountingBilledUsage(t *testing.T) {
@@ -45,34 +41,38 @@ func TestContextMeterTracksDraftRepliesAndModelWithoutCountingBilledUsage(t *tes
 	if base <= 0 || limit != 400_000 {
 		t.Fatal("system instructions and model capacity are missing")
 	}
-	*m.draft() = newEditor(strings.Repeat("hello ", 100))
+	*m.draft() = textview.NewField(strings.Repeat("hello ", 100))
 	withDraft, _ := m.chatContextUsage()
 	if withDraft <= base {
 		t.Fatal("draft is not counted")
 	}
 	c := m.chat()
-	c.turns = []workspace.Turn{{Request: workspace.Request{Prompt: m.draft().text}, Response: workspace.Response{Status: "streaming"}}}
-	*m.draft() = newEditor("")
-	m.run = &chatRun{chat: c}
+	c.Turns = []history.Turn{{Sequence: 1, Request: history.Request{ID: "active", Prompt: m.draft().Text}, Response: history.Response{Status: "streaming"}}}
+	*m.draft() = textview.NewField("")
+	m.run = &appchat.ChatRun{Chat: c}
 	beforeReply, _ := m.chatContextUsage()
-	c.turns[0].Response.Text = strings.Repeat("answer ", 100)
+	c.Turns[0].Response.Text = strings.Repeat("answer ", 100)
 	afterReply, _ := m.chatContextUsage()
 	if beforeReply < withDraft || afterReply <= beforeReply {
 		t.Fatal("active prompt or streamed reply disappeared from the meter")
 	}
-	c.turns[0].Response.Status = "completed"
-	c.turns[0].Response.Usage.Total = 999_999
+	c.Turns[0].Response.Status = "completed"
 	m.run = nil
 	completed, _ := m.chatContextUsage()
-	if completed != afterReply {
-		t.Fatal("completion must not double count tokens or sum billed usage")
+	if completed != base {
+		t.Fatal("completed history must return through recall, not the next prompt preview")
+	}
+	c.Turns[0].Response.Usage.Total = 999_999
+	if got, _ := m.chatContextUsage(); got != completed {
+		t.Fatal("billed usage entered context estimate")
 	}
 	m.settings.Agent.Provider, m.settings.Agent.Model = "anthropic", "claude-haiku-4-5-20251001"
 	switched, limit := m.chatContextUsage()
 	if switched != completed || limit != 200_000 {
 		t.Fatal("switching vendors should retain history and update capacity")
 	}
-	c.turns[0].Response.Status = "cancelled"
+	c.Turns[0].Response.Status = "cancelled"
+	c.Messages = nil
 	if got, _ := m.chatContextUsage(); got != base {
 		t.Fatal("cancelled response must leave future context")
 	}
@@ -86,11 +86,13 @@ func TestContextMeterUsesOnlyCurrentConversation(t *testing.T) {
 	m, _ := testModel(t)
 	m.settings.Agent.Model = "gpt-5.4-mini"
 	first := m.chat()
-	first.turns = []workspace.Turn{{Request: workspace.Request{Prompt: strings.Repeat("large history ", 100)}, Response: workspace.Response{Status: "streaming", Text: "partial"}}}
-	m.run = &chatRun{chat: first}
+	first.Turns = []history.Turn{{Request: history.Request{Prompt: strings.Repeat("large history ", 100)}, Response: history.Response{Status: "streaming", Text: "partial"}}}
+	m.run = &appchat.ChatRun{Chat: first}
 	createWorkspace(t, m, "Second")
+	selectChatConnection(t, m)
 	messages, metadata := m.chatMessages("", false)
-	if got, _ := m.chatContextUsage(); got != estimateTokens(messages) || len(messages) != 1 || !strings.Contains(metadata, "Second") {
+	want := agent.Estimate(agent.PreviewMessages(agent.Instructions, metadata, "")) + agent.EstimateTools(agent.ToolDefinitions(agent.Options{UI: m.uiTools(m.assistantConnections()), Store: m.store, WorkspaceID: m.conversationScope(), Connections: m.assistantConnections()}))
+	if got, _ := m.chatContextUsage(); got != want || len(messages) != 2 || !strings.Contains(metadata, "Second") {
 		t.Fatal("another conversation's active request leaked into the counter")
 	}
 }
@@ -98,34 +100,36 @@ func TestContextMeterUsesOnlyCurrentConversation(t *testing.T) {
 func TestContextMeterRebuildsFromSavedConversationAndDraft(t *testing.T) {
 	m, _ := testModel(t)
 	addAIConnection(t, m, "OpenAI", "openai")
-	conversation, err := m.store.NewConversation("", "Saved context")
+	conversation, err := m.history.NewConversation("", "Saved context")
 	if err != nil {
 		t.Fatal(err)
 	}
-	turn, err := m.store.StartTurn("", conversation.ID, workspace.Request{Agent: m.settings.Agent, Prompt: "Remember this question"})
+	turn, err := m.history.StartTurn("", conversation.ID, history.Request{Agent: m.settings.Agent, Prompt: "Remember this question"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	turn.Response.Status, turn.Response.Text = "completed", "Saved answer"
-	if err := m.store.SaveResponse("", conversation.ID, turn.Request.ID, turn.Response); err != nil {
+	if err := m.history.SaveResponse("", conversation.ID, turn.Request.ID, turn.Response); err != nil {
 		t.Fatal(err)
 	}
 	m.openConversation(m.chat(), conversation)
-	*m.draft() = newEditor("Follow-up draft")
+	finishChatRestore(t, m)
+	*m.draft() = textview.NewField("Follow-up draft")
 	before, limit := m.chatContextUsage()
 	if err := m.saveSession(); err != nil {
 		t.Fatal(err)
 	}
-	restarted, err := newModel(m.store, "0.0.1")
+	restarted, err := newModel(m.store, m.history, "0.0.1")
 	if err != nil {
 		t.Fatal(err)
 	}
+	finishChatRestore(t, restarted)
 	if got, capacity := restarted.chatContextUsage(); got != before || capacity != limit {
 		t.Fatal("reopening history changed its context estimate")
 	}
 	mainCommand(t, m, "C")
-	if got, _ := m.chatContextUsage(); got >= before {
-		t.Fatal("new conversation retained the previous conversation's tokens")
+	if got, _ := m.chatContextUsage(); got != before || m.draft().Text != "Follow-up draft" {
+		t.Fatal("new conversation should preserve the draft estimate without importing saved history")
 	}
 }
 
@@ -135,10 +139,10 @@ func TestContextLineFitsAndPreservesCapacity(t *testing.T) {
 		for _, model := range ai.Models(provider) {
 			m.settings.Agent.Provider, m.settings.Agent.Model = provider, model.ID
 			for _, draft := range []string{"", strings.Repeat("long draft ", 24_000), strings.Repeat("한글 문장 ", 100)} {
-				*m.draft() = newEditor(draft)
+				*m.draft() = textview.NewField(draft)
 				for _, width := range []int{20, 32, 60} {
 					line := m.chatContextLine(width)
-					if ansi.StringWidth(line) > width || !strings.Contains(line, "~") || !strings.Contains(line, compactTokens(model.ContextWindow)+" tokens") || strings.Contains(line, "…") {
+					if ansi.StringWidth(line) > width || !strings.Contains(line, "~") || !strings.Contains(line, appchat.CompactTokens(model.ContextWindow)+" tokens") || strings.Contains(line, "…") {
 						t.Fatalf("incomplete context indicator: %q", line)
 					}
 				}

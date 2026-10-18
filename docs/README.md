@@ -1,42 +1,39 @@
-# Plous documentation
+# Documentation
 
-Plous is a terminal workspace for infrastructure and deployment tools. Keep related tool connections, configuration history, and AI conversations together in a workspace.
+[Project README](../README.md) · [Getting started](getting-started/README.md) · [Keymap](reference/keymap.md)
 
-## Start here
+## Guides
 
-1. [Install Plous](installation.md).
-2. [Create your first workspace](getting-started.md). No cluster or AI account is required.
-3. [Choose a tool integration](integrations.md) for the work you want to do.
-
-## Using Plous
-
-The core structure is **Workspace → Tool → Connection**. A workspace can hold multiple tools, contexts, and repositories. For example, one project might group a Terraform directory, a Kustomize overlay, and two Kubernetes contexts.
-
-| Guide | What it covers |
+| Guide | Covers |
 | --- | --- |
-| [Workspaces and connections](workspaces.md) | Group tools, add connections, and manage settings. |
-| [Interface and navigation](navigation.md) | Move between panels, search, and use commands. |
-| [Activity and history](activity.md) | Read configuration changes and compare saved revisions. |
-| [AI assistant](ai-chat.md) | Discuss your work, retrieve prior conversations, and investigate supported sources. |
+| [Getting started](getting-started/README.md) | Build, install, and try a first cluster or Code workflow |
+| [Navigation](guides/navigation.md) | Panels, commands, search, and input controls |
+| [Workspaces](guides/workspaces.md) | Contexts, repositories, and saved connections |
+| [Cluster Overview](guides/overview.md) | Health, usage, recent observations, and attention items |
+| [Code](guides/code.md) | Edit configuration, render resources, and compare output |
+| [Activity](guides/activity.md) | Workspace revisions and recorded Helm history |
+| [AI chat](guides/ai-chat.md) | Agent setup, model selection, conversations, and Sources |
+| [Plous MCP](guides/plous-mcp.md) | Native-agent tool access, examples, scope, and recovery |
 
-**Overview** shows saved configuration. **Explore** opens the selected tool connection. **Activity** shows workspace changes. The assistant stays alongside these views.
+## Integrations
 
-## What this version supports
+See [integration support](integrations/README.md) for capabilities and connection setup.
 
-Plous **0.0.1** is an early development build, not ready to ship.
+- [Kubernetes](integrations/kubernetes/README.md): resources, usage charts, logs, editing, and container terminals.
+- [Helm](integrations/helm/README.md): releases, revisions, previews, and rollback.
+- [Code and Kustomize](integrations/kustomize/README.md): source browsers, rendering, field history, findings, and engine limits.
+- [Argo CD and Flux](integrations/gitops/README.md): controller status, source references, and managed resources.
 
-Workspaces, configuration history, and AI conversations are implemented. Kubernetes has live browsing and resource operations. Helm, Kustomize, Terraform, Argo, and Kargo currently save connection settings. The [integration guide](integrations.md) distinguishes those capabilities.
+## Reference
 
-Remote workspaces, sharing, deployment pipelines, and assistant write operations are not available.
+- [Keymap](reference/keymap.md)
+- [Configuration](reference/configuration.md)
+- [MCP tools and transport](reference/mcp.md)
+- [Data and privacy](reference/data-and-privacy.md)
+- [Troubleshooting](reference/troubleshooting.md)
 
-## Find a task
+## Development
 
-- [Configure Plous](configuration.md) or [look up a shortcut](keymap.md).
-- [Check data storage and privacy](data-and-privacy.md) or [fix a problem](troubleshooting.md).
-- [Contribute](contributing.md), [run development checks](development.md), or [maintain these docs](documentation.md).
-
-## Reading the instructions
-
-**Bold text** names a key or on-screen control. `:s` means type a colon, type `s`, then press **Enter** inside Plous. `11` means press **1** twice, with no Enter. Shell commands appear in code blocks.
-
-Press **hh** while navigating for in-app Help. See the [project README](../README.md) for project information.
+- [Contributing](contributing/README.md) and [AI implementation](contributing/ai-assistant.md)
+- [Tests](../tests/README.md) and [PlousBench](../benchmark/README.md)
+- [Kubernetes playground](integrations/kubernetes/playground.md) and [GitOps playground](integrations/gitops/playground.md)

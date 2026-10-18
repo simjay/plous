@@ -1,16 +1,15 @@
 package app
 
 import (
+	tea "charm.land/bubbletea/v2"
 	"encoding/json"
+	"github.com/charmbracelet/x/ansi"
+	textview "github.com/simjay/plous/internal/ui/text"
+	"github.com/simjay/plous/internal/workspace"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
-
-	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
-	"github.com/simjay/plous/internal/textview"
-	"github.com/simjay/plous/internal/workspace"
 )
 
 func activityReviewModel() (*model, workspace.Change) {
@@ -29,13 +28,13 @@ func TestActivityReviewCapturesExactImmutableSnapshots(t *testing.T) {
 	m, change := activityReviewModel()
 	m.setActivityDetail(change)
 	r := m.activityReview
-	if r.comparison != nil || r.open || !m.activityDetailActive() {
+	if r.Comparison != nil || r.Open || !m.activityDetailActive() {
 		t.Fatal("summary must remain the default and build comparison only on request")
 	}
 	for _, sample := range []struct {
 		text string
 		want workspace.Workspace
-	}{{r.before, *change.Before}, {r.after, change.After}} {
+	}{{r.Before, *change.Before}, {r.After, change.After}} {
 		var got workspace.Workspace
 		if err := json.Unmarshal([]byte(sample.text), &got); err != nil {
 			t.Fatal(err)
@@ -49,16 +48,16 @@ func TestActivityReviewCapturesExactImmutableSnapshots(t *testing.T) {
 	if !m.openActivityReview() {
 		t.Fatal("could not open comparison from captured summary")
 	}
-	if strings.Contains(r.before+r.after, "replaced-") {
+	if strings.Contains(r.Before+r.After, "replaced-") {
 		t.Fatal("later history or workspace updates replaced the captured snapshots")
 	}
-	if r.comparison.BeforeLabel != "Revision 5" || r.comparison.AfterLabel != "Revision 9" {
+	if r.Comparison.BeforeLabel != "Revision 5" || r.Comparison.AfterLabel != "Revision 9" {
 		t.Fatal("comparison must label the actual snapshot revisions")
 	}
-	if r.comparison.CanConfirm || r.comparison.ConfirmLabel != "" || r.comparison.Confirm().Action != "" {
+	if r.Comparison.CanConfirm || r.Comparison.ConfirmLabel != "" || r.Comparison.Confirm().Action != "" {
 		t.Fatal("Activity must never offer a confirmation/write path")
 	}
-	if !strings.Contains(r.comparison.Target, "Read-only") {
+	if !strings.Contains(r.Comparison.Target, "Read-only") {
 		t.Fatal("read-only state must be visible")
 	}
 }
@@ -69,18 +68,18 @@ func TestActivityReviewCreationAndDeterministicIdentity(t *testing.T) {
 	change.After.Revision, change.Revision = 1, 1
 	m.setActivityDetail(change)
 	m.openActivityReview()
-	if m.activityReview.before != "" || m.activityReview.comparison.BeforeLabel != "Empty workspace" {
+	if m.activityReview.Before != "" || m.activityReview.Comparison.BeforeLabel != "Empty workspace" {
 		t.Fatal("creation must compare an empty workspace with revision one")
 	}
-	identity, after := m.activityReview.identity, m.activityReview.after
+	identity, after := m.activityReview.Identity, m.activityReview.After
 	change.After.Connections[0].Settings = map[string]string{"context": "production", "namespace": "shop"}
 	m.setActivityDetail(change)
-	if m.activityReview.identity != identity || m.activityReview.after != after {
+	if m.activityReview.Identity != identity || m.activityReview.After != after {
 		t.Fatal("map insertion order changed the stored comparison")
 	}
 	change.ID = "different-change"
 	m.setActivityDetail(change)
-	if m.activityReview.identity == identity {
+	if m.activityReview.Identity == identity {
 		t.Fatal("comparison identity must identify the selected history event")
 	}
 }
@@ -91,7 +90,7 @@ func TestActivityReviewBackPreservesSummaryPositionAndSharedReadingLayers(t *tes
 	summary := m.detail
 	m.cursor = 12
 	m.positions[m.viewKey()] = 4
-	filter := &panelSearch{kind: "activity", input: newEditor("updated")}
+	filter := &panelSearch{kind: "activity", input: textview.NewField("updated")}
 	m.searches[1] = filter
 	m.openActivityReview()
 	r := m.activityReview
@@ -107,20 +106,20 @@ func TestActivityReviewBackPreservesSummaryPositionAndSharedReadingLayers(t *tes
 		t.Fatal("comparison search must use shared literal search input")
 	}
 	key(tea.KeyEnter, "")
-	if r.comparison.Reader.Query != "production" || r.comparison.Reader.Searching {
+	if r.Comparison.Reader.Query != "production" || r.Comparison.Reader.Searching {
 		t.Fatal("search submission must retain query for navigation")
 	}
 	key(tea.KeyEscape, "")
-	if !m.activityReviewVisible() || r.comparison.Reader.Query != "" {
+	if !m.activityReviewVisible() || r.Comparison.Reader.Query != "" {
 		t.Fatal("Esc must clear local search before leaving comparison")
 	}
 	key('v', "v")
 	key(tea.KeyDown, "")
-	if !r.comparison.Reader.Selecting {
+	if !r.Comparison.Reader.Selecting {
 		t.Fatal("comparison selection unavailable")
 	}
 	key(tea.KeyEscape, "")
-	if !m.activityReviewVisible() || r.comparison.Reader.Selecting {
+	if !m.activityReviewVisible() || r.Comparison.Reader.Selecting {
 		t.Fatal("Esc must clear local selection before leaving comparison")
 	}
 	key(tea.KeyEnter, "")
@@ -131,7 +130,7 @@ func TestActivityReviewBackPreservesSummaryPositionAndSharedReadingLayers(t *tes
 	if !m.activityDetailActive() || m.detail != summary || m.cursor != 12 || m.positions[m.viewKey()] != 4 || m.searches[1] != filter {
 		t.Fatal("return from comparison changed summary/list/filter state")
 	}
-	if !m.openActivityReview() || m.activityReview.comparison != r.comparison {
+	if !m.openActivityReview() || m.activityReview.Comparison != r.Comparison {
 		t.Fatal("reopening the same comparison should retain its reading position")
 	}
 }
@@ -141,16 +140,16 @@ func TestActivityReviewRejectsStaleTargetsAndDoesNotEditOnPaste(t *testing.T) {
 	m.setActivityDetail(change)
 	m.openActivityReview()
 	r := m.activityReview
-	before, after := r.before, r.after
+	before, after := r.Before, r.After
 	m.activityReviewPaste("replace the workspace")
-	if r.before != before || r.after != after || r.comparison.Reader.Query != "" {
+	if r.Before != before || r.After != after || r.Comparison.Reader.Query != "" {
 		t.Fatal("paste outside search must not change comparison")
 	}
 	for _, state := range []struct {
 		mode   int
 		active string
 		detail string
-	}{{0, change.WorkspaceID, r.summary}, {2, "different-workspace", r.summary}, {2, change.WorkspaceID, "different event"}} {
+	}{{0, change.WorkspaceID, r.Summary}, {2, "different-workspace", r.Summary}, {2, change.WorkspaceID, "different event"}} {
 		m.mode, m.active, m.detail = state.mode, state.active, state.detail
 		if m.activityReviewVisible() || m.openActivityReview() || m.activityReviewPaste("ignored") {
 			t.Fatal("comparison escaped its captured workspace and summary identity")
@@ -162,7 +161,7 @@ func TestActivityReviewUsesSharedCopyAndFitsPanels(t *testing.T) {
 	m, change := activityReviewModel()
 	m.setActivityDetail(change)
 	m.openActivityReview()
-	r := m.activityReview.comparison
+	r := m.activityReview.Comparison
 	for row, line := range r.Reader.Lines {
 		if strings.Contains(line.Text, `"namespace": "shop"`) {
 			r.Reader.Cursor = textview.Point{Row: row}

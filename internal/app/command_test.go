@@ -1,13 +1,12 @@
 package app
 
 import (
+	tea "charm.land/bubbletea/v2"
 	"encoding/json"
 	"fmt"
+	"github.com/charmbracelet/x/ansi"
 	"strings"
 	"testing"
-
-	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
 )
 
 func TestNumericModeCommandsFromEveryPanel(t *testing.T) {
@@ -21,7 +20,9 @@ func TestNumericModeCommandsFromEveryPanel(t *testing.T) {
 				focusPanel(t, m, focus)
 				typeText(m, ":"+command)
 				if cmd := press(t, m, "enter"); cmd != nil {
-					t.Fatal("switching modes must not quit")
+					if _, quit := cmd().(tea.QuitMsg); quit {
+						t.Fatal("switching modes must not quit")
+					}
 				}
 				if m.mode != mode || m.page != "" || m.detail != "" || m.active != id || m.focus != 1 || m.command != nil {
 					t.Fatalf(":%s did not select %s and preserve workspace scope", command, modes[mode])
@@ -59,7 +60,9 @@ func TestQuitAliasesSaveDraftBeforeExit(t *testing.T) {
 			startChat(t, m)
 			typeText(m, "unsaved chat draft :q")
 			mainCommand(t, m, "3")
-			cmd := mainCommand(t, m, alias)
+			mainCommand(t, m, alias)
+			m.drainPersistence()
+			cmd := m.syncQuit()
 			if cmd == nil {
 				t.Fatalf(":%s must request exit", alias)
 			}
@@ -74,7 +77,7 @@ func TestQuitAliasesSaveDraftBeforeExit(t *testing.T) {
 			if err := json.Unmarshal(data, &saved); err != nil {
 				t.Fatal(err)
 			}
-			if saved.Drafts[id] != "unsaved chat draft :q" || saved.Mode != 2 || saved.Workspace != id {
+			if saved.Drafts[m.conversationScope()] != "unsaved chat draft :q" || saved.Mode != 2 || saved.Workspace != id {
 				t.Fatalf(":%s must save the latest draft and navigation before exit: %#v", alias, saved)
 			}
 		})
@@ -85,7 +88,7 @@ func TestMainCommandAliasesRequireExactMatches(t *testing.T) {
 	m, _ := testModel(t)
 	createWorkspace(t, m, "Payments")
 	mainCommand(t, m, "1")
-	for _, text := range []string{"qu", "over", "resource", "set", "ne", "he", "q extra", "config", "ch", "st", "o", "overview", "res", "resources", "e", "explore", "activity", "4", "44", "left", "r", "right", "side", "ai", "bb", "ii", "ss", "cc"} {
+	for _, text := range []string{"qu", "over", "resource", "set", "ne", "he", "q extra", "config", "ch", "st", "o", "overview", "res", "resources", "e", "explore", "activity", "4", "44", "left", "right", "side", "ai", "bb", "ii", "ss", "cc", "z", "zoom", "zz", "ff"} {
 		if cmd := mainCommand(t, m, text); cmd != nil {
 			t.Fatalf("partial or extended command %q must not quit", text)
 		}
@@ -101,14 +104,14 @@ func TestCommandDraftSurvivesFocusChangesAndCancels(t *testing.T) {
 	startChat(t, m)
 	mainCommand(t, m, "1")
 	typeText(m, ":")
-	press(t, m, "tab")
+	press(t, m, "alt+right")
 	typeText(m, ":q")
-	press(t, m, "tab")
+	press(t, m, "alt+right")
 	typeText(m, "a")
-	if m.command == nil || m.command.text != "" || m.mode != 0 || m.draft().text != ":q" {
+	if m.command == nil || m.command.Text != "" || m.mode != 0 || m.draft().Text != ":q" {
 		t.Fatal("typing in chat/tree must leave the main command draft and mode alone")
 	}
-	press(t, m, "tab")
+	press(t, m, "alt+right")
 	typeText(m, "2")
 	press(t, m, "enter")
 	if m.mode != 1 || m.command != nil {
@@ -120,7 +123,7 @@ func TestCommandDraftSurvivesFocusChangesAndCancels(t *testing.T) {
 	}
 	mainCommand(t, m, "n")
 	typeText(m, ":q :4 :settings")
-	if m.form == nil || m.form.fields[0].value.text != ":q :4 :settings" || m.command != nil || m.mode != 1 {
+	if m.form == nil || m.form.Fields[0].Value.Text != ":q :4 :settings" || m.command != nil || m.mode != 1 {
 		t.Fatal("aliases must remain literal text inside forms")
 	}
 }
@@ -128,7 +131,7 @@ func TestCommandDraftSurvivesFocusChangesAndCancels(t *testing.T) {
 func TestChatCommandFromFormActionPreservesEdits(t *testing.T) {
 	m, _ := testModel(t)
 	createWorkspace(t, m, "Payments")
-	openSettingsItem(t, m, "Rename workspace")
+	openSettingsItem(t, m, "Rename Workspace")
 	typeText(m, " unsaved")
 	f := m.form
 	press(t, m, "enter")
@@ -137,7 +140,7 @@ func TestChatCommandFromFormActionPreservesEdits(t *testing.T) {
 	if m.focus != 2 || !m.chatEditing || m.form != f || m.current().Name != "Payments" {
 		t.Fatal("chat command from a form action must focus chat without submitting the form")
 	}
-	if f.fields[0].value.text != "Payments unsaved" {
+	if f.Fields[0].Value.Text != "Payments unsaved" {
 		t.Fatal("opening chat lost unfinished form edits")
 	}
 }
@@ -174,7 +177,9 @@ func TestSmallTerminalAllowsQuitAliasOnly(t *testing.T) {
 	if m.form != nil || len(m.workspaces) != 1 {
 		t.Fatal("a small terminal must not create an invisible workspace form")
 	}
-	cmd := mainCommand(t, m, "q")
+	mainCommand(t, m, "q")
+	m.drainPersistence()
+	cmd := m.syncQuit()
 	if cmd == nil {
 		t.Fatal("the short quit command must still work in a small terminal")
 	}

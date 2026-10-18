@@ -2,10 +2,9 @@ package app
 
 import (
 	"fmt"
+	"github.com/charmbracelet/x/ansi"
 	"strings"
 	"testing"
-
-	"github.com/charmbracelet/x/ansi"
 )
 
 func TestFooterKeepsCompleteContextualControls(t *testing.T) {
@@ -18,7 +17,7 @@ func TestFooterKeepsCompleteContextualControls(t *testing.T) {
 			if strings.Contains(text, "\n") || ansi.StringWidth(text) != width {
 				t.Fatalf("footer exceeds its single row: %q", text)
 			}
-			for _, want := range []string{"Pods", "Enter Open", "/ Filter", "Esc Workspaces", "hh Help"} {
+			for _, want := range []string{"Pods", "Enter Open", "/ Filter", "Esc Connections", "hh Help"} {
 				if !strings.Contains(text, want) {
 					t.Errorf("footer missing %q: %s", want, text)
 				}
@@ -28,8 +27,8 @@ func TestFooterKeepsCompleteContextualControls(t *testing.T) {
 					t.Errorf("footer contains %q: %s", absent, text)
 				}
 			}
-			if width >= 120 && !strings.Contains(text, "n Namespace") {
-				t.Fatal("wide footer omitted namespace control")
+			if width >= 120 && !strings.Contains(text, ":f Fullscreen") {
+				t.Fatal("wide footer omitted main expansion")
 			}
 			t.Log(strings.TrimSpace(text))
 		})
@@ -37,7 +36,7 @@ func TestFooterKeepsCompleteContextualControls(t *testing.T) {
 	typeText(m, "bb")
 	m.status = ""
 	text := ansi.Strip(m.footer())
-	if !strings.Contains(text, "bb Show workspaces") || strings.Contains(text, "Esc Workspaces") {
+	if !strings.Contains(text, "Esc Browse resources") || strings.Contains(text, "Esc Connections") {
 		t.Fatalf("footer advertises a hidden panel as the Esc target: %s", text)
 	}
 	typeText(m, "b")
@@ -84,9 +83,9 @@ func TestFooterFollowsLogAndEditorInputStates(t *testing.T) {
 			t.Fatalf("editor search advertises Save: %s", text)
 		}
 		press(t, m, "esc")
-		a.document.Paste("# unsaved\n")
+		a.Document.Paste("# unsaved\n")
 		m.closeDocument()
-		if text := ansi.Strip(m.footer()); !strings.Contains(text, "Esc Keep editing") || strings.Contains(text, ":w") {
+		if text := ansi.Strip(m.footer()); !strings.Contains(text, "Esc Keep Editing") || strings.Contains(text, ":w") {
 			t.Fatalf("discard prompt footer is misleading: %s", text)
 		}
 	})
@@ -95,7 +94,7 @@ func TestFooterFollowsLogAndEditorInputStates(t *testing.T) {
 func TestFooterExpansionReturnsBeforeClosingAndSearchKeepsLocalKeys(t *testing.T) {
 	m := exploreModel(t)
 	m.openExploreSelection(1)
-	m.viewCommand("zoom")
+	m.viewCommand("fullscreen")
 	if !strings.Contains(ansi.Strip(m.footer()), "Esc Restore layout") {
 		t.Fatal("expanded YAML does not explain the next Esc")
 	}

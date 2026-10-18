@@ -47,7 +47,7 @@ def scenarios(value):
 
 
 def parser():
-    p = argparse.ArgumentParser(description=__doc__, epilog="See docs/playground.md. No command changes the active kubecontext.")
+    p = argparse.ArgumentParser(description=__doc__, epilog="See docs/integrations/kubernetes/playground.md. No command changes the active kubecontext.")
     p.add_argument("action", choices=["plan", "render", "setup", "status", "reset", "cleanup", "credentials", "load", "rollout-break", "rollout-recover", "edit-conflict"])
     p.add_argument("--context", help="Explicit disposable cluster context; required for cluster operations")
     p.add_argument("--kubeconfig", help="Optional kubeconfig file; read without modification")

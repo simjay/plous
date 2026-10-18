@@ -1,13 +1,15 @@
 package app
 
-import tea "charm.land/bubbletea/v2"
+import (
+	tea "charm.land/bubbletea/v2"
+)
 
 func (m *model) readOnlyWorkspaceKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	key := msg.String()
 	if m.activityReviewVisible() || m.yamlDocumentActive() || m.valueDocumentActive() {
 		searching := m.activityReviewSearching() || m.yamlDocumentSearching()
 		if m.valueDocumentActive() {
-			searching = m.explore.action.valueDocument.Searching
+			searching = m.explore.Action.ValueDocument.Searching
 		}
 		if !searching {
 			if key == ":" || key == "tab" || key == "shift+tab" {

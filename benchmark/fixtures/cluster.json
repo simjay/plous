@@ -1,0 +1,275 @@
+{
+  "scope": "cluster",
+  "routes": [
+    {
+      "path": "/cluster/api/v1",
+      "body": {
+        "apiVersion": "v1",
+        "kind": "APIResourceList",
+        "groupVersion": "v1",
+        "resources": [
+          {
+            "name": "pods",
+            "kind": "Pod",
+            "namespaced": true,
+            "verbs": [
+              "get",
+              "list"
+            ]
+          },
+          {
+            "name": "services",
+            "kind": "Service",
+            "namespaced": true,
+            "verbs": [
+              "get",
+              "list"
+            ]
+          },
+          {
+            "name": "events",
+            "kind": "Event",
+            "namespaced": true,
+            "verbs": [
+              "get",
+              "list"
+            ]
+          },
+          {
+            "name": "secrets",
+            "kind": "Secret",
+            "namespaced": true,
+            "verbs": [
+              "get",
+              "list"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "path": "/cluster/apis/apps",
+      "body": {
+        "kind": "APIGroup",
+        "preferredVersion": {
+          "groupVersion": "apps/v1",
+          "version": "v1"
+        },
+        "versions": [
+          {
+            "groupVersion": "apps/v1",
+            "version": "v1"
+          }
+        ]
+      }
+    },
+    {
+      "path": "/cluster/apis/apps/v1",
+      "body": {
+        "apiVersion": "v1",
+        "kind": "APIResourceList",
+        "groupVersion": "apps/v1",
+        "resources": [
+          {
+            "name": "deployments",
+            "kind": "Deployment",
+            "namespaced": true,
+            "verbs": [
+              "get",
+              "list"
+            ]
+          },
+          {
+            "name": "replicasets",
+            "kind": "ReplicaSet",
+            "namespaced": true,
+            "verbs": [
+              "get",
+              "list"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "path": "/cluster/apis/apps/v1/namespaces/apps/deployments/web",
+      "body": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+          "name": "web",
+          "namespace": "apps",
+          "uid": "web-uid",
+          "creationTimestamp": "2026-10-01T00:00:00Z",
+          "resourceVersion": "1",
+          "labels": {
+            "app": "web"
+          },
+          "generation": 7
+        },
+        "spec": {
+          "replicas": 3,
+          "selector": {
+            "matchLabels": {
+              "app": "web"
+            }
+          }
+        },
+        "status": {
+          "replicas": 3,
+          "readyReplicas": 3,
+          "availableReplicas": 3,
+          "updatedReplicas": 3,
+          "observedGeneration": 7
+        }
+      }
+    },
+    {
+      "path": "/cluster/api/v1/namespaces/apps/pods/web",
+      "body": {
+        "apiVersion": "v1",
+        "kind": "Pod",
+        "metadata": {
+          "name": "web",
+          "namespace": "apps",
+          "uid": "web-uid",
+          "creationTimestamp": "2026-10-01T00:00:00Z",
+          "resourceVersion": "1",
+          "labels": {
+            "app": "web"
+          },
+          "ownerReferences": [
+            {
+              "apiVersion": "apps/v1",
+              "kind": "ReplicaSet",
+              "name": "web-rs",
+              "uid": "web-rs-uid",
+              "controller": true
+            }
+          ]
+        },
+        "spec": {
+          "containers": [
+            {
+              "name": "app",
+              "image": "web:v3"
+            }
+          ]
+        },
+        "status": {
+          "phase": "Running",
+          "containerStatuses": [
+            {
+              "name": "app",
+              "ready": true,
+              "restartCount": 0,
+              "state": {
+                "running": {}
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "path": "/cluster/api/v1/namespaces/apps/pods",
+      "body": {
+        "apiVersion": "v1",
+        "kind": "PodList",
+        "metadata": {},
+        "items": [
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "web",
+              "namespace": "apps",
+              "uid": "web-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "path": "/cluster/api/v1/namespaces/apps/pods/web/log",
+      "text": "2026-10-15T10:00:00Z panic: dependency unavailable \u03a9\n"
+    },
+    {
+      "path": "/cluster/apis",
+      "body": {
+        "apiVersion": "v1",
+        "kind": "APIGroupList",
+        "groups": [
+          {
+            "name": "apps",
+            "versions": [
+              {
+                "groupVersion": "apps/v1",
+                "version": "v1"
+              }
+            ],
+            "preferredVersion": {
+              "groupVersion": "apps/v1",
+              "version": "v1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "path": "/cluster/api/v1/namespaces/apps/pods/missing",
+      "status": 404,
+      "body": {
+        "kind": "Status",
+        "apiVersion": "v1",
+        "status": "Failure",
+        "reason": "NotFound",
+        "code": 404,
+        "message": "Pod missing was not found"
+      }
+    },
+    {
+      "path": "/cluster/api/v1/namespaces/apps/events",
+      "body": {
+        "apiVersion": "v1",
+        "kind": "EventList",
+        "items": []
+      }
+    }
+  ]
+}

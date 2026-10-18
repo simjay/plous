@@ -3,10 +3,10 @@ package app
 import (
 	"context"
 	"fmt"
+	"github.com/simjay/plous/internal/app/monitor"
+	textview "github.com/simjay/plous/internal/ui/text"
 	"strings"
 	"testing"
-
-	"github.com/simjay/plous/internal/textview"
 )
 
 func logBufferModel(t *testing.T) *model {
@@ -15,9 +15,9 @@ func logBufferModel(t *testing.T) *model {
 	m.width, m.height = 160, 40
 	m.openExploreSelection(4)
 	m.syncExploreDetail()
-	run := m.explore.detailRun
-	run.cancel()
-	m.updateExploreMessage(exploreDetailResult{run: run, object: m.explore.detail.DeepCopy()})
+	run := m.explore.DetailRun
+	run.Cancel()
+	m.updateExploreMessage(monitor.ExploreDetailResult{Run: run, Object: m.explore.Detail.DeepCopy()})
 	m.syncExploreDetail()
 	return m
 }
@@ -25,26 +25,26 @@ func logBufferModel(t *testing.T) *model {
 func TestLogsReadingKeepsStreamAndResumeKeepsBuffer(t *testing.T) {
 	m := logBufferModel(t)
 	e := m.explore
-	run, key := e.log, e.logKey
-	m.updateExploreMessage(exploreLogEvent{run: run, text: strings.Repeat("record\n", 100)})
+	run, key := e.Log, e.LogKey
+	m.updateExploreMessage(monitor.ExploreLogEvent{Run: run, Text: strings.Repeat("record\n", 100)})
 	m.render()
 	press(t, m, "space")
 	v := m.podLogViewer()
 	offset := v.Reader.Top
-	if v.Following || offset >= 100 || m.syncExploreDetail() != nil || run.ctx.Err() != nil {
+	if v.Following || offset >= 100 || m.syncExploreDetail() != nil || run.Ctx.Err() != nil {
 		t.Fatal("pause stopped collection or lost viewport")
 	}
-	m.updateExploreMessage(exploreLogEvent{run: run, text: "new record 1\nnew record 2\n"})
+	m.updateExploreMessage(monitor.ExploreLogEvent{Run: run, Text: "new record 1\nnew record 2\n"})
 	m.render()
 	if v.Reader.Top != offset || v.Unseen != 2 || !strings.Contains(v.Text, "new record 2") {
 		t.Fatal("append lost reading position or output")
 	}
 	text := v.Text
 	press(t, m, "space")
-	if !v.Following || v.Unseen != 0 || v.Text != text || e.logKey != key || e.log != run || v.Reader.Cursor.Row < 100 {
+	if !v.Following || v.Unseen != 0 || v.Text != text || e.LogKey != key || e.Log != run || v.Reader.Cursor.Row < 100 {
 		t.Fatal("resume replaced stream or lost output")
 	}
-	if m.syncExploreDetail() != nil || run.ctx.Err() != nil {
+	if m.syncExploreDetail() != nil || run.Ctx.Err() != nil {
 		t.Fatal("resume restarted collection")
 	}
 }
@@ -84,7 +84,7 @@ func TestLogsTrimPreservesRetainedReadingPosition(t *testing.T) {
 			anchor := v.Reader.SelectedText()
 			m.appendExploreLogs(strings.Repeat("new record "+strings.Repeat("word ", 35)+"\n", 250))
 			m.render()
-			if len(v.Text) > exploreLogBufferLimit || v.Dropped == 0 || v.Unseen != 250 {
+			if len(v.Text) > monitor.ExploreLogBufferLimit || v.Dropped == 0 || v.Unseen != 250 {
 				t.Fatal("retention bounds lost")
 			}
 			if v.Reader.SelectedText() != anchor {
@@ -114,7 +114,7 @@ func TestLogsSearchKeepsSelectedMatchAsBufferChanges(t *testing.T) {
 	}
 	m.appendExploreLogs(strings.Repeat("needle "+strings.Repeat("word ", 35)+"\n", 250))
 	m.render()
-	if v.Reader.SelectedText() != anchor || v.Reader.Status() != "1/1 matches" || v.Dropped == 0 || m.explore.log.ctx.Err() != nil {
+	if v.Reader.SelectedText() != anchor || v.Reader.Status() != "1/1 matches" || v.Dropped == 0 || m.explore.Log.Ctx.Err() != nil {
 		t.Fatal("eviction lost match or stopped collection")
 	}
 	if m.searches[1] != nil || m.beginPanelSearch() {
@@ -140,12 +140,12 @@ func TestLogsSearchNearTailDoesNotRecenterForNewOutput(t *testing.T) {
 func TestLogsConnectionStateAndSourceReset(t *testing.T) {
 	m := logBufferModel(t)
 	e := m.explore
-	run := e.log
+	run := e.Log
 	if !m.loadingVisible() {
 		t.Fatal("initial connection must animate")
 	}
-	m.updateExploreMessage(exploreLogEvent{run: run, connected: true})
-	if m.loadingVisible() || !e.logConnected {
+	m.updateExploreMessage(monitor.ExploreLogEvent{Run: run, Connected: true})
+	if m.loadingVisible() || !e.LogConnected {
 		t.Fatal("connected stream must stop animation")
 	}
 	v := m.podLogViewer()
@@ -154,30 +154,30 @@ func TestLogsConnectionStateAndSourceReset(t *testing.T) {
 	v.Reader.Wrap = false
 	m.updateExplore("p")
 	m.syncExploreDetail()
-	if run.ctx.Err() == nil || e.log == run || v.Text != "" || v.Unseen != 0 || v.Dropped != 0 || e.logConnected || v.Reader.Wrap {
+	if run.Ctx.Err() == nil || e.Log == run || v.Text != "" || v.Unseen != 0 || v.Dropped != 0 || e.LogConnected || v.Reader.Wrap {
 		t.Fatal("source reset lost wrap preference or kept old stream")
 	}
-	m.updateExploreMessage(exploreLogEvent{run: run, text: "stale\n", connected: true})
-	if v.Text != "" || e.logConnected {
+	m.updateExploreMessage(monitor.ExploreLogEvent{Run: run, Text: "stale\n", Connected: true})
+	if v.Text != "" || e.LogConnected {
 		t.Fatal("stale output reached replacement")
 	}
-	current := e.log
-	m.updateExploreMessage(exploreLogEvent{run: current, text: "previous\n", done: true})
-	if e.log != nil || m.syncExploreDetail() != nil || v.Text != "previous\n" {
+	current := e.Log
+	m.updateExploreMessage(monitor.ExploreLogEvent{Run: current, Text: "previous\n", Done: true})
+	if e.Log != nil || m.syncExploreDetail() != nil || v.Text != "previous\n" {
 		t.Fatal("ended stream lost output or restarted")
 	}
 	m.updateExplore("g")
-	if e.detailKey != "" || e.logKey != "" {
+	if e.DetailKey != "" || e.LogKey != "" {
 		t.Fatal("reconnect did not invalidate request")
 	}
 }
 
 func TestLogsEscCancelsCollectionAndRestoresDetail(t *testing.T) {
 	m := logBufferModel(t)
-	run := m.explore.log
+	run := m.explore.Log
 	press(t, m, "up")
 	press(t, m, "esc")
-	if run.ctx.Err() != context.Canceled || m.explore.tab != 0 || m.explore.detail == nil {
+	if run.Ctx.Err() != context.Canceled || m.explore.Tab != 0 || m.explore.Detail == nil {
 		t.Fatal("leaving logs did not restore origin")
 	}
 }

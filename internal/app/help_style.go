@@ -1,81 +1,73 @@
 package app
 
 import (
-	"regexp"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/simjay/plous/internal/ui"
+	helpview "github.com/simjay/plous/internal/ui/help"
 	"strings"
-	"unicode/utf8"
-
-	"charm.land/lipgloss/v2"
 )
 
-var helpTokens = regexp.MustCompile(`\S+`)
-
-func helpKey(token string, leading bool) bool {
-	token = strings.Trim(token, "(),.")
-	token = strings.TrimSuffix(token, ":")
-	if strings.HasPrefix(token, ":") || strings.HasPrefix(token, "Ctrl+") || strings.HasPrefix(token, "Shift+") {
-		return true
-	}
-	switch token {
-	case "/m", "/model", "//m", "//model", "Enter", "Esc", "Tab", "Space", "Backspace", "Delete", "Home", "End", "PgUp", "PgDn", "Arrows", "Left", "Right", "Up", "Down", "Paste", "bb", "ii", "ss", "cc", "hh", "11", "22", "33":
-		return true
-	}
-	if strings.Contains(token, "/") && token != "/" {
-		for _, key := range strings.Split(token, "/") {
-			if !helpKey(key, leading) {
-				return false
-			}
+// Style before wrapping so continuation lines preserve their semantic role.
+func helpLines(s helpview.Section, width int) []string {
+	width = max(1, width)
+	var lines []string
+	wrap := func(text string) { lines = append(lines, strings.Split(ansi.Wrap(text, width, ""), "\n")...) }
+	entry := func(key, label, reason string) {
+		if reason != "" {
+			label += " (" + reason + ")"
 		}
-		return true
-	}
-	return leading && (utf8.RuneCountInString(token) == 1 || token == "gg" || token == "dd" || token == "yy" || token == "↑↓" || token == "←→")
-}
-
-func styledHelpText(text string) string {
-	lines := strings.Split(plain(text), "\n")
-	paragraph, description := true, false
-	for i, line := range lines {
-		if line == "" {
-			paragraph, description = true, false
-			continue
+		keyWidth := ansi.StringWidth(key)
+		column := 8
+		if width < 28 {
+			column = 6
 		}
-		tokens := helpTokens.FindAllStringIndex(line, -1)
-		keys := make([]bool, len(tokens))
-		leading, hasKey := true, false
-		for j, span := range tokens {
-			token := line[span[0]:span[1]]
-			if token == "·" {
-				leading = true
-				continue
+		if keyWidth+2 >= width/2 {
+			wrap(ui.ShortcutStyle.Render(key))
+			for _, line := range strings.Split(ansi.Wrap(label, max(1, width-2), ""), "\n") {
+				lines = append(lines, "  "+line)
 			}
-			if token == "/" && j > 0 || token == "or" && leading {
-				continue
-			}
-			keys[j] = helpKey(token, leading)
-			hasKey = hasKey || keys[j]
-			leading = leading && keys[j]
-		}
-		style := lipgloss.NewStyle().Foreground(foreground)
-		heading := paragraph && (!hasKey || line == "Enter text")
-		if heading {
-			lines[i] = sectionHeadingStyle.Render(line)
 		} else {
-			if !hasKey && !description || strings.HasSuffix(line, ".") {
-				style = muted
-			}
-			var out strings.Builder
-			last := 0
-			for j, span := range tokens {
-				if keys[j] {
-					out.WriteString(style.Render(line[last:span[0]]))
-					out.WriteString(shortcutStyle.Render(line[span[0]:span[1]]))
-					last = span[1]
+			column = max(column, keyWidth+2)
+			for i, line := range strings.Split(ansi.Wrap(label, max(1, width-column), ""), "\n") {
+				prefix := strings.Repeat(" ", column)
+				if i == 0 {
+					prefix = ui.ShortcutStyle.Render(key) + strings.Repeat(" ", column-keyWidth)
 				}
+				lines = append(lines, prefix+line)
 			}
-			out.WriteString(style.Render(line[last:]))
-			lines[i] = out.String()
 		}
-		paragraph, description = false, leading && hasKey
 	}
-	return strings.Join(lines, "\n")
+	for _, g := range s.Groups {
+		if len(lines) > 0 {
+			lines = append(lines, "")
+		}
+		if g.Title != "" {
+			wrap(ui.SectionHeadingStyle.Render(g.Title))
+		}
+		for _, e := range g.Entries {
+			entry(e.Key, e.Label, e.Reason)
+		}
+		if g.Note != "" {
+			wrap(ui.Muted.Render(g.Note))
+		}
+	}
+	var alternatives []helpview.Entry
+	for _, g := range s.Groups {
+		for _, e := range g.Entries {
+			if len(e.Alternatives) > 0 {
+				alternatives = append(alternatives, e)
+			}
+		}
+	}
+	if len(alternatives) > 0 {
+		lines = append(lines, "")
+		wrap(ui.SectionHeadingStyle.Render("Alternative keys"))
+		for _, e := range alternatives {
+			entry(strings.Join(e.Alternatives, " / "), e.Label, "")
+		}
+	}
+	if len(lines) == 0 {
+		lines = []string{""}
+	}
+	return lines
 }

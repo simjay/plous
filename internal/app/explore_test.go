@@ -10,7 +10,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/simjay/plous/internal/kubernetes"
+	"github.com/simjay/plous/internal/app/monitor"
+	kubecommon "github.com/simjay/plous/internal/integrations/kubernetes/common"
+	kubernetes "github.com/simjay/plous/internal/integrations/kubernetes/monitor"
 	"github.com/simjay/plous/internal/workspace"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -20,6 +22,7 @@ import (
 func exploreObject(name, uid string) unstructured.Unstructured {
 	return unstructured.Unstructured{Object: map[string]any{"kind": "Pod", "apiVersion": "v1", "metadata": map[string]any{"name": name, "namespace": "shop", "uid": uid}, "spec": map[string]any{"nodeName": "worker-1", "containers": []any{map[string]any{"name": "app", "image": "example/app:v1"}}}, "status": map[string]any{"phase": "Running", "containerStatuses": []any{map[string]any{"name": "app", "ready": true, "restartCount": int64(1)}}}}}
 }
+
 func exploreModel(t *testing.T) *model {
 	t.Helper()
 	m, _ := testModel(t)
@@ -34,15 +37,16 @@ func exploreModel(t *testing.T) *model {
 	m.focus = 1
 	m.settingsOverlay = nil
 	m.form = nil
+	m.loadChat()
 	client, err := kubernetes.NewForConfig(&rest.Config{Host: "http://127.0.0.1:1"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	resources := []kubernetes.Resource{{Name: "pods", Kind: "Pod", Version: "v1", Namespaced: true, Verbs: []string{"list", "watch"}, ShortNames: []string{"po"}}, {Name: "deployments", Kind: "Deployment", Group: "apps", Version: "v1", Namespaced: true}, {Name: "services", Kind: "Service", Version: "v1", Namespaced: true}, {Name: "nodes", Kind: "Node", Version: "v1"}}
+	resources := []kubecommon.Resource{{Name: "pods", Kind: "Pod", Version: "v1", Namespaced: true, Verbs: []string{"list", "watch"}, ShortNames: []string{"po"}}, {Name: "deployments", Kind: "Deployment", Group: "apps", Version: "v1", Namespaced: true}, {Name: "services", Kind: "Service", Version: "v1", Namespaced: true}, {Name: "nodes", Kind: "Node", Version: "v1"}}
 	ctx, cancel := context.WithCancel(context.Background())
-	m.explore = &exploreState{key: strings.Join([]string{m.active, c.ID, c.Settings["kubeconfig"], c.Settings["context"], c.Settings["namespace"]}, "\x00"), generation: 1, client: client, resources: resources, resource: resources[0], preference: explorePreference{Resource: "pods", Namespace: "shop"}, collection: kubernetes.Collection{Objects: []unstructured.Unstructured{exploreObject("checkout", "one"), exploreObject("catalog", "two")}}, selected: "one", status: "Live", stream: &exploreStream{key: "pods/v1/shop/", ctx: ctx, cancel: cancel, events: make(chan kubernetes.Snapshot)}}
+	m.explore = &monitor.ExploreState{Key: strings.Join([]string{m.active, c.ID, c.Settings["kubeconfig"], c.Settings["context"], c.Settings["namespace"]}, "\x00"), Generation: 1, Client: client, Resources: resources, Resource: resources[0], Preference: monitor.ExplorePreference{Resource: "pods", Namespace: "shop"}, Collection: kubernetes.Collection{Objects: []unstructured.Unstructured{exploreObject("checkout", "one"), exploreObject("catalog", "two")}}, Selected: "one", Status: "Live", Stream: &monitor.ExploreStream{Key: "pods/v1/shop/", Ctx: ctx, Cancel: cancel, Events: make(chan kubernetes.Snapshot)}}
 	m.exploreGeneration = 1
-	m.explore.listed = true
+	m.explore.Listed = true
 	t.Cleanup(m.stopExplore)
 	return m
 }
@@ -52,16 +56,13 @@ func TestExploreCancelsRequestsWhenLeavingActiveConnection(t *testing.T) {
 		t.Run(action, func(t *testing.T) {
 			m := exploreModel(t)
 			e := m.explore
-			discovery, cancelDiscovery := context.WithCancel(context.Background())
 			detail, cancelDetail := context.WithCancel(context.Background())
 			logs, cancelLogs := context.WithCancel(context.Background())
-			defer cancelDiscovery()
 			defer cancelDetail()
 			defer cancelLogs()
-			e.connectionCancel = cancelDiscovery
-			e.detailRun = &exploreDetailRun{cancel: cancelDetail}
-			e.log = &exploreLogRun{ctx: logs, cancel: cancelLogs}
-			watch := e.stream.ctx
+			e.DetailRun = &monitor.ExploreDetailRun{Cancel: cancelDetail}
+			e.Log = &monitor.ExploreLogRun{Ctx: logs, Cancel: cancelLogs}
+			watch := e.Stream.Ctx
 			switch action {
 			case "overview":
 				typeText(m, "11")
@@ -73,9 +74,9 @@ func TestExploreCancelsRequestsWhenLeavingActiveConnection(t *testing.T) {
 			case "workspace":
 				m.selectScope(m.active, "", "")
 			case "quit":
-				press(t, m, "ctrl+c")
+				assertCtrlCQuit(t, m)
 			}
-			for name, ctx := range map[string]context.Context{"discovery": discovery, "watch": watch, "detail": detail, "logs": logs} {
+			for name, ctx := range map[string]context.Context{"watch": watch, "detail": detail, "logs": logs} {
 				if ctx.Err() == nil {
 					t.Fatalf("%s still runs after %s", name, action)
 				}
@@ -87,27 +88,102 @@ func TestExploreCancelsRequestsWhenLeavingActiveConnection(t *testing.T) {
 func TestExploreLoadingAndEmptyNamespaceHaveDistinctMessages(t *testing.T) {
 	m := exploreModel(t)
 	e := m.explore
-	e.collection = kubernetes.Collection{}
-	e.preference.Namespace = "default"
-	e.stream.key = "pods/v1/default/"
-	e.listed = false
+	e.Collection = kubernetes.Collection{}
+	e.Preference.Namespace = "default"
+	e.Stream.Key = "pods/v1/default/"
+	e.Listed = false
 	view := ansi.Strip(m.exploreTableBody(70, 10))
 	if !strings.Contains(view, "Loading Pods") || strings.Contains(view, "No Pods") {
 		t.Fatalf("pending request looked empty: %s", view)
 	}
-	m.Update(exploreUpdate{stream: e.stream, snapshot: kubernetes.Snapshot{Collection: &kubernetes.Collection{}, Status: "Live"}})
+	m.Update(monitor.ExploreUpdate{Stream: e.Stream, Snapshot: kubernetes.Snapshot{Collection: &kubernetes.Collection{}, Status: "Live"}})
 	view = ansi.Strip(m.exploreTableBody(70, 10))
-	if !e.listed || !strings.Contains(view, "No Pods in namespace default.") || !strings.Contains(view, ":N *  Show all namespaces") {
+	if !e.Listed || !strings.Contains(view, "No Pods in namespace default.") || !strings.Contains(view, "[n] Choose namespace") || !strings.Contains(view, "All namespaces") {
 		t.Fatalf("empty namespace lacks scope and recovery: %s", view)
 	}
 	mainCommand(t, m, "N *")
-	if e.listed || e.preference.Namespace != "" {
+	if e.Listed || e.Preference.Namespace != "" {
 		t.Fatal("namespace change did not reset loading state")
 	}
-	m.Update(exploreUpdate{stream: e.stream, snapshot: kubernetes.Snapshot{Collection: &kubernetes.Collection{}, Status: "Live"}})
+	m.Update(monitor.ExploreUpdate{Stream: e.Stream, Snapshot: kubernetes.Snapshot{Collection: &kubernetes.Collection{}, Status: "Live"}})
 	view = ansi.Strip(m.exploreTableBody(70, 10))
 	if !strings.Contains(view, "No Pods across all namespaces.") {
 		t.Fatalf("all-namespace scope unclear: %s", view)
+	}
+}
+
+func TestExploreEmptyRecoveryControls(t *testing.T) {
+	for _, input := range []string{"keyboard", "mouse"} {
+		t.Run(input, func(t *testing.T) {
+			m := exploreModel(t)
+			m.width, m.height = 160, 40
+			e := m.explore
+			e.Collection.Objects = nil
+			if input == "mouse" {
+				clickMouse(t, m, "main", "action/n")
+			} else {
+				typeText(m, "n")
+			}
+			if e.Picker != "namespace" || e.Preference.Namespace != "shop" {
+				t.Fatal("namespace action must open the picker without changing scope")
+			}
+			press(t, m, "esc")
+			e.Preference.Filter, e.Preference.Selector = "no-match", "app=checkout"
+			view := ansi.Strip(m.exploreTableBody(70, 20))
+			if !strings.Contains(view, "No matching Pods.") || !strings.Contains(view, "[Backspace] Clear text filter") || !strings.Contains(view, "[L] Edit label selector") {
+				t.Fatalf("filtered result lacks targeted recovery: %s", view)
+			}
+			if input == "mouse" {
+				clickMouse(t, m, "footer", "action/Backspace")
+				clickMouse(t, m, "main", "action/L")
+			} else {
+				press(t, m, "backspace")
+				typeText(m, "L")
+			}
+			if e.Preference.Filter != "" || e.Preference.Selector != "app=checkout" || e.InputKind != "selector" || e.Input == nil {
+				t.Fatal("filter actions must preserve labels and open their editor")
+			}
+			if strings.Contains(ansi.Strip(m.exploreBody(70, 20)), "[L] Edit label selector") {
+				t.Fatal("a text field advertised navigation actions")
+			}
+		})
+	}
+}
+
+func TestExploreEmptyScopesAndCompactLayout(t *testing.T) {
+	for _, scope := range []string{"namespace", "all namespaces", "cluster"} {
+		m := exploreModel(t)
+		e := m.explore
+		e.Collection.Objects = nil
+		if scope == "all namespaces" {
+			e.Preference.Namespace = ""
+		} else if scope == "cluster" {
+			e.Resource = e.Resources[3]
+		}
+		footer := ansi.Strip(m.footer())
+		if strings.Contains(footer, "Enter Open") || strings.Contains(footer, "/ Filter") {
+			t.Fatalf("empty footer offers actions without rows: %s", footer)
+		}
+		for _, size := range [][2]int{{24, 4}, {32, 8}, {70, 20}} {
+			view := ansi.Strip(m.exploreTableBody(size[0], size[1]))
+			if len(strings.Split(view, "\n")) > size[1] {
+				t.Fatalf("empty state overflows %v: %s", size, view)
+			}
+			for _, line := range strings.Split(view, "\n") {
+				if ansi.StringWidth(line) > size[0] {
+					t.Fatalf("empty state is too wide at %v: %s", size, view)
+				}
+			}
+			if scope == "namespace" && !strings.Contains(view, "[n] Choose namespace") || scope != "namespace" && !strings.Contains(view, "[g] Refresh") {
+				t.Fatalf("missing primary action at %v: %s", size, view)
+			}
+			if strings.Contains(view, ":k") || strings.Contains(view, "/ Filter resources") || scope == "cluster" && strings.Contains(view, "namespace") {
+				t.Fatalf("irrelevant empty-state instructions: %s", view)
+			}
+			if size[1] == 20 && !strings.Contains(view, "+------+ |") {
+				t.Fatalf("roomy empty state lacks illustration: %s", view)
+			}
+		}
 	}
 }
 
@@ -116,10 +192,10 @@ func TestExploreCommandsRouteGloballyWithoutLosingChat(t *testing.T) {
 		t.Run(fmt.Sprint(focus), func(t *testing.T) {
 			m := exploreModel(t)
 			m.focus = focus
-			m.draft().insert("Keep this draft", true)
+			m.draft().Insert("Keep this draft", true)
 			typeText(m, ":deployments")
 			press(t, m, "enter")
-			if m.mode != 1 || m.focus != 1 || m.explore.preference.Resource != "deployments.apps" || m.draft().text != "Keep this draft" {
+			if m.mode != 1 || m.focus != 1 || m.explore.Preference.Resource != "deployments.apps" || m.draft().Text != "Keep this draft" {
 				t.Fatal("resource command lost scope or draft")
 			}
 		})
@@ -128,13 +204,13 @@ func TestExploreCommandsRouteGloballyWithoutLosingChat(t *testing.T) {
 
 func TestExploreCommandFromOverviewPreservesExplicitNamespace(t *testing.T) {
 	m := exploreModel(t)
-	client, resources := m.explore.client, m.explore.resources
+	client, resources := m.explore.Client, m.explore.Resources
 	mainCommand(t, m, "1")
 	mainCommand(t, m, "pods platform")
 	mainCommand(t, m, "chat")
-	m.Update(exploreConnected{generation: m.explore.generation, client: client, resources: resources})
-	if m.explore.preference.Resource != "pods" || m.explore.preference.Namespace != "platform" {
-		t.Fatalf("wrong scope: %#v", m.explore.preference)
+	m.Update(monitor.ExploreConnected{Generation: m.explore.Generation, Client: client, Resources: resources})
+	if m.explore.Preference.Resource != "pods" || m.explore.Preference.Namespace != "platform" {
+		t.Fatalf("wrong scope: %#v", m.explore.Preference)
 	}
 	if m.focus != 2 || !m.chatEditing {
 		t.Fatal("discovery completion stole chat focus")
@@ -142,25 +218,22 @@ func TestExploreCommandFromOverviewPreservesExplicitNamespace(t *testing.T) {
 }
 
 func TestExploreConnectionPickerRetainsCommandAndContextNamespace(t *testing.T) {
-	for _, command := range []string{"pods platform", "pods", "namespace platform", "kinds"} {
+	for _, command := range []string{"pods platform", "pods", "namespace platform"} {
 		t.Run(command, func(t *testing.T) {
 			m := exploreModel(t)
-			client, resources := m.explore.client, m.explore.resources
+			client, resources := m.explore.Client, m.explore.Resources
 			client.Namespace = "context-default"
 			m.currentConnection().Settings["namespace"] = ""
 			m.selectScope(m.active, "", "")
 			mainCommand(t, m, command)
 			press(t, m, "enter")
-			m.Update(exploreConnected{generation: m.explore.generation, client: client, resources: resources})
+			m.Update(monitor.ExploreConnected{Generation: m.explore.Generation, Client: client, Resources: resources})
 			want := "context-default"
 			if strings.Contains(command, "platform") {
 				want = "platform"
 			}
-			if m.explore.preference.Namespace != want {
-				t.Fatalf("namespace = %q, want %q", m.explore.preference.Namespace, want)
-			}
-			if command == "kinds" && m.explore.picker != "kinds" {
-				t.Fatal("kind picker command was lost during connection selection")
+			if m.explore.Preference.Namespace != want {
+				t.Fatalf("namespace = %q, want %q", m.explore.Preference.Namespace, want)
 			}
 		})
 	}
@@ -174,15 +247,15 @@ func TestExploreSortsNumbersAndAgesByValue(t *testing.T) {
 	newer.SetCreationTimestamp(metav1.NewTime(time.Now().Add(-2 * time.Hour)))
 	older.SetCreationTimestamp(metav1.NewTime(time.Now().Add(-10 * time.Hour)))
 	older.Object["status"].(map[string]any)["containerStatuses"].([]any)[0].(map[string]any)["restartCount"] = int64(10)
-	e.collection.Objects = []unstructured.Unstructured{older, newer}
+	e.Collection.Objects = []unstructured.Unstructured{older, newer}
 	for _, column := range []int{4, 5} {
-		e.preference.Sort = column
-		e.preference.Descending = false
+		e.Preference.Sort = column
+		e.Preference.Descending = false
 		_, rows := m.exploreRows()
 		if rows[0].Object.GetName() != "newer" {
 			t.Fatalf("column %d sorted text instead of values", column)
 		}
-		e.preference.Descending = true
+		e.Preference.Descending = true
 		_, rows = m.exploreRows()
 		if rows[0].Object.GetName() != "older" {
 			t.Fatalf("column %d did not reverse", column)
@@ -195,8 +268,8 @@ func TestExploreLogsKeepContainerHeaderAndReplacementErrorsVisible(t *testing.T)
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 32})
 	e := m.explore
 	m.openExploreSelection(4)
-	e.detailValid = true
-	e.container = "app"
+	e.DetailValid = true
+	e.Container = "app"
 	m.podLogViewer().Append(strings.Repeat("example log line\n", 100))
 	for _, wrap := range []bool{true, false} {
 		m.podLogViewer().Reader.Wrap = wrap
@@ -212,16 +285,16 @@ func TestExploreLogsKeepContainerHeaderAndReplacementErrorsVisible(t *testing.T)
 		t.Fatal("Up did not leave the followed tail")
 	}
 
-	m.updateExploreMessage(exploreDetailResult{run: e.detailRun, text: "This object was deleted and replaced."})
+	m.updateExploreMessage(monitor.ExploreDetailResult{Run: e.DetailRun, Text: "This object was deleted and replaced."})
 	m.exploreDetailBody(50, 12)
 	m.podLogViewer().Key("end", "")
 	if view := m.exploreDetailBody(50, 12); !strings.Contains(view, "deleted and replaced") || !strings.Contains(view, "Disconnected") {
 		t.Fatalf("replacement error hidden in Logs: %s", ansi.Strip(view))
 	}
-	e.resource.Group = "example.io"
-	e.tab = 0
+	e.Resource.Group = "example.io"
+	e.Tab = 0
 	m.openExploreSelection(4)
-	if e.tab == 4 {
+	if e.Tab == 4 {
 		t.Fatal("custom resource named pods exposed core Pod logs")
 	}
 }
@@ -231,24 +304,24 @@ func TestExploreEditorsKeepCommandsAndPastesLiteral(t *testing.T) {
 	typeText(m, "/")
 	typeText(m, "bb cc ss :quit")
 	m.Update(tea.PasteMsg{Content: " :deployments\n"})
-	if m.explore.input == nil || m.command != nil || m.leftHidden || m.rightHidden || m.chatEditing || m.settingsOverlay != nil {
+	if m.explore.Input == nil || m.command != nil || m.leftHidden || m.rightHidden || m.chatEditing || m.settingsOverlay != nil {
 		t.Fatal("filter text executed navigation")
 	}
-	if !strings.Contains(m.explore.input.text, ":deployments") {
+	if !strings.Contains(m.explore.Input.Text, ":deployments") {
 		t.Fatal("filter paste was lost")
 	}
 	press(t, m, "esc")
-	if m.explore.preference.Filter != "" {
+	if m.explore.Preference.Filter != "" {
 		t.Fatal("cancel applied unfinished filter")
 	}
-	mainCommand(t, m, "kinds")
+	mainCommand(t, m, "connections")
 	typeText(m, "bb")
-	if m.leftHidden || m.explore.input.text != "bb" {
-		t.Fatal("kind search ran sidebar shortcut")
+	if m.leftHidden || m.explore.Input.Text != "bb" {
+		t.Fatal("connection search ran sidebar shortcut")
 	}
 	press(t, m, "tab")
 	if m.focus != 1 {
-		t.Fatal("Tab escaped resource picker")
+		t.Fatal("Tab escaped connection picker")
 	}
 	press(t, m, "esc")
 	typeText(m, "bb")
@@ -265,7 +338,7 @@ func TestResourceCommandsCannotDiscardUnsavedForms(t *testing.T) {
 	press(t, m, "enter")
 	typeText(m, ":pods")
 	press(t, m, "enter")
-	if m.form != form || form.fields[0].value.text != "Unfinished" || !strings.Contains(m.status, "Finish or cancel") {
+	if m.form != form || form.Fields[0].Value.Text != "Unfinished" || !strings.Contains(m.status, "Finish or cancel") {
 		t.Fatal("resource command discarded an unfinished form")
 	}
 }
@@ -273,20 +346,20 @@ func TestResourceCommandsCannotDiscardUnsavedForms(t *testing.T) {
 func TestExploreRejectsStaleConnectionAndWatchResults(t *testing.T) {
 	m := exploreModel(t)
 	e := m.explore
-	client := e.client
-	e.connecting = true
-	m.Update(exploreConnected{generation: 0, client: nil})
-	if e.client != client || !e.connecting {
+	client := e.Client
+	e.Connecting = true
+	m.Update(monitor.ExploreConnected{Generation: 0, Client: nil})
+	if e.Client != client || !e.Connecting {
 		t.Fatal("stale connection replaced current client")
 	}
-	e.connecting = false
-	stale := &exploreStream{}
-	m.Update(exploreUpdate{stream: stale, snapshot: kubernetes.Snapshot{Collection: &kubernetes.Collection{Objects: []unstructured.Unstructured{exploreObject("wrong-cluster", "wrong")}}}})
-	if e.collection.Objects[0].GetName() == "wrong-cluster" {
+	e.Connecting = false
+	stale := &monitor.ExploreStream{}
+	m.Update(monitor.ExploreUpdate{Stream: stale, Snapshot: kubernetes.Snapshot{Collection: &kubernetes.Collection{Objects: []unstructured.Unstructured{exploreObject("wrong-cluster", "wrong")}}}})
+	if e.Collection.Objects[0].GetName() == "wrong-cluster" {
 		t.Fatal("stale watch crossed connection scope")
 	}
-	m.Update(exploreUpdate{stream: e.stream, snapshot: kubernetes.Snapshot{Collection: &kubernetes.Collection{Objects: []unstructured.Unstructured{exploreObject("catalog", "two"), exploreObject("checkout", "one")}}, Status: "Live"}})
-	if e.selected != "one" {
+	m.Update(monitor.ExploreUpdate{Stream: e.Stream, Snapshot: kubernetes.Snapshot{Collection: &kubernetes.Collection{Objects: []unstructured.Unstructured{exploreObject("catalog", "two"), exploreObject("checkout", "one")}}, Status: "Live"}})
+	if e.Selected != "one" {
 		t.Fatal("live sorting lost selection by UID")
 	}
 }
@@ -294,21 +367,21 @@ func TestExploreRejectsStaleConnectionAndWatchResults(t *testing.T) {
 func TestExploreDetailsAndBackRetainSelectionAndFilter(t *testing.T) {
 	m := exploreModel(t)
 	e := m.explore
-	e.preference.Filter = "checkout"
+	e.Preference.Filter = "checkout"
 	press(t, m, "enter")
-	if e.detail == nil || e.detail.GetUID() != "one" {
+	if e.Detail == nil || e.Detail.GetUID() != "one" {
 		t.Fatal("Enter did not open selected object")
 	}
 	typeText(m, "y")
-	if e.tab != 1 {
+	if e.Tab != 1 {
 		t.Fatal("YAML shortcut failed")
 	}
 	press(t, m, "esc")
-	if e.detail == nil || e.tab != 0 || e.detail.GetUID() != "one" {
+	if e.Detail == nil || e.Tab != 0 || e.Detail.GetUID() != "one" {
 		t.Fatal("YAML did not return to the original Summary")
 	}
 	press(t, m, "esc")
-	if e.detail != nil || e.selected != "one" || e.preference.Filter != "checkout" {
+	if e.Detail != nil || e.Selected != "one" || e.Preference.Filter != "checkout" {
 		t.Fatal("back lost table state")
 	}
 }
@@ -317,11 +390,11 @@ func TestExploreConnectionPickerDoesNotChooseAnUnrelatedCluster(t *testing.T) {
 	m := exploreModel(t)
 	m.selectScope(m.active, "", "")
 	mainCommand(t, m, "pods")
-	if m.connection != "" || m.explore.picker != "connections" {
+	if m.connection != "" || m.explore.Picker != "connections" {
 		t.Fatal("resource command silently chose a connection")
 	}
 	press(t, m, "enter")
-	if m.currentConnection() == nil || m.mode != 1 || m.explore.preference.Resource != "pods" {
+	if m.currentConnection() == nil || m.mode != 1 || m.explore.Preference.Resource != "pods" {
 		t.Fatal("connection selection did not open requested resources")
 	}
 }
@@ -330,7 +403,7 @@ func TestExplorePreferencesPersistWithoutObjectsOrLogs(t *testing.T) {
 	m := exploreModel(t)
 	mainCommand(t, m, "N platform")
 	m.podLogViewer().Append("PRIVATE_LOG_CONTENT")
-	m.explore.collection.Objects = []unstructured.Unstructured{exploreObject("PRIVATE_RESOURCE_OBJECT", "private")}
+	m.explore.Collection.Objects = []unstructured.Unstructured{exploreObject("PRIVATE_RESOURCE_OBJECT", "private")}
 	if err := m.saveSession(); err != nil {
 		t.Fatal(err)
 	}
@@ -355,26 +428,28 @@ func TestExplorePreferencesPersistWithoutObjectsOrLogs(t *testing.T) {
 
 func TestExploreExitCancelsStreamsAndKeepsDraft(t *testing.T) {
 	m := exploreModel(t)
-	ctx := m.explore.stream.ctx
-	m.draft().insert("draft", true)
-	cmd := press(t, m, "ctrl+c")
+	ctx := m.explore.Stream.Ctx
+	m.draft().Insert("draft", true)
+	press(t, m, "ctrl+c")
+	m.drainPersistence()
+	cmd := m.syncQuit()
 	if cmd == nil {
 		t.Fatal("exit unavailable")
 	}
 	if _, ok := cmd().(tea.QuitMsg); !ok {
 		t.Fatal("Ctrl+C did not exit")
 	}
-	if ctx.Err() == nil || m.explore.stream != nil {
+	if ctx.Err() == nil || m.explore.Stream != nil {
 		t.Fatal("exit retained a watch")
 	}
-	if m.draft().text != "draft" {
+	if m.draft().Text != "draft" {
 		t.Fatal("exit discarded chat draft")
 	}
 }
 
 func TestExploreLayoutsStayInsideThreePanels(t *testing.T) {
 	for _, size := range [][2]int{{80, 16}, {120, 32}, {160, 40}} {
-		for _, view := range []string{"table", "filter-input", "filter-applied", "loading", "empty", "failure", "kinds", "detail", "yaml", "command"} {
+		for _, view := range []string{"table", "filter-input", "filter-applied", "loading", "empty", "failure", "connections", "detail", "yaml", "command"} {
 			t.Run(fmt.Sprintf("%dx%d/%s", size[0], size[1], view), func(t *testing.T) {
 				m := exploreModel(t)
 				m.Update(tea.WindowSizeMsg{Width: size[0], Height: size[1]})
@@ -385,15 +460,15 @@ func TestExploreLayoutsStayInsideThreePanels(t *testing.T) {
 						press(t, m, "enter")
 					}
 				case "loading":
-					m.explore.collection = kubernetes.Collection{}
-					m.explore.listed = false
+					m.explore.Collection = kubernetes.Collection{}
+					m.explore.Listed = false
 				case "empty":
-					m.explore.collection = kubernetes.Collection{}
+					m.explore.Collection = kubernetes.Collection{}
 				case "failure":
-					m.explore.collection = kubernetes.Collection{}
-					m.explore.err = "Kubernetes authentication failed. Renew your credentials, then refresh."
-				case "kinds":
-					mainCommand(t, m, "kinds")
+					m.explore.Collection = kubernetes.Collection{}
+					m.explore.Err = "Kubernetes authentication failed. Renew your credentials, then refresh."
+				case "connections":
+					mainCommand(t, m, "connections")
 				case "detail":
 					press(t, m, "enter")
 				case "yaml":

@@ -1,10 +1,11 @@
 package app
 
 import (
-	"strings"
-
-	"charm.land/lipgloss/v2"
-	"github.com/simjay/plous/internal/ai"
+	"github.com/simjay/plous/internal/ai/agent"
+	ai "github.com/simjay/plous/internal/ai/model"
+	appchat "github.com/simjay/plous/internal/app/chat"
+	appsettings "github.com/simjay/plous/internal/app/settings"
+	"github.com/simjay/plous/internal/ui"
 )
 
 // Each vendor connection makes its full supported chat catalog available.
@@ -25,20 +26,17 @@ func (m *model) chatModelChoices() []ai.Config {
 	return choices
 }
 
-func chatModelName(config ai.Config) string {
-	if model, ok := ai.LookupModel(config.Provider, config.Model); ok {
-		return model.Name
-	}
-	return config.Model
-}
-
 func (m *model) openModelPicker() {
+	if m.settings.MainAgent.Effective() != agent.Plous {
+		m.status = "The selected agent uses its CLI model configuration."
+		return
+	}
 	c := m.chat()
-	c.models, c.history, c.modelCursor = true, false, 0
+	c.Models, c.History, c.ModelCursor = true, false, 0
 	m.chatEditing = false
 	for i, config := range m.chatModelChoices() {
 		if config == m.settings.Agent {
-			c.modelCursor = i
+			c.ModelCursor = i
 		}
 	}
 	m.status = ""
@@ -47,33 +45,38 @@ func (m *model) openModelPicker() {
 func (m *model) updateModelPicker(key string) {
 	c := m.chat()
 	choices := m.chatModelChoices()
-	c.modelCursor = max(0, min(c.modelCursor, len(choices)))
+	c.ModelCursor = max(0, min(c.ModelCursor, len(choices)))
 	switch key {
 	case "up":
-		c.modelCursor = max(0, c.modelCursor-1)
+		c.ModelCursor = max(0, c.ModelCursor-1)
 	case "down":
-		c.modelCursor = min(len(choices), c.modelCursor+1)
+		c.ModelCursor = min(len(choices), c.ModelCursor+1)
 	case "home":
-		c.modelCursor = 0
+		c.ModelCursor = 0
 	case "end":
-		c.modelCursor = len(choices)
+		c.ModelCursor = len(choices)
 	case "esc":
-		c.models = false
+		c.Models = false
 		m.chatEditing = true
 		m.status = ""
 	case "enter":
-		if c.modelCursor == len(choices) {
-			if m.form != nil {
+		if c.ModelCursor == len(choices) {
+			if m.form != nil || m.removeForm != nil {
 				m.status = "Finish or cancel the open Settings form first."
 				return
 			}
-			c.models = false
+			c.Models = false
 			m.chatEditing = true
-			m.openSettings()
-			m.selectSettingsItem("Add AI connection")
+			m.beginAgentSettings()
+			for i, row := range m.form.Rows {
+				if row.Kind == appsettings.AddProviderRow {
+					m.form.Index = len(m.form.Fields) + i
+					break
+				}
+			}
 			return
 		}
-		config := choices[c.modelCursor]
+		config := choices[c.ModelCursor]
 		if err := config.Supported(); err != nil {
 			m.status = err.Error()
 			return
@@ -85,34 +88,34 @@ func (m *model) updateModelPicker(key string) {
 				return
 			}
 		}
-		c.models = false
+		c.Models = false
 		m.chatEditing = true
-		m.status = "Next message: " + chatModelName(config) + " · " + config.Name
+		m.status = "Next message: " + appchat.ChatModelName(config) + " · " + config.Name
 	}
 }
 
 func (m *model) modelPickerBody(width, height int) string {
 	choices := m.chatModelChoices()
-	lines := []string{titleStyle.Render("Choose a model"), muted.Render("✓ Current model"), ""}
+	lines := []string{ui.TitleStyle.Render("Choose a model"), ui.Muted.Render("✓ Current model"), ""}
 	selectedRow := 0
 	group := ""
 	for i, config := range choices {
 		if group != config.Name {
 			group = config.Name
-			heading := providerLabel(config.Provider)
+			heading := appsettings.ProviderLabel(config.Provider)
 			if group != heading {
 				heading += " · " + group
 			}
-			lines = append(lines, titleStyle.Render(clipped(oneLine(heading), width)))
+			lines = append(lines, ui.TitleStyle.Render(ui.Clipped(ui.OneLine(heading), width)))
 		}
-		label := chatModelName(config)
+		label := appchat.ChatModelName(config)
 		if config == m.settings.Agent {
 			label += " ✓"
 		}
-		if i == m.chat().modelCursor {
+		if i == m.chat().ModelCursor {
 			selectedRow = len(lines)
 		}
-		lines = append(lines, choiceLine(label, i == m.chat().modelCursor, width))
+		lines = append(lines, ui.MouseChoice(ui.ChoiceLine(label, i == m.chat().ModelCursor, width), i, config.Name+"/"+config.Model))
 		if i+1 == len(choices) || choices[i+1].Name != group {
 			lines = append(lines, "")
 		}
@@ -120,28 +123,9 @@ func (m *model) modelPickerBody(width, height int) string {
 	if len(choices) == 0 {
 		lines = append(lines, "Connect a supported vendor in Settings.", "")
 	}
-	if m.chat().modelCursor == len(choices) {
+	if m.chat().ModelCursor == len(choices) {
 		selectedRow = len(lines)
 	}
-	lines = append(lines, choiceLine("Manage in Settings", m.chat().modelCursor == len(choices), width))
-	return scrollSelection(lines, selectedRow, height)
-}
-
-func choiceLine(label string, active bool, width int) string {
-	prefix := "  "
-	style := lipgloss.NewStyle().Width(width)
-	if active {
-		prefix = "› "
-		style = selected.Background(highlight).Width(width)
-	}
-	return style.Render(clipped(prefix+oneLine(label), width))
-}
-
-func scrollSelection(lines []string, selectedRow, height int) string {
-	if height <= 0 {
-		return ""
-	}
-	start := max(0, selectedRow-height+min(3, height))
-	start = min(start, max(0, len(lines)-height))
-	return strings.Join(lines[start:min(len(lines), start+height)], "\n")
+	lines = append(lines, ui.MouseChoice(ui.ChoiceLine("Manage in Settings", m.chat().ModelCursor == len(choices), width), len(choices), "settings"))
+	return ui.ScrollSelection(lines, selectedRow, height)
 }

@@ -1,7 +1,6 @@
 package app
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -10,8 +9,17 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/simjay/plous/internal/kubeconfig"
-	"github.com/simjay/plous/internal/kubernetes"
+	backend "github.com/simjay/plous/internal/ai/agent"
+	"github.com/simjay/plous/internal/ai/history"
+	"github.com/simjay/plous/internal/app/activity"
+	appchat "github.com/simjay/plous/internal/app/chat"
+	appcode "github.com/simjay/plous/internal/app/code"
+	"github.com/simjay/plous/internal/app/monitor"
+	appsettings "github.com/simjay/plous/internal/app/settings"
+	kubecommon "github.com/simjay/plous/internal/integrations/kubernetes/common"
+	kubernetes "github.com/simjay/plous/internal/integrations/kubernetes/monitor"
+	diffview "github.com/simjay/plous/internal/ui/diff"
+	textview "github.com/simjay/plous/internal/ui/text"
 	"github.com/simjay/plous/internal/workspace"
 )
 
@@ -21,79 +29,132 @@ const (
 )
 
 var modes = []string{"Overview", "Explore", "Activity"}
-var toolTypes = []string{"kubernetes", "helm", "kustomize", "terraform", "argo", "kargo"}
-var toolNames = map[string]string{"kubernetes": "Kubernetes", "helm": "Helm", "kustomize": "Kustomize", "terraform": "Terraform", "argo": "Argo", "kargo": "Kargo"}
 
 type session struct {
-	Version      int                          `json:"version"`
-	Workspace    string                       `json:"workspace"`
-	Connection   string                       `json:"connection"`
-	Tool         string                       `json:"tool"`
-	Mode         int                          `json:"mode"`
-	Focus        int                          `json:"focus"`
-	LeftHidden   bool                         `json:"left_hidden,omitempty"`
-	RightHidden  bool                         `json:"right_hidden,omitempty"`
-	TreeKey      string                       `json:"tree_key"`
-	Expanded     map[string]bool              `json:"expanded"`
-	AutoExpanded map[string]bool              `json:"auto_expanded,omitempty"`
-	Drafts       map[string]string            `json:"drafts"`
-	Positions    map[string]int               `json:"positions"`
-	ChatIDs      map[string]string            `json:"chat_ids,omitempty"`
-	Explore      map[string]explorePreference `json:"explore,omitempty"`
+	GitOps        map[string]gitOpsPreference          `json:"gitops,omitempty"`
+	Code          map[string]appcode.CodePreference    `json:"code,omitempty"`
+	Version       int                                  `json:"version"`
+	Workspace     string                               `json:"workspace"`
+	Connection    string                               `json:"connection"`
+	Tool          string                               `json:"tool"`
+	Mode          int                                  `json:"mode"`
+	Focus         int                                  `json:"focus"`
+	LeftHidden    bool                                 `json:"left_hidden,omitempty"`
+	RightHidden   bool                                 `json:"right_hidden,omitempty"`
+	AssistantSize assistantSize                        `json:"assistant_size,omitempty"`
+	TreeKey       string                               `json:"tree_key"`
+	Expanded      map[string]bool                      `json:"expanded"`
+	AutoExpanded  map[string]bool                      `json:"auto_expanded,omitempty"`
+	Drafts        map[string]string                    `json:"drafts"`
+	Positions     map[string]int                       `json:"positions"`
+	ChatIDs       map[string]string                    `json:"chat_ids,omitempty"`
+	Explore       map[string]monitor.ExplorePreference `json:"explore,omitempty"`
+	Helm          map[string]monitor.HelmPreference    `json:"helm,omitempty"`
+	Kustomize     map[string]appcode.LegacyPreference  `json:"kustomize,omitempty"`
 }
 
 type autosaveMsg struct{}
 
 type model struct {
-	version                    string
-	dirty                      bool
-	lastSession                []byte
-	width, height, focus, mode int
-	store                      *workspace.Store
-	workspaces                 []workspace.Workspace
-	active, connection, tool   string
-	expanded                   map[string]bool
-	autoExpanded               map[string]bool
-	searches                   [3]*panelSearch
-	treeCursor                 int
-	drafts                     map[string]*editor
-	positions                  map[string]int
-	page                       string
-	settingsOverlay            *settingsOverlay
-	toolSetup                  *toolSetup
-	cursor                     int
-	form                       *form
-	command                    *editor
-	commandFocus               int
-	shortcutPrefix             string
-	help                       *helpState
-	leftHidden, rightHidden    bool
-	viewExpansion              *viewExpansion
-	status                     string
-	loadingFrame               int
-	loadingTickPending         bool
-	contexts                   []kubeconfig.Context
-	chosen                     map[int]bool
-	activityReview             *activityReview
-	changes                    []workspace.Change
-	removeID                   string
-	removeProfile              string
-	detail                     string
-	chatEditing                bool
-	settings                   workspace.Settings
-	chats                      map[string]*chatState
-	chatIDs                    map[string]string
-	run                        *chatRun
-	explore                    *exploreState
-	explorePreferences         map[string]explorePreference
-	exploreGeneration          uint64
-	exploreClosed              bool
-	exploreCatalogs            map[string][]kubernetes.Resource
-	exploreTreeSelection       string
+	uiDone                                                                  chan struct{}
+	uiStopped                                                               bool
+	uiRequests                                                              chan *uiRequest
+	uiPending                                                               *uiRequest
+	uiInputVersion                                                          uint64
+	uiDocument                                                              *uiDocument
+	uiLastView                                                              *backend.ViewRequest
+	uiLastComparison                                                        *diffview.Model
+	currentRoot                                                             bool
+	currentPaths, currentError, currentNotice, historyView, historyViewName string
+	currentCluster                                                          *workspace.Workspace
+	currentDirectory                                                        *workspace.Workspace
+	currentDirectoryError                                                   string
+	currentInventory                                                        kubecommon.ContextInventory
+	currentRequest, currentLoading                                          *currentRequest
+
+	activityUI                   activity.Controller
+	codeUI                       appcode.Controller
+	mouse                        mouseState
+	clipboard                    clipboardAccess
+	clipboardPaste               *clipboardPasteRequest
+	version                      string
+	dirty                        bool
+	lastSession                  []byte
+	persistenceQueue             []*persistenceJob
+	persistenceActive            *persistenceJob
+	persistenceErr               error
+	quitting                     bool
+	width, height, focus, mode   int
+	store                        *workspace.Store
+	history                      *history.Store
+	workspaces                   []workspace.Workspace
+	active, connection, tool     string
+	expanded                     map[string]bool
+	autoExpanded                 map[string]bool
+	searches                     [3]*panelSearch
+	treeCursor                   int
+	drafts                       map[string]*textview.Field
+	positions                    map[string]int
+	page                         string
+	settingsOverlay              *appsettings.SettingsOverlay
+	toolSetup                    *appsettings.ToolSetup
+	cursor                       int
+	form                         *appsettings.Form
+	removeForm                   *appsettings.Form
+	command                      *textview.Field
+	commandFocus                 int
+	shortcutPrefix               string
+	help                         *helpState
+	helpTravel, sourcesTravel    overlayTravel
+	leftHidden, rightHidden      bool
+	agentReturnFocus             int
+	assistantSize                assistantSize
+	viewExpansion                *viewExpansion
+	status                       string
+	loadingFrame                 int
+	loadingTickPending           bool
+	contexts                     []kubecommon.Context
+	chosen                       map[int]bool
+	activityReview               *activity.ActivityReview
+	activityRecord               *activity.ActivityEntry
+	activityListSearch           *panelSearch
+	activityObservations         bool
+	removeID                     string
+	removeProfile                string
+	detail                       string
+	chatEditing                  bool
+	chatSources                  *appchat.ChatSources
+	settings                     workspace.Settings
+	chats                        map[string]*appchat.ChatState
+	chatIDs                      map[string]string
+	run                          *appchat.ChatRun
+	nativeAgent                  *appchat.Native
+	nativeChange                 *nativeAgentChange
+	nativeScroll                 nativeScrollState
+	nativeRequested, nativeFresh bool
+	nativeError                  string
+	chatRestore                  appchat.RestoreController
+
+	kustomizePreferences map[string]appcode.LegacyPreference
+	overviewBack         *overviewReturn
+	overviews            map[string]*overviewView
+	clusterStates        map[string]*clusterState
+	gitOpsViews          map[string]*gitOpsView
+	gitOpsPreferences    map[string]gitOpsPreference
+	gitOpsReturn         *gitOpsReturn
+	helmStates           map[string]*monitor.HelmState
+	helmPreferences      map[string]monitor.HelmPreference
+	operationDetail      *workspace.Operation
+	explore              *monitor.ExploreState
+	explorePreferences   map[string]monitor.ExplorePreference
+	exploreGeneration    uint64
+	exploreClosed        bool
+	exploreCatalogs      map[string][]kubecommon.Resource
+	exploreTreeSelection string
 }
 
-func newModel(store *workspace.Store, version string) (*model, error) {
-	m := &model{version: version, store: store, focus: 1, expanded: map[string]bool{}, drafts: map[string]*editor{}, positions: map[string]int{}}
+func newModel(store *workspace.Store, archive *history.Store, version string) (*model, error) {
+	m := &model{uiRequests: make(chan *uiRequest), uiDone: make(chan struct{}), version: version, store: store, history: archive, mode: 0, focus: 1, agentReturnFocus: 1, expanded: map[string]bool{}, drafts: map[string]*textview.Field{}, positions: map[string]int{}}
 	var err error
 	m.chatIDs = map[string]string{}
 	m.settings, err = store.ReadSettings()
@@ -108,6 +169,7 @@ func newModel(store *workspace.Store, version string) (*model, error) {
 	if err != nil {
 		return nil, err
 	}
+	treeKey := ""
 	if len(data) > 0 {
 		var s session
 		if err = json.Unmarshal(data, &s); err != nil {
@@ -117,13 +179,6 @@ func newModel(store *workspace.Store, version string) (*model, error) {
 			return nil, fmt.Errorf("unsupported session version %d", s.Version)
 		}
 		if s.Version == 1 {
-			// The old third mode was Deployment; Activity moved from fourth to third.
-			switch s.Mode {
-			case 2:
-				s.Mode = 0
-			case 3:
-				s.Mode = 2
-			}
 			for key, value := range s.Positions {
 				if strings.HasSuffix(key, "/Resources") {
 					s.Positions[strings.TrimSuffix(key, "/Resources")+"/Explore"] = value
@@ -135,11 +190,22 @@ func newModel(store *workspace.Store, version string) (*model, error) {
 			m.chatIDs = s.ChatIDs
 		}
 		m.explorePreferences = s.Explore
+		m.helmPreferences = s.Helm
+		m.gitOpsPreferences = s.GitOps
+		m.kustomizePreferences = s.Kustomize
+		m.codeUI.Preferences = s.Code
 		m.active, m.connection, m.tool = s.Workspace, s.Connection, s.Tool
-		m.mode = max(0, min(len(modes)-1, s.Mode))
-		m.focus = max(0, min(2, s.Focus))
+		if m.tool == "kustomize" {
+			m.tool = "manifests"
+		}
+		if m.tool == "tfcode" {
+			m.tool = "manifests"
+		}
 		m.leftHidden, m.rightHidden = s.LeftHidden, s.RightHidden
-		m.ensureVisibleFocus()
+		if !m.rightHidden && (s.AssistantSize == assistantDouble || s.AssistantSize == "main") {
+			// Retired main-area sizes restore with room for both panels.
+			m.assistantSize = assistantDouble
+		}
 		if s.Expanded != nil {
 			m.expanded = s.Expanded
 		}
@@ -151,8 +217,8 @@ func newModel(store *workspace.Store, version string) (*model, error) {
 			}
 		}
 		for id, text := range s.Drafts {
-			e := newEditor(text)
-			e.literal = text != ""
+			e := textview.NewField(text)
+			e.Literal = text != ""
 			m.drafts[id] = &e
 		}
 		if m.current() == nil {
@@ -164,26 +230,40 @@ func newModel(store *workspace.Store, version string) (*model, error) {
 			m.connection = ""
 			m.tool = ""
 		}
-		for i, row := range m.treeRows() {
-			if row.key == canonicalTreeKey(s.TreeKey) {
-				m.treeCursor = i
-				break
-			}
-		}
+		treeKey = canonicalTreeKey(s.TreeKey)
 	}
 	if m.active == "" && len(m.workspaces) > 0 && len(data) == 0 {
 		m.active = m.workspaces[0].ID
 		m.expanded[m.active] = true
 	}
+	m.captureCurrentDirectory()
+	m.expanded[m.currentTreeKey()] = true
+	m.restoreCollapsedTree(treeKey)
+	// Restore workspace data without reopening the previous connection's page.
+	m.active, m.connection, m.tool = "", "", ""
+	m.currentRoot = true
+	m.currentRequest = &currentRequest{Select: true, Startup: true}
+	m.nativeRequested = m.externalAgentSelected()
 	m.loadHistory()
 	m.loadChat()
 	return m, nil
 }
-func (m *model) Init() tea.Cmd { return tea.Batch(autosave(), m.syncExplore(), m.syncLoading()) }
+
+func (m *model) Init() tea.Cmd {
+	return tea.Batch(waitUI(m.uiRequests, m.uiDone), autosave(), currentTick(), m.syncCurrent(), m.syncExplore(), m.syncOverview(), m.syncClusters(), m.syncGitOps(), m.syncHelm(), m.syncCode(), m.syncLoading(), m.syncChatRestore(), m.syncActivity())
+}
+
 func autosave() tea.Cmd {
 	return tea.Tick(500*time.Millisecond, func(time.Time) tea.Msg { return autosaveMsg{} })
 }
+
 func (m *model) current() *workspace.Workspace {
+	if m.currentDirectory != nil && m.currentDirectory.ID == m.active {
+		return m.currentDirectory
+	}
+	if m.currentCluster != nil && m.currentCluster.ID == m.active {
+		return m.currentCluster
+	}
 	for i := range m.workspaces {
 		if m.workspaces[i].ID == m.active {
 			return &m.workspaces[i]
@@ -191,9 +271,30 @@ func (m *model) current() *workspace.Workspace {
 	}
 	return nil
 }
+
 func (m *model) currentConnection() *workspace.Connection {
-	w := m.current()
-	if w != nil {
+	return m.connectionView(m.savedConnection())
+}
+
+// Visible context must not capture credentials or initialize connections.
+func (m *model) connectionView(c *workspace.Connection) *workspace.Connection {
+	if c != nil && monitorCluster(c.Tool) && (m.tool == "kubernetes" || m.tool == "helm" || gitOpsTool(m.tool)) {
+		copy := *c
+		copy.Tool = m.tool
+		if driver := m.helmDriver(m.active, *c); m.tool == "helm" && driver != c.Settings["driver"] {
+			copy.Settings = maps.Clone(c.Settings)
+			if copy.Settings == nil {
+				copy.Settings = map[string]string{}
+			}
+			copy.Settings["driver"] = driver
+		}
+		return &copy
+	}
+	return c
+}
+
+func (m *model) selectedConnection() *workspace.Connection {
+	if w := m.current(); w != nil {
 		for i := range w.Connections {
 			if w.Connections[i].ID == m.connection {
 				return &w.Connections[i]
@@ -202,67 +303,25 @@ func (m *model) currentConnection() *workspace.Connection {
 	}
 	return nil
 }
-func (m *model) draft() *editor {
-	if m.drafts[m.active] == nil {
-		e := newEditor("")
-		m.drafts[m.active] = &e
+
+func (m *model) savedConnection() *workspace.Connection {
+	c := m.selectedConnection()
+	if c != nil && monitorCluster(c.Tool) && !c.TargetCaptured {
+		c.TargetCaptured = true
+		c.Target, _ = kubecommon.ResolveTarget(clusterSettings(*c)["kubeconfig"], c.Settings["context"], c.Settings["namespace"])
 	}
-	return m.drafts[m.active]
+	return c
 }
-func (m *model) saveSession() error {
-	if m.store == nil {
-		return nil
+
+func (m *model) draft() *textview.Field {
+	key := m.conversationScope()
+	if m.drafts[key] == nil {
+		e := textview.NewField("")
+		m.drafts[key] = &e
 	}
-	if err := m.flushChats(); err != nil {
-		return err
-	}
-	s := session{ChatIDs: m.chatIDs, Version: 2, Workspace: m.active, Connection: m.connection, Tool: m.tool, Mode: m.mode, Focus: m.focus, Expanded: m.expanded, Drafts: map[string]string{}, Positions: m.positions}
-	s.LeftHidden, s.RightHidden = m.leftHidden, m.rightHidden
-	s.Explore = m.explorePreferences
-	s.AutoExpanded = m.autoExpanded
-	rows := m.treeRows()
-	if m.treeCursor >= 0 && m.treeCursor < len(rows) {
-		s.TreeKey = rows[m.treeCursor].key
-	}
-	if search := m.searches[0]; search != nil {
-		s.TreeKey = search.treeKey
-	}
-	if search := m.searches[1]; search != nil && search.kind == "activity" {
-		s.Positions = maps.Clone(m.positions)
-		s.Positions[m.viewKey()] = search.cursor
-	}
-	for id, e := range m.drafts {
-		s.Drafts[id] = e.text
-	}
-	data, err := json.Marshal(s)
-	if err != nil {
-		return err
-	}
-	if bytes.Equal(data, m.lastSession) {
-		m.dirty = false
-		return nil
-	}
-	if err := m.store.WriteSession(data); err != nil {
-		return err
-	}
-	m.lastSession = data
-	m.dirty = false
-	return nil
+	return m.drafts[key]
 }
-func (m *model) persist() { m.dirty = true }
-func (m *model) loadHistory() {
-	m.changes = nil
-	if m.current() != nil && m.store != nil {
-		changes, err := m.store.History(m.active)
-		if err != nil {
-			m.status = err.Error()
-			return
-		}
-		for i := len(changes) - 1; i >= 0; i-- {
-			m.changes = append(m.changes, changes[i])
-		}
-	}
-}
+
 func (m *model) saveWorkspace(w workspace.Workspace) bool {
 	saved, err := m.store.Save(w, "user")
 	if err != nil {
@@ -271,6 +330,7 @@ func (m *model) saveWorkspace(w workspace.Workspace) bool {
 			m.workspaces = current
 			if saved.ID != "" {
 				m.active = saved.ID
+				m.currentRoot, m.historyView = false, ""
 				m.form = nil
 				m.page = "settings"
 				m.cursor = 0
@@ -291,9 +351,10 @@ func (m *model) saveWorkspace(w workspace.Workspace) bool {
 		return false
 	}
 	if m.settingsOverlay != nil && m.active != saved.ID {
-		m.settingsOverlay.page, m.settingsOverlay.detail, m.settingsOverlay.cursor = "", "", 0
+		m.settingsOverlay.Page, m.settingsOverlay.Detail, m.settingsOverlay.Cursor = "", "", 0
 	}
 	m.active = saved.ID
+	m.currentRoot, m.historyView = false, ""
 	m.expanded[saved.ID] = true
 	if m.connection != "" && m.currentConnection() == nil {
 		m.connection = ""
@@ -305,35 +366,78 @@ func (m *model) saveWorkspace(w workspace.Workspace) bool {
 	m.persist()
 	return true
 }
+
 func (m *model) viewKey() string {
 	return m.active + "/" + m.tool + "/" + m.connection + "/" + modes[m.mode]
 }
+
 func (m *model) selectScope(ws, tool, connection string) {
-	if m.explore != nil && m.explore.action != nil && (ws != m.active || connection != m.connection || tool != m.tool) {
+	if (ws != m.active || connection != m.connection) && !m.canSwitchCurrent() {
+		return
+	}
+	if tool == "kustomize" {
+		tool = "manifests"
+	}
+	if m.explore != nil && m.explore.Action != nil && (ws != m.active || connection != m.connection || tool != m.tool) {
 		m.status = "Finish or cancel the open resource action first."
 		return
 	}
-	if ws != m.active || connection != m.connection {
+	m.gitOpsReturn = nil
+	changedConnection := ws != m.active || connection != m.connection
+	if changedConnection {
 		m.stopExplore()
 		if m.explore != nil {
-			m.explore.key = ""
-			m.explore.requested = ""
-			m.explore.pendingCommand = ""
+			m.explore.Key = ""
+			m.explore.Requested = ""
+			m.explore.PendingCommand = ""
 		}
 	}
 	m.settingsOverlay = nil
 	m.toolSetup = nil
 	m.active, m.tool, m.connection = ws, tool, connection
+	m.currentRoot = workspace.IsCurrentScope(ws)
+	m.historyView = ""
 	m.page = ""
 	m.form = nil
 	m.command = nil
 	m.detail = ""
 	m.status = ""
-	m.loadHistory()
+	if changedConnection && connection != "" {
+		m.queueTreeSources(treeRow{kind: "codeview", workspace: ws, connection: connection})
+	}
+	if m.activityUI.Workspace != m.active {
+		m.loadHistory()
+	}
 	m.loadChat()
 }
 
 func (m *model) Update(msg tea.Msg) (next tea.Model, command tea.Cmd) {
+	m.nativeScroll.deferView = false
+	if frame, ok := msg.(*nativeScrollFrame); ok {
+		if m.nativeScroll.pending == frame && m.nativeAgent == frame.session {
+			m.nativeScroll.pending = nil
+		} else {
+			m.nativeScroll.deferView = true
+		}
+		return m, nil
+	}
+	if tick, ok := msg.(nativeAgentTick); ok && m.nativeAgent == tick.session && !tick.session.Finished && tick.session.Reading() {
+		m.nativeScroll.deferView = true
+		return m, nativeTick(tick.session)
+	}
+	switch msg.(type) {
+	case tea.KeyPressMsg, tea.PasteMsg, tea.MouseMsg, tea.BlurMsg, tea.WindowSizeMsg:
+		m.cancelClipboardPaste()
+		_, mouse := msg.(tea.MouseMsg)
+		if m.focus != 2 || mouse {
+			m.uiInputVersion++
+		}
+	}
+	if wheel, ok := msg.(tea.MouseWheelMsg); ok && m.nativeScrollWheel(wheel) {
+		return m, m.updateMouse(wheel)
+	}
+	m.nativeScroll.pending = nil
+	m.nativeScroll.onlyNative = false
 	// Animation ticks only redraw; they must not start requests or change navigation.
 	if _, ok := msg.(loadingTickMsg); ok {
 		m.loadingTickPending = false
@@ -343,140 +447,296 @@ func (m *model) Update(msg tea.Msg) (next tea.Model, command tea.Cmd) {
 		}
 		return m, nil
 	}
-	treeKey := ""
+	var treePath []string
 	switch msg.(type) {
-	case exploreConnected, exploreUpdate, exploreDetailResult, exploreLogEvent, namespaceResult:
+	case clusterDiscoveryResult, helmDetectionResult, monitor.ExploreConnected, monitor.ExploreUpdate, monitor.ExploreDetailResult, monitor.ExploreLogEvent, monitor.ExploreUsageResult, monitor.NamespaceResult, appcode.CodeResult:
 		rows := m.treeRows()
 		if m.treeCursor >= 0 && m.treeCursor < len(rows) {
-			treeKey = rows[m.treeCursor].key
+			parents := make(map[string]string, len(rows))
+			for _, row := range rows {
+				parents[row.key] = row.parent
+			}
+			for key := rows[m.treeCursor].key; key != ""; key = parents[key] {
+				treePath = append(treePath, key)
+			}
 		}
 	}
+	previousFocus := m.focus
 	defer func() {
+		if previousFocus != 2 && m.focus == 2 {
+			m.agentReturnFocus = previousFocus
+		}
+		command = tea.Batch(command, m.syncNativeAgent(), m.syncCurrent(), m.syncQuit(), m.syncPersistence(), m.syncDirectoryPicker())
 		m.syncViewExpansion()
 		m.resizeResourceTerminal()
+		m.resizeNativeAgent()
 		m.clearStaleSearches()
-		command = tea.Batch(command, m.syncExplore(), m.syncResourceAction())
+		command = tea.Batch(command, m.syncExplore(), m.syncResourceAction(), m.syncOverview(), m.syncClusters(), m.syncGitOps(), m.syncHelm(), m.syncCode())
+		if m.explore != nil && m.explore.Usage != nil {
+			m.explore.Usage.ReconcileCharts(time.Now())
+		}
 		command = tea.Batch(command, m.syncLoading())
+		command = tea.Batch(command, m.syncChatEvidence(), m.syncChatFind(), m.syncChatRestore(), m.syncActivity())
 		m.syncExploreTree()
-		if treeKey != "" {
-			for i, row := range m.treeRows() {
-				if row.key == treeKey {
-					m.treeCursor = i
+		if len(treePath) > 0 {
+			rows := m.treeRows()
+			m.treeCursor = max(0, min(m.treeCursor, len(rows)-1))
+			for _, key := range treePath {
+				found := false
+				for i, row := range rows {
+					if row.key == key {
+						m.treeCursor, found = i, true
+						break
+					}
+				}
+				if found {
 					break
 				}
 			}
 		}
 	}()
 	switch msg := msg.(type) {
-	case resourceProgressResult:
+	case *uiRequest:
+		return m, tea.Batch(waitUI(m.uiRequests, m.uiDone), m.receiveUI(msg))
+	case uiLoaded:
+		m.applyUI(msg)
+		return m, nil
+	case overviewResult:
+		m.applyOverview(msg)
+		return m, nil
+	case overviewUsageResult:
+		m.applyOverviewUsage(msg)
+		return m, nil
+	case overviewUsagePoll:
+		if msg.View.UsageRun == msg.Run && msg.View.UsagePoll {
+			msg.View.UsagePoll = false
+			if m.overviewVisible() && m.overviewCurrent() == msg.View && msg.View.UsageCancel == nil && msg.View.Cluster.Client != nil {
+				return m, m.syncOverviewUsage(msg.View)
+			}
+		}
+		return m, nil
+	case overviewInspectResult:
+		m.applyOverviewInspect(msg)
+		return m, nil
+	case overviewPoll:
+		if msg.View.Run == msg.Run && msg.View.Poll {
+			msg.View.Poll = false
+			if m.overviewVisible() && m.overviewCurrent() == msg.View && msg.View.Cancel == nil && msg.View.Cluster.Client != nil {
+				return m, m.readOverview(msg.View)
+			}
+		}
+		return m, nil
+	case helmDetectionResult:
+		m.applyHelmDetection(msg)
+		return m, nil
+	case clusterDiscoveryResult:
+		m.applyClusterDiscovery(msg)
+		return m, nil
+	case gitOpsResult:
+		m.applyGitOpsResult(msg)
+		return m, nil
+	case gitOpsResourceResult:
+		m.applyGitOpsResource(msg)
+		return m, nil
+	case gitOpsNamespaceResult:
+		m.applyGitOpsNamespaces(msg)
+		return m, nil
+	case gitOpsPoll:
+		if msg.View.Poll == msg.Run && msg.View.PollPending {
+			msg.View.PollPending = false
+			if m.gitOpsVisible() && m.gitOpsCurrent() == msg.View && msg.View.Cancel == nil && msg.View.Namespaces == nil && !msg.View.State.FilterInput() {
+				if msg.View.State.Detail != nil {
+					msg.View.State.Pending = &monitor.GitOpsAction{Kind: "detail", Ref: msg.View.State.Detail.Ref}
+				} else {
+					msg.View.State.Loaded = false
+				}
+			}
+		}
+		return m, nil
+	case appsettings.DirectoryResult:
+		m.applyDirectoryResult(msg)
+		return m, nil
+	case activity.ActivityResult:
+		m.applyActivity(msg)
+		return m, nil
+	case tea.MouseMsg:
+		return m, m.updateMouse(msg)
+	case appchat.ChatRestoreResult:
+		m.updateChatRestore(msg)
+		return m, nil
+	case chatFindResult:
+		m.updateChatFind(msg)
+		return m, nil
+	case appchat.ChatEvidenceResult:
+		msg.Evidence.Records, msg.Evidence.Err, msg.Evidence.Loaded = msg.Records, msg.Err, true
+		if s := m.chatSources; s != nil && s.Evidence == msg.Evidence {
+			s.List = len(msg.Records) > 1
+		}
+		return m, nil
+	case appchat.ChatSourceDocumentResult:
+		return m, m.updateChatSourceDocument(msg)
+	case monitor.HelmNamespaceResult:
+		m.updateHelmNamespaceResult(msg)
+		return m, nil
+	case appcode.CodeResult:
+		return m, m.updateCodeResult(msg)
+
+	case monitor.HelmResult:
+		m.updateHelmResult(msg)
+		return m, nil
+	case monitor.ResourceProgressResult:
 		m.updateResourceProgress(msg)
 		return m, nil
-	case resourceActionResult:
+	case monitor.ResourceActionResult:
 		m.updateResourceActionResult(msg)
 		return m, nil
-	case resourceTerminalTick:
-		if m.explore != nil && m.explore.terminal == msg.terminal && !msg.terminal.done {
-			return m, terminalTick(msg.terminal)
+	case monitor.ResourceTerminalTick:
+		if m.explore != nil && m.explore.Terminal == msg.Terminal && !msg.Terminal.Done {
+			return m, monitor.TerminalTick(msg.Terminal)
 		}
 		return m, nil
-	case resourceTerminalResult:
-		if m.explore != nil && m.explore.terminal == msg.terminal {
+	case monitor.ResourceTerminalResult:
+		if m.explore != nil && m.explore.Terminal == msg.Terminal {
 			var client *kubernetes.Client
-			if msg.terminal.launch != nil {
-				client = msg.terminal.launch.client
+			if msg.Terminal.Launch != nil {
+				client = msg.Terminal.Launch.Client
 			}
-			msg.terminal.done, msg.terminal.captured, msg.terminal.err = true, false, client.ExecErrorText(msg.err)
-			if msg.terminal.review == nil {
-				msg.terminal.beginReview()
+			msg.Terminal.Done, msg.Terminal.Captured, msg.Terminal.Err = true, false, client.ExecErrorText(msg.Err)
+			if msg.Terminal.Review == nil {
+				msg.Terminal.BeginReview()
 			}
 		}
 		return m, nil
-	case exploreConnected, exploreUpdate, exploreDetailResult, exploreLogEvent, namespaceResult:
+	case monitor.ExploreConnected, monitor.ExploreUpdate, monitor.ExploreDetailResult, monitor.ExploreLogEvent, monitor.ExploreUsageResult, monitor.NamespaceResult:
 		return m, m.updateExploreMessage(msg)
-	case chatEvent:
+	case persistenceResult:
+		return m, m.applyPersistence(msg)
+	case appchat.ChatEvent:
 		return m, m.updateChatEvent(msg)
+	case currentResult:
+		m.applyCurrent(msg)
+		return m, nil
+	case currentPoll:
+		if m.currentLoading == nil && m.currentRequest == nil {
+			m.requestCurrent("", false)
+		}
+		return m, currentTick()
 	case autosaveMsg:
 		if m.dirty {
-			if err := m.saveSession(); err != nil {
+			if err := m.queueSession(); err != nil {
 				m.status = "Could not save session: " + err.Error()
 			}
 		}
 		return m, autosave()
+	case nativeAgentTick:
+		if m.nativeAgent == msg.session && !msg.session.Finished {
+			return m, nativeTick(msg.session)
+		}
+		return m, nil
+	case nativeAgentResult:
+		msg.session.SaveErr, msg.session.Save = msg.saveErr, msg.save
+		if msg.saveErr != nil && m.quitting {
+			m.persistenceErr = msg.saveErr
+		}
+		msg.session.Finished = true
+		msg.session.Captured = false
+		if msg.err != nil {
+			msg.session.Err = msg.err.Error()
+		}
+		if m.nativeAgent == msg.session {
+			m.status = msg.session.Kind.Label() + " session ended. cc Resume · :C New session"
+			if msg.err != nil {
+				m.status = msg.err.Error()
+			}
+			if msg.saveErr != nil {
+				m.status = "Evidence save failed. :X retries the save."
+			}
+		}
+		m.finishNativeAgentChange(msg.session)
+		return m, nil
 	case tea.WindowSizeMsg:
+		m.mouse.reset()
+		m.mouse.spans = nil
 		m.width, m.height = msg.Width, msg.Height
+		m.ensureVisibleFocus()
 		m.clearDocumentPrefix()
 		m.resizeResourceTerminal()
 		m.shortcutPrefix = ""
 		return m, nil
 	case tea.BlurMsg:
+		m.mouse.reset()
 		m.clearDocumentPrefix()
 		m.shortcutPrefix = ""
 		return m, nil
+	case clipboardCopyResult:
+		if msg.native {
+			m.status = "Copied to clipboard."
+			return m, nil
+		}
+		m.status = "Sent to the terminal clipboard. Clipboard support depends on your terminal."
+		return m, tea.SetClipboard(msg.fallback)
+	case clipboardPasteResult:
+		m.finishClipboardPaste(msg)
+		return m, nil
 	case tea.PasteMsg:
-		m.shortcutPrefix = ""
-		if m.workspacePaste(msg.Content) {
-			return m, nil
-		}
-		if m.resourceTerminalVisible() && m.explore.terminal.captured {
-			m.explore.terminal.emulator.Paste(msg.Content)
-			return m, nil
-		}
-		if m.resourceActionVisible() {
-			a := m.explore.action
-			if !a.busy && (slices.Contains([]string{"scale", "export"}, a.stage) || a.stage == "execcommand" && a.execEditing) {
-				a.input.insert(msg.Content, a.stage == "edit")
-			}
-			return m, nil
-		}
-		if m.tooSmall() || m.help != nil || (m.command != nil && m.focus == 1) {
-			return m, nil
-		}
-		// Handle paste before key dispatch so pasted commands stay literal.
-		if search := m.searches[m.focus]; search != nil {
-			if !search.finished {
-				search.input.insert(msg.Content, false)
-				m.searchChanged()
-			}
-		} else if m.focus == 2 && m.chatEditing && !m.chat().history && !m.chat().models {
-			m.draft().insert(msg.Content, true)
-			m.draft().literal = true
-			m.persist()
-		} else if m.focus == 1 && m.form != nil {
-			before := m.form.fields[0].value.text
-			m.form.paste(msg.Content)
-			if m.form.kind == "kube" && m.form.fields[0].value.text != before {
-				m.invalidateContexts()
-			}
-		} else if m.exploreEditing() && m.explore.input != nil {
-			m.explore.input.insert(msg.Content, false)
-		}
+		m.pasteText(msg.Content)
 		return m, nil
 	case tea.KeyPressMsg:
+		m.mouse.reset()
 		key := msg.String()
-		// Handle exit before editors and the small-terminal fallback.
-		if key == "ctrl+c" {
+		// Native input owns Ctrl+C; other input owners use it to exit.
+		if key == "ctrl+c" && !m.nativeAgentCaptured() {
 			if m.execute("quit") {
 				return m, tea.Quit
 			}
 			return m, nil
 		}
-		if (key == "tab" || key == "shift+tab") && (m.help != nil || (m.settingsOverlay != nil && m.focus == 1)) {
+		// Mac Option-arrows can arrive as Meta-arrows or Escape+b/f.
+		// Escape+b/f is indistinguishable from Alt+B/F.
+		switch key {
+		case "alt+left", "meta+left", "alt+b":
+			m.travelPanel(true)
+			return m, nil
+		case "alt+right", "meta+right", "alt+f":
+			m.travelPanel(false)
+			return m, nil
+		}
+		// Captured Exec retains its existing output-review escape.
+		if key == "ctrl+]" && !m.mainTerminalCaptured() {
+			if !msg.IsRepeat {
+				m.toggleAgentFocus()
+			}
+			return m, nil
+		}
+		if m.nativeAgentCaptured() {
+			return m, m.nativeAgentKey(msg)
+		}
+		if handled, cmd := m.clipboardKey(msg); handled {
+			return m, cmd
+		}
+		if key == "esc" && m.clearInputSelection() {
+			return m, nil
+		}
+		if (key == "tab" || key == "shift+tab") && (m.helpVisible() || m.chatSourcesVisible() || (m.settingsOverlay != nil && m.focus == 1)) {
 			m.shortcutPrefix = ""
 			return m, nil
+		}
+		if m.chatSourcesVisible() && !m.helpVisible() && !m.commandFocused() && !m.tooSmall() {
+			return m, m.chatSourcesKey(msg)
 		}
 		if key == "esc" && m.restoreExpandedOnEscape() {
 			return m, nil
 		}
-		if handled, cmd := m.workspaceKey(msg); handled {
+		if handled, cmd := m.featureKey(msg); handled {
 			return m, cmd
 		}
 		if m.tooSmall() {
 			m.shortcutPrefix = ""
 			return m, m.updateSmall(msg)
 		}
-		if m.resourceActionVisible() && m.command == nil && !m.documentActive() && !m.valueDocumentActive() {
-			a := m.explore.action
-			if !a.busy && (!slices.Contains([]string{"edit", "scale", "export", "execcommand"}, a.stage) || a.stage == "execcommand" && !a.execEditing) {
+		if m.resourceActionVisible() && !m.commandFocused() && !m.documentActive() && !m.valueDocumentActive() {
+			a := m.explore.Action
+			if !a.Busy && (!slices.Contains([]string{"edit", "scale", "export", "execcommand"}, a.Stage) || a.Stage == "execcommand" && !a.ExecEditing) {
 				if m.updateShortcut(msg) {
 					m.persist()
 					return m, nil
@@ -489,24 +749,17 @@ func (m *model) Update(msg tea.Msg) (next tea.Model, command tea.Cmd) {
 			m.shortcutPrefix = ""
 			return m, m.updateResourceActionKey(msg)
 		}
-		if key == "tab" || key == "shift+tab" {
-			if m.exploreEditing() && m.explore.picker != "" {
-				m.shortcutPrefix = ""
-				return m, nil
-			}
-			m.cycleFocus(key == "shift+tab")
-			m.status = ""
-			m.persist()
-			return m, nil
-		}
-		if m.command != nil && m.focus == 1 {
+		if m.commandFocused() {
 			m.shortcutPrefix = ""
+			if key == "esc" || key == "enter" {
+				m.unparkOverlays()
+			}
 			switch key {
 			case "esc":
 				m.command = nil
 				m.focus = m.commandFocus
 			case "enter":
-				cmd := strings.TrimSpace(m.command.text)
+				cmd := strings.TrimSpace(m.command.Text)
 				m.command = nil
 				m.focus = m.commandFocus
 				quit := m.execute(cmd)
@@ -515,24 +768,24 @@ func (m *model) Update(msg tea.Msg) (next tea.Model, command tea.Cmd) {
 					return m, tea.Quit
 				}
 			default:
-				m.command.key(msg, false)
+				m.command.Key(msg, false)
 			}
 			return m, nil
 		}
-		if m.help == nil {
-			if s := m.searches[m.focus]; s != nil && (!s.finished || key == "esc" || key == "n" || key == "N") && !(m.focus == 1 && m.settingsOverlay != nil) {
+		if !m.helpVisible() {
+			if s := m.activePanelSearch(m.focus); s.ownsKey(key) {
 				m.shortcutPrefix = ""
 				m.updatePanelSearch(msg)
 				m.persist()
 				return m, nil
 			}
-			if m.focus == 1 && m.form != nil && m.form.index < len(m.form.fields) {
+			if m.focus == 1 && m.form != nil && (m.form.Index < len(m.form.Fields) || m.form.Directory != nil && m.form.Directory.Editing) {
 				m.shortcutPrefix = ""
 				m.updateForm(msg)
 				m.persist()
 				return m, nil
 			}
-			if m.focus == 2 && m.chatEditing && !m.chat().history && !m.chat().models {
+			if m.focus == 2 && m.chatEditing && !m.chat().History && !m.chat().Models {
 				m.shortcutPrefix = ""
 				cmd := m.updateChat(msg)
 				m.persist()
@@ -543,6 +796,12 @@ func (m *model) Update(msg tea.Msg) (next tea.Model, command tea.Cmd) {
 				m.updateExploreInput(msg)
 				return m, nil
 			}
+		}
+		if key == "tab" && m.focus != 2 && !(m.focus == 1 && m.form != nil) {
+			if !msg.IsRepeat {
+				m.toggleTreeFocus()
+			}
+			return m, nil
 		}
 		if m.updateShortcut(msg) {
 			m.persist()
@@ -555,7 +814,7 @@ func (m *model) Update(msg tea.Msg) (next tea.Model, command tea.Cmd) {
 		if key == "/" && m.beginPanelSearch() {
 			return m, nil
 		}
-		if m.help != nil {
+		if m.helpVisible() {
 			m.updateHelp(key)
 		} else if m.focus == 0 {
 			m.updateTree(key)
@@ -573,119 +832,22 @@ func (m *model) Update(msg tea.Msg) (next tea.Model, command tea.Cmd) {
 	return m, nil
 }
 
-func (m *model) beginCommand() {
-	// Tab resumes a command draft; a fresh colon starts a new command.
-	e := newEditor("")
-	m.command = &e
-	m.commandFocus = m.focus
-	m.focus = 1
-	m.status = ""
-}
-
-func (m *model) execute(command string) bool {
-	m.shortcutPrefix = ""
-	if m.editorLocalCommand(command) {
-		return false
-	}
-	command = canonicalCommand(command)
-	if m.viewCommand(command) {
-		return false
-	}
-	if m.explore != nil && m.explore.action != nil && !slices.Contains([]string{"quit", "help", "chat", "newchat", "openchat", "stopchat", "restoreprompt", "sidebar", "aiinteraction"}, command) {
-		m.status = "Finish or cancel the open resource action first."
-		return false
-	}
-	if m.form != nil && (command == "new" || command == "settings" || command == "1" || command == "2" || command == "3") {
-		m.status = "Finish or cancel the open form in the main panel first."
-		return false
-	}
-	switch command {
-	case "1", "2", "3":
-		m.closeHelp()
-		m.closeSettings()
-		m.focus = 1
-		m.mode = int(command[0] - '1')
-		m.page = ""
-		m.detail = ""
-		m.status = ""
-	case "review":
-		if m.form != nil || m.settingsOverlay != nil || !m.openActivityReview() {
-			m.status = "Open an Activity entry to view its changes."
-		} else {
-			m.closeHelp()
-			m.focus = 1
-			m.status = ""
-		}
-	case "new":
-		m.closeHelp()
-		m.beginWorkspace()
-	case "settings":
-		m.closeHelp()
-		m.openSettings()
-	case "help":
-		if m.help == nil {
-			m.help = &helpState{previousFocus: m.focus, section: m.focus}
-		}
-		m.status = ""
-	case "sidebar", "aiinteraction":
-		m.restoreView()
-		hidden, name := &m.leftHidden, "Sidebar"
-		if command == "aiinteraction" {
-			hidden, name = &m.rightHidden, "AI panel"
-		}
-		*hidden = !*hidden
-		m.ensureVisibleFocus()
-		m.status = name + " shown."
-		if *hidden {
-			m.status = name + " hidden."
-		}
-	case "chat", "newchat", "openchat":
-		m.chatCommand(command)
-	case "restoreprompt":
-		m.restoreChatPrompt()
-	case "stopchat":
-		if m.run == nil {
-			m.status = "No AI response is running."
-		} else {
-			m.stopChat()
-			m.status = "AI response stopped. Received text is saved."
-			if err := m.flushChats(); err != nil {
-				m.status = "Could not save response: " + err.Error()
-			}
-		}
-	case "quit":
-		m.stopChat()
-		if err := m.saveSession(); err != nil {
-			m.status = "Cannot save before exit: " + err.Error()
-			return false
-		}
-		m.exploreClosed = true
-		m.stopExplore()
-		return true
-	default:
-		if !m.executeExplore(command) {
-			m.status = "Unknown command. Use :h for available commands."
-		}
-	}
-	return false
-}
-
 func (m *model) tooSmall() bool {
+	if (m.overviewActive() || m.overviewBack != nil) && m.width >= 40 && m.height >= 12 {
+		return false
+	}
 	return m.width > 0 && m.height > 0 && (m.width < minWidth || m.height < minHeight)
 }
 
 // Keep invisible form actions disabled while retaining a visible way to exit.
 func (m *model) updateSmall(k tea.KeyPressMsg) tea.Cmd {
 	key := k.String()
-	if key == "tab" || key == "shift+tab" {
-		m.cycleFocus(key == "shift+tab")
-		return nil
-	}
 	if m.command != nil && m.focus != 1 {
 		return nil
 	}
 	if key == "esc" {
 		if m.command != nil {
+			m.unparkOverlays()
 			m.focus = m.commandFocus
 		}
 		m.command = nil
@@ -698,7 +860,8 @@ func (m *model) updateSmall(k tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	if key == "enter" {
-		cmd := canonicalCommand(strings.TrimSpace(m.command.text))
+		cmd := canonicalCommand(strings.TrimSpace(m.command.Text))
+		m.unparkOverlays()
 		m.command = nil
 		m.focus = m.commandFocus
 		if cmd == "quit" && m.execute(cmd) {
@@ -706,6 +869,6 @@ func (m *model) updateSmall(k tea.KeyPressMsg) tea.Cmd {
 		}
 		return nil
 	}
-	m.command.key(k, false)
+	m.command.Key(k, false)
 	return nil
 }

@@ -7,7 +7,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/simjay/plous/internal/kubernetes"
+	"github.com/simjay/plous/internal/app/monitor"
+	kubecommon "github.com/simjay/plous/internal/integrations/kubernetes/common"
+	kubernetes "github.com/simjay/plous/internal/integrations/kubernetes/monitor"
 )
 
 func treeIndexFor(t *testing.T, m *model, key string) int {
@@ -19,6 +21,92 @@ func treeIndexFor(t *testing.T, m *model, key string) int {
 	}
 	t.Fatalf("tree key %q is not visible", key)
 	return 0
+}
+
+func TestConnectionExpansionKeepsHelmCollapsedUntilOpened(t *testing.T) {
+	for _, action := range []string{"enter", "right", "label", "disclosure"} {
+		t.Run(action, func(t *testing.T) {
+			m := exploreModel(t)
+			m.width, m.height = 200, 50
+			m.clusterFor(m.active, *m.savedConnection()).HelmDriver = "secret"
+			m.syncExploreTree()
+			connection := m.connection
+			helm := connection + "/view/helm"
+			m.setTreeExpanded(connection+"/view/kubernetes", false)
+			m.setTreeExpanded(connection, false)
+			m.focus, m.treeCursor = 0, treeIndexFor(t, m, connection)
+			switch action {
+			case "enter", "right":
+				press(t, m, action)
+			case "label":
+				clickMouse(t, m, "tree", "tree/"+connection)
+			case "disclosure":
+				clickMouse(t, m, "tree", "fold/"+connection)
+			}
+			if !m.expanded[connection] || m.treeRows()[m.treeCursor].key != connection {
+				t.Fatal("connection did not expand at the selected row")
+			}
+			for _, row := range m.treeRows() {
+				if row.kind == "capability" && row.open || row.kind == "helmsection" {
+					t.Fatal("opening the connection also opened a tool branch", row.label)
+				}
+			}
+			clickMouse(t, m, "tree", "fold/"+helm)
+			treeIndexFor(t, m, connection+"/helm/Releases")
+			clickMouse(t, m, "tree", "fold/"+connection)
+			clickMouse(t, m, "tree", "fold/"+connection)
+			if m.treeRows()[treeIndexFor(t, m, helm)].open {
+				t.Fatal("reopening the connection exposed the previously opened Helm sections")
+			}
+			clickMouse(t, m, "tree", "fold/"+helm)
+			treeIndexFor(t, m, connection+"/helm/Releases")
+			if err := m.saveSession(); err != nil {
+				t.Fatal(err)
+			}
+			restored, err := newModel(m.store, m.history, "test")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if restored.expanded[helm] || restored.expanded[connection] {
+				t.Fatal("restart restored an expanded connection or Helm branch")
+			}
+			clickMouse(t, m, "tree", "fold/"+helm)
+			clickMouse(t, m, "tree", "fold/"+connection)
+			clickMouse(t, m, "tree", "fold/"+connection)
+			if m.treeRows()[treeIndexFor(t, m, helm)].open {
+				t.Fatal("reopening the connection discarded the deliberate Helm collapse")
+			}
+		})
+	}
+}
+
+func TestInitialKubernetesDiscoveryKeepsToolBranchesCollapsed(t *testing.T) {
+	m := exploreModel(t)
+	client, resources := m.explore.Client, m.explore.Resources
+	m.explore.Key = ""
+	m.setTreeExpanded(m.connection, false)
+	m.focus, m.treeCursor = 0, treeIndexFor(t, m, m.connection)
+	press(t, m, "enter")
+	if !m.explore.Connecting {
+		t.Fatal("opening the connection did not start discovery")
+	}
+	m.Update(monitor.ExploreConnected{Generation: m.explore.Generation, Client: client, Resources: resources})
+	for _, row := range m.treeRows() {
+		if row.kind == "capability" && row.open || row.kind == "category" || row.kind == "resource" {
+			t.Fatal("background discovery opened a tool branch", row.label)
+		}
+	}
+	if m.explore.Preference.Resource != "pods" || m.explore.Resource.Key() != "pods" {
+		t.Fatal("keeping the tree collapsed changed the main resource view")
+	}
+	m.executeExplore("pods")
+	m.syncExploreTree()
+	if m.expanded[m.connection+"/view/kubernetes"] {
+		t.Fatal("resource navigation reopened a capability closed with its connection")
+	}
+	m.focus, m.treeCursor = 0, treeIndexFor(t, m, m.connection+"/view/kubernetes")
+	press(t, m, "right")
+	treeIndexFor(t, m, m.connection+"/resource/pods")
 }
 
 func TestCategoryExpansionMigrationPreservesFoldsAndCurrentKeys(t *testing.T) {
@@ -67,11 +155,11 @@ func TestConnectionCollapseKeepsCurrentResourceAndSurvivesRestart(t *testing.T) 
 		t.Run(key, func(t *testing.T) {
 			m := exploreModel(t)
 			m.syncExploreTree()
-			m.explore.preference.Filter = "checkout"
+			m.explore.Preference.Filter = "checkout"
 			m.openExploreSelection(1)
-			m.draft().insert("Keep this draft", true)
+			m.draft().Insert("Keep this draft", true)
 			e := m.explore
-			object, stream, preference := e.detail, e.stream, e.preference
+			object, stream, preference := e.Detail, e.Stream, e.Preference
 			connection := m.connection
 			m.focus, m.treeCursor = 0, treeIndexFor(t, m, connection)
 			press(t, m, key)
@@ -87,10 +175,10 @@ func TestConnectionCollapseKeepsCurrentResourceAndSurvivesRestart(t *testing.T) 
 			if row.key != connection || treeDisclosure(row) != "▸ " {
 				t.Fatal("collapse lost the connection cursor or disclosure state")
 			}
-			if m.connection != connection || m.focus != 0 || m.mode != 1 || e.detail != object || e.tab != 1 || e.stream != stream || e.preference != preference || m.draft().text != "Keep this draft" {
+			if m.connection != connection || m.focus != 0 || m.mode != 1 || e.Detail != object || e.Tab != 1 || e.Stream != stream || e.Preference != preference || m.draft().Text != "Keep this draft" {
 				t.Fatal("collapsing the sidebar changed the open resource, scope, or draft")
 			}
-			m.Update(exploreUpdate{stream: stream, snapshot: kubernetes.Snapshot{Status: "Live"}})
+			m.Update(monitor.ExploreUpdate{Stream: stream, Snapshot: kubernetes.Snapshot{Status: "Live"}})
 			m.Update(tea.WindowSizeMsg{Width: 140, Height: 40})
 			if m.expanded[connection] {
 				t.Fatal("background update or resize reopened the connection")
@@ -98,7 +186,7 @@ func TestConnectionCollapseKeepsCurrentResourceAndSurvivesRestart(t *testing.T) 
 			if err := m.saveSession(); err != nil {
 				t.Fatal(err)
 			}
-			restored, err := newModel(m.store, "test")
+			restored, err := newModel(m.store, m.history, "test")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -108,13 +196,15 @@ func TestConnectionCollapseKeepsCurrentResourceAndSurvivesRestart(t *testing.T) 
 				t.Fatal("restart or rediscovery lost the collapsed connection")
 			}
 			press(t, m, "right")
-			if !m.expanded[connection] || m.focus != 0 || e.detail != object {
+			if !m.expanded[connection] || m.focus != 0 || e.Detail != object {
 				t.Fatal("Right did not reopen the connection without losing the resource")
 			}
-			treeIndexFor(t, m, connection+"/resource/pods")
+			if m.treeRows()[treeIndexFor(t, m, connection+"/view/kubernetes")].open {
+				t.Fatal("reopening the connection exposed its previous resource path")
+			}
 			press(t, m, "left")
 			press(t, m, "left")
-			if m.treeRows()[m.treeCursor].key != m.active+"/kubernetes" {
+			if m.treeRows()[m.treeCursor].key != m.active+"/monitor" {
 				t.Fatal("Left on a collapsed connection did not move to its parent")
 			}
 		})
@@ -127,7 +217,7 @@ func TestBranchEnterTogglesWithoutChangingMainMode(t *testing.T) {
 			t.Run(kind+"/"+name, func(t *testing.T) {
 				m := exploreModel(t)
 				m.syncExploreTree()
-				keys := map[string]string{"workspace": m.active, "tool": m.active + "/kubernetes", "connection": m.connection, "category": categoryTreeKey(m.connection, "Workloads")}
+				keys := map[string]string{"workspace": m.active, "tool": m.active + "/monitor", "connection": m.connection, "category": categoryTreeKey(m.connection, "Workloads")}
 				key := keys[kind]
 				m.mode, m.focus = mode, 0
 				m.treeCursor = treeIndexFor(t, m, key)
@@ -158,18 +248,18 @@ func TestBranchArrowsPreserveActiveResourceAndSavedFolds(t *testing.T) {
 		t.Run(kind, func(t *testing.T) {
 			m := exploreModel(t)
 			m.syncExploreTree()
-			keys := map[string]string{"workspace": m.active, "tool": m.active + "/kubernetes", "connection": m.connection, "category": categoryTreeKey(m.connection, "Workloads")}
+			keys := map[string]string{"workspace": m.active, "tool": m.active + "/monitor", "connection": m.connection, "category": categoryTreeKey(m.connection, "Workloads")}
 			key := keys[kind]
 			m.focus, m.treeCursor = 0, treeIndexFor(t, m, key)
-			connection, stream := m.connection, m.explore.stream
+			connection, stream := m.connection, m.explore.Stream
 			press(t, m, "left")
-			if m.expanded[key] || m.connection != connection || m.mode != 1 || m.explore.stream != stream || stream.ctx.Err() != nil {
+			if m.expanded[key] || m.connection != connection || m.mode != 1 || m.explore.Stream != stream || stream.Ctx.Err() != nil {
 				t.Fatal("Left did not fold without interrupting the resource view")
 			}
 			if err := m.saveSession(); err != nil {
 				t.Fatal(err)
 			}
-			restored, err := newModel(m.store, "test")
+			restored, err := newModel(m.store, m.history, "test")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -179,7 +269,7 @@ func TestBranchArrowsPreserveActiveResourceAndSavedFolds(t *testing.T) {
 				t.Fatal("restart or discovery reopened a folded branch")
 			}
 			press(t, m, "right")
-			if !m.expanded[key] || m.connection != connection || m.mode != 1 || m.explore.stream != stream {
+			if !m.expanded[key] || m.connection != connection || m.mode != 1 || m.explore.Stream != stream {
 				t.Fatal("Right changed the active resource")
 			}
 			m.mode = 0
@@ -192,11 +282,11 @@ func TestBranchArrowsPreserveActiveResourceAndSavedFolds(t *testing.T) {
 }
 
 func TestTreeSearchExpandsEveryBranchResult(t *testing.T) {
-	for _, query := range []string{"Shop", "Kubernetes", "test-context", "Workloads"} {
+	for _, query := range []string{"Shop", "Monitor", "test-context", "Workloads"} {
 		for _, open := range []bool{false, true} {
 			m := exploreModel(t)
 			m.syncExploreTree()
-			keys := map[string]string{"Shop": m.active, "Kubernetes": m.active + "/kubernetes", "test-context": m.connection, "Workloads": categoryTreeKey(m.connection, "Workloads")}
+			keys := map[string]string{"Shop": m.active, "Monitor": m.active + "/monitor", "test-context": m.connection, "Workloads": categoryTreeKey(m.connection, "Workloads")}
 			key := keys[query]
 			connection := m.connection
 			m.setTreeExpanded(key, open)
@@ -207,7 +297,15 @@ func TestTreeSearchExpandsEveryBranchResult(t *testing.T) {
 			if !m.expanded[key] || m.searches[0] != nil || m.focus != 0 {
 				t.Fatalf("opening search result %q folded its branch", query)
 			}
-			treeIndexFor(t, m, connection+"/resource/pods")
+			if query == "test-context" && !open {
+				for _, row := range m.treeRows() {
+					if row.kind == "capability" && row.open || row.kind == "resource" {
+						t.Fatal("opening a connection search result exposed its previous tool children")
+					}
+				}
+			} else {
+				treeIndexFor(t, m, connection+"/resource/pods")
+			}
 		}
 	}
 }
@@ -224,23 +322,23 @@ func TestRootEscFocusesNearestVisibleAncestorWithoutChangingExplore(t *testing.T
 			case "connection":
 				want = m.connection
 			case "tool":
-				want = m.active + "/kubernetes"
+				want = m.active + "/monitor"
 			case "workspace":
 				want = m.active
 			}
 			if fold != "" {
 				m.expanded[want] = false
 			}
-			m.explore.preference.Filter = "checkout"
-			m.explore.preference.Selector = "app=checkout"
-			m.explore.scroll = 9
-			preference, selected := m.explore.preference, m.explore.selected
+			m.explore.Preference.Filter = "checkout"
+			m.explore.Preference.Selector = "app=checkout"
+			m.explore.Scroll = 9
+			preference, selected := m.explore.Preference, m.explore.Selected
 			expansion := maps.Clone(m.expanded)
 			m.focusRootSidebar()
 			if m.focus != 0 || m.treeRows()[m.treeCursor].key != want {
 				t.Fatalf("root back-navigation selected %q with focus %d, want %q", m.treeRows()[m.treeCursor].key, m.focus, want)
 			}
-			if m.explore.preference != preference || m.explore.selected != selected || m.explore.scroll != 9 || !maps.Equal(expansion, m.expanded) {
+			if m.explore.Preference != preference || m.explore.Selected != selected || m.explore.Scroll != 9 || !maps.Equal(expansion, m.expanded) {
 				t.Fatal("root back-navigation changed filters, selection, scroll, or deliberate folds")
 			}
 		})
@@ -269,7 +367,7 @@ func TestRootSidebarFocusGuardsVisibilityAndCurrentPanel(t *testing.T) {
 
 func TestTreeHierarchyUsesEqualDepthStepsAndKeepsLongResourceNames(t *testing.T) {
 	m := exploreModel(t)
-	m.explore.resources = append(m.explore.resources, kubernetes.Resource{Name: "horizontalpodautoscalers", Group: "autoscaling", Version: "v2", Kind: "HorizontalPodAutoscaler"})
+	m.explore.Resources = append(m.explore.Resources, kubecommon.Resource{Name: "horizontalpodautoscalers", Group: "autoscaling", Version: "v2", Kind: "HorizontalPodAutoscaler"})
 	m.syncExploreTree()
 	rows := m.treeRows()
 	parent := treeIndexFor(t, m, categoryTreeKey(m.connection, "Workloads"))
@@ -290,7 +388,7 @@ func TestTreeHierarchyUsesEqualDepthStepsAndKeepsLongResourceNames(t *testing.T)
 			if ansi.StringWidth(line) > width {
 				t.Fatalf("resource row exceeds %d cells: %q", width, line)
 			}
-			label.WriteString(strings.TrimSpace(ansi.Cut(line, 11, width)))
+			label.WriteString(strings.TrimSpace(ansi.Cut(line, 3+2*rows[long].depth, width)))
 		}
 		if label.String() != "HorizontalPodAutoscalers" {
 			t.Fatalf("resource name was lost at width %d: %q", width, label.String())
@@ -316,11 +414,11 @@ func TestTreeCursorAndOpenResourceHaveDifferentMarkers(t *testing.T) {
 
 func TestTreeCategoriesFormOneContinuousHierarchy(t *testing.T) {
 	m := exploreModel(t)
-	m.explore.resources = append(m.explore.resources,
-		kubernetes.Resource{Name: "statefulsets", Group: "apps", Version: "v1", Kind: "StatefulSet"},
-		kubernetes.Resource{Name: "services", Version: "v1", Kind: "Service"},
-		kubernetes.Resource{Name: "persistentvolumes", Version: "v1", Kind: "PersistentVolume"},
-		kubernetes.Resource{Name: "events", Version: "v1", Kind: "Event"},
+	m.explore.Resources = append(m.explore.Resources,
+		kubecommon.Resource{Name: "statefulsets", Group: "apps", Version: "v1", Kind: "StatefulSet"},
+		kubecommon.Resource{Name: "services", Version: "v1", Kind: "Service"},
+		kubecommon.Resource{Name: "persistentvolumes", Version: "v1", Kind: "PersistentVolume"},
+		kubecommon.Resource{Name: "events", Version: "v1", Kind: "Event"},
 	)
 	m.syncExploreTree()
 	for _, category := range []string{"Network", "Storage", "Admin"} {
@@ -330,7 +428,7 @@ func TestTreeCategoriesFormOneContinuousHierarchy(t *testing.T) {
 	lines := strings.Split(view, "\n")
 	newRow := -1
 	for i, line := range lines {
-		if strings.Contains(line, "+ New workspace") {
+		if strings.Contains(line, "+ New Workspace") {
 			newRow = i
 			break
 		}
@@ -357,13 +455,13 @@ func TestTreeCategoriesFormOneContinuousHierarchy(t *testing.T) {
 	}
 }
 
-func TestSidebarWidthStaysStableAcrossModes(t *testing.T) {
+func TestSidebarWidthStaysStableAcrossExploreAndActivity(t *testing.T) {
 	m := exploreModel(t)
 	for _, width := range []int{80, 120, 160, 200} {
 		m.width = width
-		m.mode = 0
+		m.mode = 1
 		want := m.panelWidths()[0]
-		for mode := 1; mode < len(modes); mode++ {
+		for mode := 2; mode < len(modes); mode++ {
 			m.mode = mode
 			if got := m.panelWidths()[0]; got != want {
 				t.Fatalf("sidebar width changed between modes: %d to %d", want, got)
@@ -375,35 +473,35 @@ func TestSidebarWidthStaysStableAcrossModes(t *testing.T) {
 func TestEscUnwindsOneExploreLayerPerKey(t *testing.T) {
 	m := exploreModel(t)
 	m.syncExploreTree()
-	m.explore.preference.Filter = "checkout"
+	m.explore.Preference.Filter = "checkout"
 	m.openExploreSelection(0)
-	original := m.explore.detail.DeepCopy()
+	original := m.explore.Detail.DeepCopy()
 	m.openNamespacePicker()
-	m.explore.namespaces.manual = true
+	m.explore.Namespaces.Manual = true
 	press(t, m, "esc")
-	if m.explore.picker != "namespace" || m.explore.namespaces.manual || m.explore.detail == nil || m.focus != 1 {
+	if m.explore.Picker != "namespace" || m.explore.Namespaces.Manual || m.explore.Detail == nil || m.focus != 1 {
 		t.Fatal("manual namespace Esc did not return to the picker alone")
 	}
 	press(t, m, "esc")
-	if m.explore.picker != "" || m.explore.detail == nil || m.focus != 1 {
+	if m.explore.Picker != "" || m.explore.Detail == nil || m.focus != 1 {
 		t.Fatal("namespace picker Esc did not return to the detail alone")
 	}
 	typeText(m, "b")
 	press(t, m, "esc")
-	if m.shortcutPrefix != "" || m.explore.detail == nil || m.focus != 1 {
+	if m.shortcutPrefix != "" || m.explore.Detail == nil || m.focus != 1 {
 		t.Fatal("Esc consumed more than the pending shortcut prefix")
 	}
-	m.explore.trail = []exploreLocation{{preference: m.explore.preference, selected: m.explore.selected, object: original, tab: 1}}
+	m.explore.Trail = []monitor.ExploreLocation{{Preference: m.explore.Preference, Selected: m.explore.Selected, Object: original, Tab: 1}}
 	press(t, m, "esc")
-	if m.explore.detail == nil || m.explore.tab != 1 || len(m.explore.trail) != 0 || m.focus != 1 {
+	if m.explore.Detail == nil || m.explore.Tab != 1 || len(m.explore.Trail) != 0 || m.focus != 1 {
 		t.Fatal("related detail Esc did not restore its parent detail and section")
 	}
 	press(t, m, "esc")
-	if m.explore.detail != nil || m.explore.preference.Filter != "checkout" || m.focus != 1 {
+	if m.explore.Detail != nil || m.explore.Preference.Filter != "checkout" || m.focus != 1 {
 		t.Fatal("top-level detail Esc did not restore the filtered list alone")
 	}
 	press(t, m, "esc")
-	if m.focus != 0 || m.explore.preference.Filter != "checkout" {
+	if m.focus != 0 || m.explore.Preference.Filter != "checkout" {
 		t.Fatal("list Esc did not preserve its committed filter and focus the sidebar")
 	}
 }
@@ -431,15 +529,15 @@ func TestEscAtRootModesAndActivityDetail(t *testing.T) {
 
 func TestEscFromFilterCancelsDraftThenReturnsFocus(t *testing.T) {
 	m := exploreModel(t)
-	m.explore.preference.Filter = "checkout"
+	m.explore.Preference.Filter = "checkout"
 	m.openExploreInput("filter", "unsubmitted")
 	press(t, m, "esc")
-	if m.explore.input != nil || m.explore.preference.Filter != "checkout" || m.focus != 1 {
+	if m.explore.Input != nil || m.explore.Preference.Filter != "checkout" || m.focus != 1 {
 		t.Fatal("filter Esc failed to preserve the committed filter in the list")
 	}
 	m.leftHidden = true
 	press(t, m, "esc")
-	if m.focus != 1 || !m.leftHidden || m.explore.preference.Filter != "checkout" {
-		t.Fatal("root Esc cleared a filter or revealed a hidden sidebar")
+	if m.focus != 0 || m.leftHidden || m.explore.Preference.Filter != "checkout" {
+		t.Fatal("root Esc did not reveal the sidebar with its applied filter preserved")
 	}
 }

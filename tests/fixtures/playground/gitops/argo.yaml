@@ -1,0 +1,122 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: plous-playground
+  namespace: plous-argo
+  labels:
+    plous.dev/gitops-playground: v1
+spec:
+  sourceRepos:
+    - https://stefanprodan.github.io/podinfo
+    - https://github.com/stefanprodan/podinfo
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: plous-argo-demo
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: podinfo-healthy
+  namespace: plous-argo
+  labels:
+    plous.dev/gitops-playground: v1
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: plous-playground
+  source:
+    repoURL: https://stefanprodan.github.io/podinfo
+    chart: podinfo
+    targetRevision: 6.11.2
+    helm:
+      releaseName: argo-healthy
+      valuesObject:
+        replicaCount: 1
+        resources:
+          requests: {cpu: 25m, memory: 32Mi}
+          limits: {memory: 128Mi}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: plous-argo-demo
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: podinfo-degraded
+  namespace: plous-argo
+  labels:
+    plous.dev/gitops-playground: v1
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: plous-playground
+  source:
+    repoURL: https://github.com/stefanprodan/podinfo
+    path: kustomize
+    targetRevision: d77ade33c0ac45b83a674fab93ee304652dfc53e
+    kustomize:
+      namePrefix: argo-degraded-
+      images:
+        - ghcr.io/stefanprodan/podinfo:plous-deliberately-missing
+      patches:
+        - target:
+            kind: HorizontalPodAutoscaler
+            name: podinfo
+          patch: |
+            $patch: delete
+            apiVersion: autoscaling/v2
+            kind: HorizontalPodAutoscaler
+            metadata:
+              name: podinfo
+        - target:
+            kind: Deployment
+            name: podinfo
+          patch: |
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: podinfo
+            spec:
+              replicas: 1
+              template:
+                spec:
+                  containers:
+                    - name: podinfod
+                      resources:
+                        requests: {cpu: 25m, memory: 32Mi}
+                        limits: {cpu: 200m, memory: 128Mi}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: plous-argo-demo
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: podinfo-outofsync
+  namespace: plous-argo
+  labels:
+    plous.dev/gitops-playground: v1
+spec:
+  project: plous-playground
+  source:
+    repoURL: https://stefanprodan.github.io/podinfo
+    chart: podinfo
+    targetRevision: 6.11.2
+    helm:
+      releaseName: argo-manual
+      valuesObject:
+        replicaCount: 1
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: plous-argo-demo

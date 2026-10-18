@@ -1,0 +1,1 @@
+resources: [../../apps/api/base, ../../apps/worker/base, ../../apps/cache/base]

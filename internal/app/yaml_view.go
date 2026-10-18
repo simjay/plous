@@ -4,72 +4,65 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	docedit "github.com/simjay/plous/internal/editor"
-	"github.com/simjay/plous/internal/kubernetes"
-	"github.com/simjay/plous/internal/textview"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"github.com/simjay/plous/internal/app/monitor"
+	kubernetes "github.com/simjay/plous/internal/integrations/kubernetes/monitor"
+	"github.com/simjay/plous/internal/ui"
+	docedit "github.com/simjay/plous/internal/ui/editor"
+	textview "github.com/simjay/plous/internal/ui/text"
 )
-
-type yamlDocument struct {
-	document       *docedit.Model
-	identity, text string
-	revealed       bool
-	source         *unstructured.Unstructured
-	sourceVersion  string
-}
 
 func (m *model) yamlDocumentActive() bool {
 	e := m.explore
-	if e != nil && !e.detailValid && e.detailRun == nil && (e.detailError != "" || e.detailText != "") {
+	if e != nil && !e.DetailValid && e.DetailRun == nil && (e.DetailError != "" || e.DetailText != "") {
 		return false
 	}
-	return m.exploreVisible() && e != nil && e.detail != nil && e.tab == 1 && e.action == nil && e.terminal == nil && e.input == nil && e.picker == ""
+	return m.exploreVisible() && e != nil && e.Detail != nil && e.Tab == 1 && e.Action == nil && e.Terminal == nil && e.Input == nil && e.Picker == ""
 }
 
 func (m *model) yamlDocumentSearching() bool {
-	return m.yamlDocumentActive() && m.syncYAMLDocument().document.Searching
+	return m.yamlDocumentActive() && m.syncYAMLDocument().Document.Searching
 }
 
-func (m *model) syncYAMLDocument() *yamlDocument {
+func (m *model) syncYAMLDocument() *monitor.YamlDocument {
 	e := m.explorer()
-	if e.detail == nil {
+	if e.Detail == nil {
 		return nil
 	}
 	context := ""
 	if connection := m.currentConnection(); connection != nil {
 		context = connection.Settings["context"]
 	}
-	identity := strings.Join([]string{m.active, m.connection, context, e.resource.Key(), e.detail.GetAPIVersion(), e.detail.GetKind(), e.detail.GetNamespace(), e.detail.GetName(), string(e.detail.GetUID())}, "\x00")
-	d := e.yamlDocument
+	identity := strings.Join([]string{m.active, m.connection, context, e.Resource.Key(), e.Detail.GetAPIVersion(), e.Detail.GetKind(), e.Detail.GetNamespace(), e.Detail.GetName(), string(e.Detail.GetUID())}, "\x00")
+	d := e.YamlDocument
 	// API and watch updates replace the captured object. Focus and resize reuse it.
-	version := e.detail.GetResourceVersion()
-	if d != nil && d.identity == identity && d.source == e.detail && d.sourceVersion == version && d.revealed == e.reveal {
+	version := e.Detail.GetResourceVersion()
+	if d != nil && d.Identity == identity && d.Source == e.Detail && d.SourceVersion == version && d.Revealed == e.Reveal {
 		return d
 	}
-	text := kubernetes.YAML(*e.detail, e.reveal)
-	if d == nil || d.identity != identity {
-		d = &yamlDocument{identity: identity, document: docedit.New(text)}
-		d.document.ReadOnly, d.document.Syntax = true, "yaml"
-		d.document.Name = "YAML · " + e.detail.GetName()
-		e.yamlDocument = d
+	text := kubernetes.YAML(*e.Detail, e.Reveal)
+	if d == nil || d.Identity != identity {
+		d = &monitor.YamlDocument{Identity: identity, Document: docedit.New(text)}
+		d.Document.ReadOnly, d.Document.Syntax = true, "yaml"
+		d.Document.Name = "YAML · " + e.Detail.GetName()
+		e.YamlDocument = d
 	}
-	if d.text != text || d.revealed != e.reveal {
-		d.document.RefreshReadOnly(text)
-		if d.text != "" {
-			d.document.Notice = "YAML refreshed; search and selection cleared."
-			if d.revealed != e.reveal {
-				d.document.Notice = "Value visibility changed; search and selection cleared."
+	if d.Text != text || d.Revealed != e.Reveal {
+		d.Document.RefreshReadOnly(text)
+		if d.Text != "" {
+			d.Document.Notice = "YAML refreshed; search and selection cleared."
+			if d.Revealed != e.Reveal {
+				d.Document.Notice = "Value visibility changed; search and selection cleared."
 			}
 		}
-		d.text, d.revealed = text, e.reveal
+		d.Text, d.Revealed = text, e.Reveal
 	}
-	d.source, d.sourceVersion = e.detail, version
-	d.document.Target = context + " · " + e.detail.GetNamespace()
-	if e.resource.Key() == "secrets" {
-		if e.reveal {
-			d.document.Target += " · Values revealed"
+	d.Source, d.SourceVersion = e.Detail, version
+	d.Document.Target = context + " · " + e.Detail.GetNamespace()
+	if e.Resource.Key() == "secrets" {
+		if e.Reveal {
+			d.Document.Target += " · Values revealed"
 		} else {
-			d.document.Target += " · Values hidden"
+			d.Document.Target += " · Values hidden"
 		}
 	}
 	return d
@@ -81,35 +74,35 @@ func (m *model) yamlDocumentBody(width, height int) string {
 		return ""
 	}
 	actions := []textview.Action{{Key: "/", Label: "Find"}, {Key: "z", Label: "Select"}, {Key: "y", Label: "Copy"}, {Key: "E", Label: "Edit"}}
-	if m.explore.resource.Key() == "secrets" {
+	if m.explore.Resource.Key() == "secrets" {
 		label := "Reveal values"
-		if d.revealed {
+		if d.Revealed {
 			label = "Hide values"
 		}
 		actions = append(actions, textview.Action{Key: "v", Label: label})
 	}
-	d.document.Actions = []textview.ActionGroup{{Label: "Read", Actions: actions}, m.documentDisplayActions(d.document)}
-	if m.explore.resource.Key() == "secrets" && height > 1 {
+	d.Document.Actions = []textview.ActionGroup{{Label: "Read", Actions: actions}, m.documentDisplayActions(d.Document)}
+	if m.explore.Resource.Key() == "secrets" && height > 1 {
 		visibility := "Values hidden"
-		if d.revealed {
+		if d.Revealed {
 			visibility = "Values revealed"
 		}
-		return muted.Render(visibility) + "\n" + d.document.ViewEmbedded(width, height-1, workspaceTheme())
+		return ui.Muted.Render(visibility) + "\n" + d.Document.ViewEmbedded(width, height-1, ui.WorkspaceTheme())
 	}
-	return d.document.ViewEmbedded(width, height, workspaceTheme())
+	return d.Document.ViewEmbedded(width, height, ui.WorkspaceTheme())
 }
 
 func (m *model) yamlDocumentKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	if !m.yamlDocumentActive() {
 		return false, nil
 	}
-	d := m.syncYAMLDocument().document
+	d := m.syncYAMLDocument().Document
 	key := msg.String()
 	if !d.Searching {
 		switch key {
 		case "v":
-			if m.explore.resource.Key() == "secrets" {
-				m.explore.reveal = !m.explore.reveal
+			if m.explore.Resource.Key() == "secrets" {
+				m.explore.Reveal = !m.explore.Reveal
 				m.syncYAMLDocument()
 				return true, nil
 			}
@@ -134,19 +127,19 @@ func (m *model) yamlDocumentPaste(text string) bool {
 	if !m.yamlDocumentActive() {
 		return false
 	}
-	m.syncYAMLDocument().document.Paste(text)
+	m.syncYAMLDocument().Document.Paste(text)
 	return true
 }
 
 func (m *model) returnFromExploreYAML() bool {
 	e := m.explorer()
-	if e.tab != 1 || e.yamlOrigin == nil {
+	if e.Tab != 1 || e.YamlOrigin == nil {
 		return false
 	}
-	origin := e.yamlOrigin
-	e.tab, e.scroll = origin.tab, origin.scroll
-	e.relatedCursor = origin.relatedCursor
-	e.yamlOrigin, e.yamlDocument, e.reveal = nil, nil, false
+	origin := e.YamlOrigin
+	e.Tab, e.Scroll = origin.Tab, origin.Scroll
+	e.RelatedCursor = origin.RelatedCursor
+	e.YamlOrigin, e.YamlDocument, e.Reveal = nil, nil, false
 	m.rememberExplore()
 	return true
 }

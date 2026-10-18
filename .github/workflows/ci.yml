@@ -18,7 +18,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
         with:
@@ -30,8 +30,10 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.13'
-      - name: Check formatting, code, unit tests, and terminal journeys
+      - name: Check docs, formatting, code, unit tests, and terminal journeys
         run: make check
+      - name: Check the Go agent acceptance cases
+        run: make eval
       - name: Check for Go data races
         run: make test-race
       - name: Build all distribution archives and verify checksums

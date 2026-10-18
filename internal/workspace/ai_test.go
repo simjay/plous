@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/simjay/plous/internal/ai"
+	ai "github.com/simjay/plous/internal/ai/model"
 )
 
 func TestSettingsRequireExplicitSavedConnections(t *testing.T) {
@@ -91,72 +91,6 @@ func TestSettingsAuditAndConflict(t *testing.T) {
 		t.Fatal("corrupt settings overwritten")
 	}
 }
-func TestChatChronologyCheckpointAndImmutableRequest(t *testing.T) {
-	root := t.TempDir()
-	s, err := Open(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
-	w, err := s.Save(Workspace{Name: "Test"}, "user")
-	if err != nil {
-		t.Fatal(err)
-	}
-	c, err := s.NewConversation(w.ID, "A question")
-	if err != nil {
-		t.Fatal(err)
-	}
-	req := Request{Agent: ai.DefaultConfig(), Prompt: "hello", Context: "metadata"}
-	turn, err := s.StartTurn(w.ID, c.ID, req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	requestPath := filepath.Join(root, "workspaces", w.ID, "conversations", c.ID, "reasoning.jsonl")
-	before, _ := os.ReadFile(requestPath)
-	turn.Response.Text = "partial"
-	if err = s.SaveResponse(w.ID, c.ID, turn.Request.ID, turn.Response); err != nil {
-		t.Fatal(err)
-	}
-	turns, err := s.Turns(w.ID, c.ID)
-	if err != nil || len(turns) != 1 || turns[0].Response.Text != "partial" {
-		t.Fatal(turns, err)
-	}
-	turn.Response.Status = "completed"
-	turn.Response.Text = "complete"
-	if err = s.SaveResponse(w.ID, c.ID, turn.Request.ID, turn.Response); err != nil {
-		t.Fatal(err)
-	}
-	turn.Response.Text = "rewritten"
-	if err = s.SaveResponse(w.ID, c.ID, turn.Request.ID, turn.Response); err == nil {
-		t.Fatal("rewrote terminal response")
-	}
-	after, _ := os.ReadFile(requestPath)
-	if string(after) != string(before) {
-		t.Fatal("request mutated")
-	}
-	list, err := s.Conversations(w.ID)
-	if err != nil || len(list) != 1 || list[0].ID != c.ID {
-		t.Fatal(list, err)
-	}
-	if _, err = s.Turns(w.ID, "../escape"); err == nil {
-		t.Fatal("accepted traversal")
-	}
-	if err = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		info, err := d.Info()
-		if err != nil {
-			return err
-		}
-		if info.Mode().Perm()&0077 != 0 {
-			t.Errorf("permissions on %s: %v", path, info.Mode())
-		}
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-}
 func TestAIStorageRejectsSymlinks(t *testing.T) {
 	root := t.TempDir()
 	s, err := Open(root)
@@ -171,58 +105,9 @@ func TestAIStorageRejectsSymlinks(t *testing.T) {
 	if _, err = s.ReadSettings(); err == nil {
 		t.Fatal("followed settings symlink")
 	}
-	w, err := s.Save(Workspace{Name: "Test"}, "user")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = os.Symlink(outside, filepath.Join(root, "workspaces", w.ID, "conversations")); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = s.Conversations(w.ID); err == nil {
-		t.Fatal("followed chats symlink")
-	}
 	entries, _ := os.ReadDir(outside)
 	if len(entries) != 0 {
 		t.Fatal("modified symlink target")
-	}
-}
-
-func TestGeneralChatStorageAndWorkspaceIsolation(t *testing.T) {
-	s, err := Open(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
-	c, err := s.NewConversation("", "General question")
-	if err != nil || c.WorkspaceID != "" {
-		t.Fatal("general conversation needs no workspace", err)
-	}
-	turn, err := s.StartTurn("", c.ID, Request{Prompt: "Hello"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	turn.Response.Status, turn.Response.Text = "completed", "Answer"
-	if err := s.SaveResponse("", c.ID, turn.Request.ID, turn.Response); err != nil {
-		t.Fatal(err)
-	}
-	turns, err := s.Turns("", c.ID)
-	if err != nil || len(turns) != 1 || turns[0].Response.Text != "Answer" {
-		t.Fatal("general response did not persist", err)
-	}
-	w, err := s.Save(Workspace{Name: "Separate"}, "user")
-	if err != nil {
-		t.Fatal(err)
-	}
-	choices, err := s.Conversations(w.ID)
-	if err != nil || len(choices) != 0 {
-		t.Fatal("general chat leaked into workspace history", err)
-	}
-	if _, err := s.Turns(w.ID, c.ID); err == nil {
-		t.Fatal("workspace opened a general chat")
-	}
-	choices, err = s.Conversations("")
-	if err != nil || len(choices) != 1 || choices[0].ID != c.ID {
-		t.Fatal("general history lost its conversation", err)
 	}
 }
 
@@ -259,5 +144,70 @@ func TestVendorConnectionAndChatSelectionAreStoredSeparately(t *testing.T) {
 	json.Unmarshal(change["after"], &after)
 	if _, exists := after.Providers[0]["model"]; exists {
 		t.Fatal("vendor connection contains a chat model")
+	}
+}
+
+func TestMousePreferenceSurvivesSettingsRevisions(t *testing.T) {
+	s, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	initial, err := s.ReadSettings()
+	if err != nil || initial.MouseDisabled {
+		t.Fatal("missing preference must enable mouse", err)
+	}
+	data, err := json.Marshal(initial)
+	if err != nil || strings.Contains(string(data), "mouse_disabled") {
+		t.Fatal("default changed legacy record encoding", err)
+	}
+	initial.MouseDisabled = true
+	saved, err := s.SaveSettings(initial)
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved.Agent.Model = "test-model"
+	saved.Agent.KeyEnv = "TEST_MOUSE_KEY"
+	saved.Providers = []ai.Config{saved.Agent.Connection()}
+	if _, err = s.SaveSettings(saved); err != nil {
+		t.Fatal(err)
+	}
+	restored, err := s.ReadSettings()
+	if err != nil || !restored.MouseDisabled || restored.Revision != 2 {
+		t.Fatal("AI update lost mouse preference", err)
+	}
+}
+
+func TestMainAgentPreferenceSurvivesRestartWithoutProviders(t *testing.T) {
+	root := t.TempDir()
+	s, err := Open(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings, err := s.ReadSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.MainAgent.Effective() != "plous" {
+		t.Fatal(settings)
+	}
+	settings.MainAgent = "codex"
+	saved, err := s.SaveSettings(settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	s, err = Open(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	restored, err := s.ReadSettings()
+	if err != nil || restored.MainAgent != "codex" || restored.Revision != saved.Revision || len(restored.Providers) != 0 {
+		t.Fatal(restored, err)
+	}
+	restored.MainAgent = "unknown"
+	if _, err = s.SaveSettings(restored); err == nil {
+		t.Fatal("unknown backend accepted")
 	}
 }

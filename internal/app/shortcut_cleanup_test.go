@@ -1,35 +1,37 @@
 package app
 
 import (
+	tea "charm.land/bubbletea/v2"
 	"encoding/json"
+	"github.com/simjay/plous/internal/ai/history"
+	"github.com/simjay/plous/internal/app/monitor"
+	textview "github.com/simjay/plous/internal/ui/text"
+
 	"strings"
 	"testing"
-
-	tea "charm.land/bubbletea/v2"
-	"github.com/simjay/plous/internal/workspace"
 )
 
 func TestRetiredCommandAliasesAndLiteralAllNamespace(t *testing.T) {
 	m := exploreModel(t)
 	for _, command := range []string{"setting", "ac", "lg", "ex", "sl", "rr", "ed", "dl", "ci", "cv", "xy", "un", "nc", "oc", "rp", "rf", "cn", "ya", "de", "ln", "vr", "vd", "ud", "rd", "be", "ce", "ap", "backtoeditor", "closeeditor", "applychange", "validatereview", "viewchanges", "nsp", "stc"} {
 		m.execute(command)
-		if !strings.Contains(m.status, "Unknown command") || m.explore.action != nil || m.settingsOverlay != nil {
+		if !strings.Contains(m.status, "Unknown command") || m.explore.Action != nil || m.settingsOverlay != nil {
 			t.Fatalf("retired alias %q still handled: %s", command, m.status)
 		}
 	}
 	for _, command := range []string{"N all", "pods all"} {
 		m.execute(command)
-		if m.explore.preference.Namespace != "all" {
+		if m.explore.Preference.Namespace != "all" {
 			t.Fatalf("%s did not select literal namespace all", command)
 		}
 	}
 	m.execute("N *")
-	if m.explore.preference.Namespace != "" {
+	if m.explore.Preference.Namespace != "" {
 		t.Fatal("wildcard did not select all namespaces")
 	}
-	for _, action := range resourceActionDefinitions {
-		if actionCommand(action.alias) != action.id || actionCommand(action.command) != action.id {
-			t.Fatalf("lost action %s", action.id)
+	for _, action := range monitor.ResourceActionDefinitions {
+		if actionCommand(action.Alias) != action.Id || actionCommand(action.Command) != action.Id {
+			t.Fatalf("lost action %s", action.Id)
 		}
 	}
 }
@@ -37,7 +39,7 @@ func TestRetiredCommandAliasesAndLiteralAllNamespace(t *testing.T) {
 func TestLogsInterveningInputClearsShortcutPrefix(t *testing.T) {
 	m := exploreModel(t)
 	m.openExploreSelection(4)
-	m.explore.detailValid = true
+	m.explore.DetailValid = true
 	m.podLogViewer().Append("one\ntwo\nthree\n")
 	for _, key := range []string{"down", "pgup", "v", "/"} {
 		typeText(m, "b")
@@ -74,28 +76,30 @@ func TestActionAndReaderShortcutsPersist(t *testing.T) {
 			m, a := documentModel(t)
 			switch view {
 			case "editor actions":
-				a.document.Controls = true
+				a.Document.Controls = true
 			case "exec review":
-				m.explore.action = nil
+				m.explore.Action = nil
 				tm := reviewTerminal(t, 40, 8)
-				tm.beginReview()
-				m.explore.terminal = tm
+				tm.BeginReview()
+				m.explore.Terminal = tm
 			case "action picker":
-				a.stage = "menu"
+				a.Stage = "menu"
 			case "logs":
-				m.explore.action = nil
-				m.explore.tab = 4
+				m.explore.Action = nil
+				m.explore.Tab = 4
 			}
 			if err := m.saveSession(); err != nil {
 				t.Fatal(err)
 			}
 			typeText(m, "b")
 			m.Update(autosaveMsg{})
+			m.drainPersistence()
 			typeText(m, "b")
 			if !m.leftHidden || !m.dirty {
 				t.Fatal("completed shortcut did not schedule autosave")
 			}
 			m.Update(autosaveMsg{})
+			m.drainPersistence()
 			data, err := m.store.ReadSession()
 			if err != nil {
 				t.Fatal(err)
@@ -113,26 +117,26 @@ func TestActionAndReaderShortcutsPersist(t *testing.T) {
 
 func TestCompletedExecEditReplacesShellShortcut(t *testing.T) {
 	m, a := documentModel(t)
-	a.stage, a.input = "execcommand", newEditor("/bin/sh")
+	a.Stage, a.Input = "execcommand", textview.NewField("/bin/sh")
 	tm := reviewTerminal(t, 40, 8)
-	tm.done, tm.launch = true, a
-	tm.beginReview()
-	m.explore.action, m.explore.terminal = nil, tm
+	tm.Done, tm.Launch = true, a
+	tm.BeginReview()
+	m.explore.Action, m.explore.Terminal = nil, tm
 	typeText(m, "s")
-	if m.explore.action != nil || m.shortcutPrefix != "s" {
+	if m.explore.Action != nil || m.shortcutPrefix != "s" {
 		t.Fatal("s bypassed reserved Settings prefix")
 	}
 	press(t, m, "esc")
 	typeText(m, "e")
-	if m.explore.action != a || !a.execEditing || a.previousTerminal != tm {
+	if m.explore.Action != a || !a.ExecEditing || a.PreviousTerminal != tm {
 		t.Fatal("e did not open editable launcher retaining output")
 	}
 	press(t, m, "esc")
-	if a.execEditing {
+	if a.ExecEditing {
 		t.Fatal("Esc did not leave command input")
 	}
 	typeText(m, "hh")
-	if !strings.Contains(m.panelHelpText(1), "Resource action") {
+	if m.panelHelpSection(1).Title != "Exec · Shell / command" || !strings.Contains(m.panelHelpText(1), "Start") {
 		t.Fatal("launcher help not contextual")
 	}
 }
@@ -140,7 +144,7 @@ func TestCompletedExecEditReplacesShellShortcut(t *testing.T) {
 func TestFinishedPanelFindNavigatesWithoutCapturingCommands(t *testing.T) {
 	m, _ := testModel(t)
 	m.focus = 2
-	m.chat().turns = []workspace.Turn{{Request: workspace.Request{Prompt: "needle"}, Response: workspace.Response{Text: strings.Repeat("line\n", 50) + "needle", Status: "completed"}}}
+	m.chat().Turns = []history.Turn{{Request: history.Request{Prompt: "needle"}, Response: history.Response{Text: strings.Repeat("line\n", 50) + "needle", Status: "completed"}}}
 	typeText(m, "/needle")
 	m.chatTranscript(50, 14)
 	press(t, m, "enter")
@@ -158,14 +162,14 @@ func TestFinishedPanelFindNavigatesWithoutCapturingCommands(t *testing.T) {
 	if s.match != 0 {
 		t.Fatal("N did not return to first match")
 	}
-	before := m.chat().scroll
+	before := m.chat().Scroll
 	m.Update(tea.KeyPressMsg{Code: tea.KeyPgDown})
 	m.chatTranscript(50, 14)
-	if m.chat().scroll <= before {
+	if m.chat().Scroll <= before {
 		t.Fatal("retained query pinned the viewport instead of scrolling")
 	}
 	m.Update(tea.PasteMsg{Content: "ignored"})
-	if s.input.text != "needle" {
+	if s.input.Text != "needle" {
 		t.Fatal("navigation paste edited finished query")
 	}
 	typeText(m, "bb")
@@ -194,9 +198,10 @@ func TestHelpUsesUnderlyingViewControls(t *testing.T) {
 	}
 	m.closeHelp()
 	tm := reviewTerminal(t, 40, 8)
-	tm.done = true
-	tm.beginReview()
-	m.explore.terminal = tm
+	tm.Done = true
+	tm.Launch = &monitor.ResourceActionState{Stage: "execcommand"}
+	tm.BeginReview()
+	m.explore.Terminal = tm
 	m.execute("help")
 	text = m.panelHelpText(1)
 	if !strings.Contains(text, "e Edit command") || strings.Contains(text, "r Resume") || strings.Contains(text, "s Shell") {

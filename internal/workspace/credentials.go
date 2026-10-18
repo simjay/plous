@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/simjay/plous/internal/ai"
+	ai "github.com/simjay/plous/internal/ai/model"
 	"golang.org/x/sys/unix"
 )
 

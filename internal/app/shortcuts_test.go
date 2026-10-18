@@ -1,16 +1,15 @@
 package app
 
 import (
+	tea "charm.land/bubbletea/v2"
 	"fmt"
+	"github.com/charmbracelet/x/ansi"
 	"strings"
 	"testing"
-
-	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
 )
 
 func TestDoubleKeyActionsFromEveryPanel(t *testing.T) {
-	for _, key := range []string{"b", "i", "s", "c", "h", "1", "2", "3"} {
+	for _, key := range []string{"b", "i", "s", "c", "h", "f", "1", "2", "3"} {
 		for focus := 0; focus < 3; focus++ {
 			t.Run(fmt.Sprintf("%s%s/from%d", key, key, focus), func(t *testing.T) {
 				m, _ := testModel(t)
@@ -24,7 +23,7 @@ func TestDoubleKeyActionsFromEveryPanel(t *testing.T) {
 				}
 				focusPanel(t, m, focus)
 				typeText(m, key)
-				if m.shortcutPrefix != key || m.focus != focus || m.leftHidden || m.rightHidden || m.chatEditing || m.help != nil || m.page != "" || m.mode != beforeMode {
+				if m.shortcutPrefix != key || m.focus != focus || m.leftHidden || m.rightHidden || m.chatEditing || m.help != nil || m.page != "" || m.mode != beforeMode || m.viewExpansion != nil {
 					t.Fatal("the first key executed an action")
 				}
 				lines := strings.Split(ansi.Strip(m.render()), "\n")
@@ -37,6 +36,10 @@ func TestDoubleKeyActionsFromEveryPanel(t *testing.T) {
 					t.Fatal("completed shortcut changed scope or left a pending command")
 				}
 				switch key {
+				case "f":
+					if !m.viewExpanded() || m.focus != 1 || m.panelWidths() != [3]int{0, m.width, 0} {
+						t.Fatal("ff did not expand and focus main")
+					}
 				case "1", "2", "3":
 					if m.focus != 1 || m.page != "" {
 						t.Fatal("mode shortcut did not focus the main view")
@@ -46,8 +49,8 @@ func TestDoubleKeyActionsFromEveryPanel(t *testing.T) {
 						t.Fatal("bb did not hide the sidebar and repair focus")
 					}
 				case "i":
-					if !m.rightHidden || m.focus == 2 {
-						t.Fatal("ii did not hide AI and repair focus")
+					if m.rightHidden || m.assistantSize != assistantDouble || m.focus != focus {
+						t.Fatal("ii did not expand AI while preserving focus")
 					}
 				case "s":
 					if m.page != "settings" || m.focus != 1 {
@@ -62,7 +65,7 @@ func TestDoubleKeyActionsFromEveryPanel(t *testing.T) {
 						t.Fatal("cc did not enter the composer")
 					}
 					typeText(m, "bb ii ss cc hh 11 22 33 44")
-					if m.draft().text != "bb ii ss cc hh 11 22 33 44" || m.leftHidden || m.rightHidden {
+					if m.draft().Text != "bb ii ss cc hh 11 22 33 44" || m.leftHidden || m.rightHidden {
 						t.Fatal("shortcut letters stopped being literal after entering chat")
 					}
 				}
@@ -115,7 +118,7 @@ func TestDoubleKeyPrefixClearsOnInterveningInput(t *testing.T) {
 	}
 	m, _ := testModel(t)
 	typeText(m, "bii")
-	if m.leftHidden || !m.rightHidden || m.shortcutPrefix != "" {
+	if m.leftHidden || m.assistantSize != assistantDouble || m.shortcutPrefix != "" {
 		t.Fatal("a different shortcut key did not begin a fresh sequence")
 	}
 	typeText(m, "b")
@@ -150,11 +153,11 @@ func TestDoubleKeysStayLiteralInEditors(t *testing.T) {
 			var value string
 			switch editor {
 			case "form":
-				value = m.form.fields[0].value.text
+				value = m.form.Fields[0].Value.Text
 			case "chat":
-				value = m.draft().text
+				value = m.draft().Text
 			case "command":
-				value = m.command.text
+				value = m.command.Text
 			}
 			if value != "bb ii ss cc hh 11 22 33 44" {
 				t.Fatalf("editor changed literal text: %q", value)
@@ -165,14 +168,15 @@ func TestDoubleKeysStayLiteralInEditors(t *testing.T) {
 
 func TestDoubleKeyCommandsPreserveFormsAndReplacePendingCommands(t *testing.T) {
 	m, _ := testModel(t)
+	mode := m.mode
 	createWorkspace(t, m, "Payments")
-	openSettingsItem(t, m, "Rename workspace")
+	openSettingsItem(t, m, "Rename Workspace")
 	typeText(m, " unsaved")
 	f := m.form
 	press(t, m, "enter")
 	for _, sequence := range []string{"ss", "11", "22", "33"} {
 		typeText(m, sequence)
-		if m.form != f || !strings.Contains(m.status, "Finish or cancel") || m.mode != 0 {
+		if m.form != f || !strings.Contains(m.status, "Finish or cancel") || m.mode != mode {
 			t.Fatalf("%s bypassed the unfinished-form guard", sequence)
 		}
 	}
@@ -206,7 +210,7 @@ func TestDoubleKeysInHelpAndHistory(t *testing.T) {
 	if m.help == nil {
 		t.Fatal("prefix cancellation closed Help")
 	}
-	typeText(m, "bbii")
+	typeText(m, "bbiiii")
 	if m.help == nil || !m.leftHidden || !m.rightHidden {
 		t.Fatal("help did not apply visibility changes to the underlying layout")
 	}
@@ -217,18 +221,19 @@ func TestDoubleKeysInHelpAndHistory(t *testing.T) {
 	press(t, m, "esc")
 	mainCommand(t, m, "H")
 	typeText(m, "cc")
-	if m.chat().history || !m.chatEditing {
+	if m.chat().History || !m.chatEditing {
 		t.Fatal("cc from history failed to enter the composer")
 	}
 }
 
 func TestDoubleKeyPrefixDoesNotSurviveRestartOrSmallTerminal(t *testing.T) {
 	m, _ := testModel(t)
+	mode := m.mode
 	typeText(m, "b")
 	if err := m.saveSession(); err != nil {
 		t.Fatal(err)
 	}
-	restored, err := newModel(m.store, "test-version")
+	restored, err := newModel(m.store, m.history, "test-version")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,7 +242,7 @@ func TestDoubleKeyPrefixDoesNotSurviveRestartOrSmallTerminal(t *testing.T) {
 	}
 	m.Update(tea.WindowSizeMsg{Width: 60, Height: 10})
 	typeText(m, "bb iiss cc hh 11 22 33 44")
-	if m.shortcutPrefix != "" || m.leftHidden || m.rightHidden || m.page != "" || m.chatEditing || m.mode != 0 {
+	if m.shortcutPrefix != "" || m.leftHidden || m.rightHidden || m.page != "" || m.chatEditing || m.mode != mode {
 		t.Fatal("small-terminal fallback executed hidden actions")
 	}
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})

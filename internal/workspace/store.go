@@ -3,11 +3,13 @@ package workspace
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	kubecommon "github.com/simjay/plous/internal/integrations/kubernetes/common"
 	"io"
 	"os"
 	"path/filepath"
@@ -23,13 +25,16 @@ import (
 )
 
 type Connection struct {
-	ID       string            `json:"id"`
-	Tool     string            `json:"tool"`
-	Name     string            `json:"name"`
-	Settings map[string]string `json:"settings"`
+	TargetCaptured bool               `json:"-"`
+	Target         *kubecommon.Target `json:"-"`
+	ID             string             `json:"id"`
+	Tool           string             `json:"tool"`
+	Name           string             `json:"name"`
+	Settings       map[string]string  `json:"settings"`
 }
 
 type Workspace struct {
+	OriginScope string       `json:"origin_scope,omitempty"`
 	ID          string       `json:"id"`
 	Name        string       `json:"name"`
 	Revision    uint64       `json:"revision"`
@@ -55,9 +60,13 @@ var (
 )
 
 type Store struct {
-	mu   sync.Mutex
-	root string
-	lock *os.File
+	closers   []func() error
+	closeOnce sync.Once
+	closeErr  error
+	closing   bool
+	mu        sync.Mutex
+	root      string
+	lock      *os.File
 }
 
 // Open takes a process-lifetime lock. Call Close when the application exits.
@@ -110,18 +119,40 @@ func Open(root string) (*Store, error) {
 		s.Close()
 		return nil, err
 	}
+	if _, err := s.SourceIgnore(); err != nil {
+		s.Close()
+		return nil, err
+	}
 	return s, nil
 }
 
 func (s *Store) Close() error {
+	s.closeOnce.Do(func() {
+		s.mu.Lock()
+		s.closing = true
+		closers := append([]func() error(nil), s.closers...)
+		s.mu.Unlock()
+		for i := len(closers) - 1; i >= 0; i-- {
+			s.closeErr = errors.Join(s.closeErr, closers[i]())
+		}
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if s.lock != nil {
+			s.closeErr = errors.Join(s.closeErr, s.lock.Close())
+			s.lock = nil
+		}
+	})
+	return s.closeErr
+}
+
+func (s *Store) AddCloser(close func() error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.lock == nil {
-		return nil
+	if s.lock == nil || s.closing {
+		return ErrClosed
 	}
-	err := s.lock.Close() // Closing the descriptor releases flock, even on error.
-	s.lock = nil
-	return err
+	s.closers = append(s.closers, close)
+	return nil
 }
 
 func (s *Store) List() ([]Workspace, error) {
@@ -240,7 +271,26 @@ func (s *Store) History(workspaceID string) ([]Change, error) {
 	return s.history(workspaceID)
 }
 
+// HistoryContext reads immutable revisions without holding the storage lock
+// across file I/O. A concurrent save publishes a new revision atomically.
+func (s *Store) HistoryContext(ctx context.Context, id string) ([]Change, error) {
+	s.mu.Lock()
+	closed := s.lock == nil
+	s.mu.Unlock()
+	if closed {
+		return nil, ErrClosed
+	}
+	return s.readWorkspaceHistory(ctx, id)
+}
+
 func (s *Store) history(id string) ([]Change, error) {
+	return s.readWorkspaceHistory(context.Background(), id)
+}
+
+func (s *Store) readWorkspaceHistory(ctx context.Context, id string) ([]Change, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if !idPattern.MatchString(id) {
 		return nil, errors.New("invalid workspace ID")
 	}
@@ -265,6 +315,9 @@ func (s *Store) history(id string) ([]Change, error) {
 	var result []Change
 	var previous *Workspace
 	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if strings.HasPrefix(entry.Name(), ".pending-") {
 			continue // Ignore revisions whose publication did not finish.
 		}
@@ -357,7 +410,7 @@ func validate(w Workspace) error {
 		}
 		ids[c.ID] = true
 		switch c.Tool {
-		case "kubernetes", "helm", "kustomize", "terraform", "argo", "kargo":
+		case "kubernetes", "helm", "kustomize", "code", "terraform", "argo", "kargo":
 		default:
 			return fmt.Errorf("unsupported tool %q", c.Tool)
 		}
@@ -456,4 +509,14 @@ func syncDir(path string) error {
 	}
 	defer dir.Close()
 	return dir.Sync()
+}
+
+// DataRoot identifies storage protected by this profile's process lock.
+func (s *Store) DataRoot() (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.lock == nil || s.closing {
+		return "", ErrClosed
+	}
+	return s.root, nil
 }

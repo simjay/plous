@@ -1,59 +1,29 @@
 package app
 
 import (
-	"cmp"
-	"slices"
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
-	"github.com/simjay/plous/internal/kubernetes"
+	"github.com/simjay/plous/internal/app/monitor"
+	kubernetes "github.com/simjay/plous/internal/integrations/kubernetes/monitor"
+	"github.com/simjay/plous/internal/ui"
 )
 
-var relatedGroups = []string{"Owner", "Managed resources", "Referenced resources", "Selector matches"}
-
-func relatedGroup(ref kubernetes.Reference) int {
-	if ref.Relation == "Owner" {
-		return 0
-	}
-	if strings.Contains(strings.ToLower(ref.Relation), "selector match") {
-		return 3
-	}
-	// A claim or node used by an owned Pod is a reference, not an owned object.
-	if strings.HasPrefix(ref.Relation, "Owned ") && !strings.HasPrefix(ref.Relation, "Owned Pod ") {
-		return 1
-	}
-	return 2
-}
-
-func sortedReferences(refs []kubernetes.Reference) []kubernetes.Reference {
-	refs = slices.Clone(refs)
-	slices.SortStableFunc(refs, func(a, b kubernetes.Reference) int {
-		if n := cmp.Compare(relatedGroup(a), relatedGroup(b)); n != 0 {
-			return n
-		}
-		return cmp.Compare(a.Resource.Kind+"/"+a.Namespace+"/"+a.Name, b.Resource.Kind+"/"+b.Namespace+"/"+b.Name)
-	})
-	return refs
-}
-
-func (m *model) relatedBody(width, height int) string {
+func (m *model) relatedContent(width int) (string, int, int) {
 	e := m.explorer()
-	if len(e.references) == 0 {
+	if len(e.References) == 0 {
 		text := "No related resources found."
-		if e.detailRun != nil && !e.detailLoaded {
+		if e.DetailRun != nil && !e.DetailLoaded {
 			text = m.loading("Loading relationships…")
 		}
-		if e.detailText != "" {
-			text += "\n\n" + e.detailText
+		if e.DetailText != "" {
+			text += "\n\n" + e.DetailText
 		}
-		if m.searches[1] != nil {
-			return text
-		}
-		return styledTextView(text, width, height, e.scroll)
+		return text, 0, 0
 	}
 	columns := []string{"Kind", "Name", "Namespace", "Relationship"}
 	section := kubernetes.DetailSection{Columns: columns}
-	for _, ref := range e.references {
+	for _, ref := range e.References {
 		ns, name := ref.Namespace, ref.Name
 		if ns == "" {
 			ns = "cluster"
@@ -66,33 +36,34 @@ func (m *model) relatedBody(width, height int) string {
 		}
 		section.Rows = append(section.Rows, []string{ref.Resource.Kind, name, ns, ref.Relation})
 	}
-	widths, tabular := detailTableWidths(section, width)
+	widths, tabular := monitor.DetailTableWidths(section, width)
 	tabular = tabular && width >= 72
 	// Keep relationship conditions readable when four columns become too narrow.
 	tabular = tabular && width >= 64
 	var lines []string
 	selectedLine, selectedEnd, group := 0, 0, -1
-	for i, ref := range e.references {
-		next := relatedGroup(ref)
+	for i, ref := range e.References {
+		next := monitor.RelatedGroup(ref)
 		if next != group {
 			if len(lines) > 0 {
 				lines = append(lines, "")
 			}
-			lines = append(lines, summaryHeading(relatedGroups[next], width))
+			lines = append(lines, monitor.SummaryHeading(monitor.RelatedGroups[next], width))
 			if next == 3 {
-				lines = append(lines, muted.Render(clipped("Label matches do not establish ownership.", width)))
+				lines = append(lines, ui.Muted.Render(ui.Clipped("Label matches do not establish ownership.", width)))
 			}
 			if tabular {
-				lines = append(lines, renderDetailTableHeader(columns, widths)...)
+				lines = append(lines, monitor.RenderDetailTableHeader(columns, widths)...)
 			}
 			group = next
 		}
-		active := i == e.relatedCursor
+		rowStart := len(lines)
+		active := i == e.RelatedCursor
 		if active {
 			selectedLine = len(lines)
 		}
 		if tabular {
-			lines = append(lines, renderDetailTableRow(columns, widths, section.Rows[i], false, active)...)
+			lines = append(lines, monitor.RenderDetailTableRow(columns, widths, section.Rows[i], false, active)...)
 		} else {
 			row := section.Rows[i]
 			prefix := "  "
@@ -102,26 +73,49 @@ func (m *model) relatedBody(width, height int) string {
 			text := prefix + row[0] + " / " + row[1] + "\n  " + row[2] + " · " + row[3]
 			text = ansi.Wrap(text, max(1, width), "")
 			if active {
-				text = selected.Render(text)
+				text = ui.Selected.Render(text)
 			}
 			lines = append(lines, strings.Split(text, "\n")...)
+		}
+		for j := rowStart; j < len(lines); j++ {
+			lines[j] = ui.MouseTarget(lines[j], "related/"+ref.Resource.Key()+"/"+ref.Namespace+"/"+ref.Name+"/"+ref.Relation)
 		}
 		if active {
 			selectedEnd = len(lines)
 		}
 	}
-	if e.detailText != "" {
-		lines = append(lines, "", summaryHeading("Unavailable relationships", width), ansi.Wrap(plain(e.detailText), max(1, width), ""))
+	if e.DetailText != "" {
+		lines = append(lines, "", monitor.SummaryHeading("Unavailable relationships", width), ansi.Wrap(ui.Plain(e.DetailText), max(1, width), ""))
 	}
-	text := strings.Join(lines, "\n")
-	if m.searches[1] != nil {
+	return strings.Join(lines, "\n"), selectedLine, selectedEnd
+}
+
+func (m *model) relatedViewport(width, height int) (ui.Viewport, int, string) {
+	text, selectedLine, selectedEnd := m.relatedContent(width)
+	e := m.explore
+	hint := ""
+	if len(e.References) > 0 {
+		hint = "↑↓ Select · Enter Open resource · / Find"
+		if e.DetailText != "" {
+			hint = "↑↓ Select · Enter Open · End Read notes · / Find"
+		}
+		height--
+	}
+	layout := ui.MeasureViewport(text, width, height)
+	offset := max(0, selectedEnd-max(1, height))
+	offset = max(min(offset, selectedLine), e.Scroll)
+	return layout, offset, hint
+}
+
+func (m *model) relatedBody(width, height int) string {
+	if m.activePanelSearch(1) != nil {
+		text, _, _ := m.relatedContent(width)
 		return text
 	}
-	offset := max(0, selectedEnd-max(1, height-1))
-	offset = max(min(offset, selectedLine), e.scroll)
-	hint := "↑↓ Select · Enter Open resource · / Find"
-	if e.detailText != "" {
-		hint = "↑↓ Select · Enter Open · End Read notes · / Find"
+	layout, offset, hint := m.relatedViewport(width, height)
+	text := layout.View(offset)
+	if hint != "" {
+		text += "\n" + ui.Muted.Render(ui.Clipped(hint, width))
 	}
-	return styledTextView(text, width, max(0, height-1), offset) + "\n" + muted.Render(clipped(hint, width))
+	return text
 }

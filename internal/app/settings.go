@@ -1,93 +1,116 @@
 package app
 
 import (
+	lipgloss "charm.land/lipgloss/v2"
 	"fmt"
-	"strings"
-
-	"charm.land/lipgloss/v2"
-	"github.com/simjay/plous/internal/ai"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/simjay/plous/internal/ai/agent"
+	ai "github.com/simjay/plous/internal/ai/model"
+	appsettings "github.com/simjay/plous/internal/app/settings"
+	"github.com/simjay/plous/internal/ui"
+	textview "github.com/simjay/plous/internal/ui/text"
 	"github.com/simjay/plous/internal/workspace"
+	"strings"
 )
-
-type settingsOverlay struct {
-	page, detail  string
-	cursor, focus int
-}
 
 func (m *model) beginSettingsOverlay() {
 	if m.settingsOverlay == nil {
-		m.settingsOverlay = &settingsOverlay{page: m.page, detail: m.detail, cursor: m.cursor, focus: m.focus}
+		m.settingsOverlay = &appsettings.SettingsOverlay{Page: m.page, Detail: m.detail, Cursor: m.cursor, Focus: m.focus}
 	}
 	m.focus = 1
 }
 
 func (m *model) closeSettings() {
+	m.removeForm = nil
 	m.toolSetup = nil
 	if previous := m.settingsOverlay; previous != nil {
-		m.page, m.detail, m.cursor, m.focus = previous.page, previous.detail, previous.cursor, previous.focus
+		m.page, m.detail, m.cursor, m.focus = previous.Page, previous.Detail, previous.Cursor, previous.Focus
 		m.settingsOverlay = nil
 		m.ensureVisibleFocus()
 	}
 }
 
 func (m *model) renderSettingsOverlay(background string) string {
-	rows := len(m.settingsItems()) + len(m.settings.Configs()) + 7
+	width := min(84, m.width-8)
+	rows := len(m.settingsRows()) + 7
 	if m.current() != nil {
 		rows += 2
 	}
 	switch {
-	case m.form != nil && m.form.kind == "kube":
+	case m.form != nil && m.form.Directory != nil:
+		rows = 24
+	case m.form != nil && m.form.Kind == "kube":
 		rows = len(m.contexts) + 9
 	case m.form != nil:
-		rows = len(m.form.fields)*3 + len(m.form.actions()) + 2
-		if m.form.kind == "appsettings" {
+		rows = len(m.form.Fields)*3 + len(m.form.Actions()) + 2
+		if m.form.Note != "" {
+			rows += strings.Count(ansi.Wrap(m.form.Note, max(1, width-6), ""), "\n") + 2
+		}
+		if m.form.LocalDirectory() {
+			rows += 5
+		}
+		if m.form.Kind == "appsettings" {
 			rows += 2
 		}
-		if m.form.kind == "workspace" {
+		if m.form.Kind == "mainagent" {
+			rows += 2
+			for _, row := range m.form.Rows {
+				if row.Detail != "" {
+					rows++
+				}
+			}
+		}
+		if m.form.Kind == "workspace" {
 			rows += 3
 		}
 	case m.page == "tools":
-		rows = len(toolTypes) + 2
+		rows = len(appsettings.ToolTypes) + 8
 	case m.page == "remove" || m.page == "removeprovider":
 		rows = 3
 	}
 	if m.command != nil {
 		rows += 3
 	}
-	width, height := min(84, m.width-8), min(max(10, rows+4), min(28, m.height-6))
-	if m.form != nil && m.form.kind == "kube" {
+	height := min(max(10, rows+4), min(28, m.height-6))
+	if m.form != nil && m.form.Kind == "kube" {
 		height = min(max(14, rows+4), min(28, m.height-2))
 	}
 	contentWidth, contentHeight := width-6, height-4
 	title := "Settings"
 	if m.toolSetup != nil {
-		title = "Add tool"
-		if m.toolSetup.contextsOnly {
-			title = "Add context"
+		title = "Add Connection"
+		if m.toolSetup.ContextsOnly {
+			title = "Add Context"
 		}
 	}
-	if m.form != nil && m.form.kind == "workspace" {
-		title = "New workspace"
+	if m.form != nil && m.form.Kind == "workspace" {
+		title = "New Workspace"
 	}
-	if m.form != nil && m.form.kind == "kube" {
-		title = "Add Kubernetes contexts"
+	if m.form != nil && m.form.Kind == "kube" {
+		title = "Add Context"
 	}
-	heading := overlayTitleStyle.Background(surface).Render(title)
+	if m.form != nil && m.form.Kind == "contextname" {
+		title = "Add Context"
+	}
+	if m.form != nil && m.form.Source != nil {
+		title = m.form.Title
+	}
+	heading := ui.OverlayTitleStyle.Background(ui.Surface).Render(title)
 	action := " back"
 	if m.form == nil && m.page == "settings" {
 		action = " close"
 	}
-	label := shortcutStyle.Background(surface).Render("Esc") + muted.Background(surface).Render(action)
-	heading += lipgloss.NewStyle().Background(surface).Render(strings.Repeat(" ", max(1, contentWidth-lipgloss.Width(heading)-lipgloss.Width(label)))) + label
+	label := ui.MouseAction(ui.ShortcutStyle.Background(ui.Surface).Render("Esc")+ui.Muted.Background(ui.Surface).Render(action), "Esc")
+	heading += lipgloss.NewStyle().Background(ui.Surface).Render(strings.Repeat(" ", max(1, contentWidth-lipgloss.Width(heading)-lipgloss.Width(label)))) + label
 	body := m.viewContent(contentWidth, contentHeight)
 	if m.command != nil {
 		body = lipgloss.NewStyle().Width(contentWidth).Height(contentHeight-3).MaxHeight(contentHeight-3).
 			Render(m.viewContent(contentWidth, contentHeight-3)) + "\n" + m.commandBox(contentWidth)
 	}
-	window := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(focusedBorder).
-		Foreground(foreground).Background(surface).Padding(0, 2).Width(width).Height(height).MaxWidth(width).MaxHeight(height).
+	window := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(ui.FocusedBorder).
+		Foreground(ui.Foreground).Background(ui.Surface).Padding(0, 2).Width(width).Height(height).MaxWidth(width).MaxHeight(height).
 		Render(heading + "\n\n" + body)
-	return centeredOverlay(background, window)
+	return ui.CenteredOverlay(background, window)
 }
 
 func (m *model) beginAppSettings() {
@@ -96,124 +119,97 @@ func (m *model) beginAppSettings() {
 
 func (m *model) beginAISettings(index int) {
 	m.beginSettingsOverlay()
+	m.nativeChange = nil
+	parent := m.form
+	if parent == nil || parent.Kind != "mainagent" {
+		parent = appsettings.AgentForm(agent.Plous)
+		parent.RefreshAgent(m.settings.Configs())
+	}
 	a := ai.DefaultConfig()
 	a.Name, a.KeyEnv = "", ""
 	name := ""
-	title := "Add AI connection"
+	title := "Add provider connection"
 	if configs := m.settings.Configs(); index >= 0 && index < len(configs) {
 		a = configs[index]
 		name = a.Name
-		title = "Edit AI connection"
+		title = "Edit provider connection"
 	}
 	m.page = ""
 	m.command = nil
 	m.status = ""
 	m.cursor = 0
-	m.form = &form{kind: "appsettings", title: title, profile: name, remove: name != "", agent: a}
+	m.form = &appsettings.Form{Kind: "appsettings", Title: title, Profile: name, Remove: name != "", Agent: a, Parent: parent}
 	m.buildAIFields()
-}
-
-func providerLabel(provider string) string {
-	switch provider {
-	case "openai":
-		return "OpenAI"
-	case "anthropic":
-		return "Anthropic"
-	case "gemini":
-		return "Google Gemini"
-	case "xai":
-		return "xAI (Grok)"
-	default:
-		return "OpenAI-compatible"
-	}
 }
 
 func (m *model) buildAIFields() {
 	f := m.form
-	a := f.agent
-	f.fields = []field{
-		{key: "provider", label: "Vendor", required: true, value: newEditor(a.Provider), options: ai.Providers()},
-		{key: "api_key", label: "API key", secret: true, required: a.CredentialRef == "" && a.KeyEnv == "", value: newEditor(f.apiKey)},
+	a := f.Agent
+	f.Fields = []appsettings.Field{
+		{Key: "provider", Label: "Vendor", Required: true, Value: textview.NewField(a.Provider), Options: ai.Providers()},
+		{Key: "api_key", Label: "API Key", Secret: true, Required: a.CredentialRef == "" && a.KeyEnv == "", Value: textview.NewField(f.ApiKey)},
 	}
 	if a.CredentialRef != "" {
-		f.fields[1].label = "API key (saved; blank keeps it)"
+		f.Fields[1].Label = "API Key (saved; blank keeps it)"
 	}
 	if a.CredentialRef == "" && a.KeyEnv != "" {
-		f.fields[1].label = "API key (blank keeps existing environment setup)"
+		f.Fields[1].Label = "API Key (blank keeps existing environment setup)"
 	}
-	if !f.advanced {
+	if !f.Advanced {
 		return
 	}
-	f.fields = append(f.fields, field{key: "name", label: "Display name (optional)", value: newEditor(a.Name)})
-	f.fields = append(f.fields, field{key: "endpoint", label: "API proxy URL (optional)", value: newEditor(a.Endpoint)})
-	f.fields = append(f.fields,
-		field{key: "key_env", label: "Environment variable (optional legacy setup)", value: newEditor(a.KeyEnv)},
-		field{key: "instructions", label: "Custom instructions (optional)", value: newEditor(a.Instructions)},
+	f.Fields = append(f.Fields, appsettings.Field{Key: "name", Label: "Display Name (Optional)", Value: textview.NewField(a.Name)})
+	f.Fields = append(f.Fields, appsettings.Field{Key: "endpoint", Label: "API Proxy URL (Optional)", Value: textview.NewField(a.Endpoint)})
+	f.Fields = append(f.Fields,
+		appsettings.Field{Key: "key_env", Label: "Environment Variable (optional)", Value: textview.NewField(a.KeyEnv)},
+		appsettings.Field{Key: "instructions", Label: "Custom Instructions (Optional)", Value: textview.NewField(a.Instructions)},
 	)
-}
-
-func applyAIFields(a ai.Config, values map[string]string) ai.Config {
-	for key, value := range values {
-		switch key {
-		case "name":
-			a.Name = value
-		case "provider":
-			a.Provider = value
-		case "endpoint":
-			a.Endpoint = value
-		case "key_env":
-			a.KeyEnv = value
-		case "instructions":
-			a.Instructions = value
-		}
-	}
-	return a
 }
 
 func (m *model) captureAIFields() {
 	values := map[string]string{}
-	for _, field := range m.form.fields {
-		values[field.key] = strings.TrimSpace(field.value.text)
-		if field.key == "api_key" {
-			m.form.apiKey = values[field.key]
+	for _, field := range m.form.Fields {
+		values[field.Key] = strings.TrimSpace(field.Value.Text)
+		if field.Key == "api_key" {
+			m.form.ApiKey = values[field.Key]
 		}
 	}
-	m.form.agent = applyAIFields(m.form.agent, values)
+	m.form.Agent = appsettings.ApplyAIFields(m.form.Agent, values)
 }
 
 func (m *model) changeAIProvider() {
 	f := m.form
 	m.captureAIFields()
-	f.agent.KeyEnv, f.agent.CredentialRef, f.apiKey = "", "", ""
-	f.agent.Model = ""
+	f.Agent.KeyEnv, f.Agent.CredentialRef, f.ApiKey = "", "", ""
+	f.Agent.Model = ""
 	// Switching vendors must not reuse another vendor's key or endpoint.
-	f.agent.Endpoint = ""
+	f.Agent.Endpoint = ""
 	m.buildAIFields()
 }
 
 func (m *model) aiCredentialHint() string {
-	if m.form.agent.CredentialRef != "" {
-		return "API key saved locally · enter a new key to replace it"
+	if m.form.Agent.CredentialRef != "" {
+		return "API Key saved locally · enter a new key to replace it"
 	}
-	if m.form.agent.KeyEnv != "" {
+	if m.form.Agent.KeyEnv != "" {
 		return "Existing environment setup retained until a key is saved"
 	}
-	return "API keys stay in your local Plous data directory"
+	return "API Keys stay in your local Plous data directory"
 }
 
 func (m *model) saveAppSettings(values map[string]string) {
-	a := applyAIFields(m.form.agent, values).Connection()
+	a := appsettings.ApplyAIFields(m.form.Agent, values).Connection()
 	if err := a.SupportedProvider(); err != nil {
 		m.status = err.Error()
 		return
 	}
 	if a.Name == "" {
-		base := providerLabel(a.Provider)
+		base := appsettings.ProviderLabel(a.Provider)
 		a.Name = base
 		for suffix := 2; ; suffix++ {
 			used := false
 			for _, config := range m.settings.Configs() {
-				if config.Name != m.form.profile && strings.EqualFold(config.Name, a.Name) {
+				if config.Name != m.form.Profile && strings.EqualFold(config.Name, a.Name) {
 					used = true
 					break
 				}
@@ -231,7 +227,7 @@ func (m *model) saveAppSettings(values map[string]string) {
 	}
 	key := strings.TrimSpace(values["api_key"])
 	if _, exists := values["api_key"]; !exists {
-		key = m.form.apiKey
+		key = m.form.ApiKey
 	}
 	if key != "" {
 		ref, err := m.store.SaveCredential(key)
@@ -245,7 +241,7 @@ func (m *model) saveAppSettings(values map[string]string) {
 	next.Providers = m.settings.Configs()
 	found := false
 	for i, c := range next.Providers {
-		if c.Name == m.form.profile {
+		if c.Name == m.form.Profile {
 			next.Providers[i] = a
 			found = true
 		}
@@ -253,8 +249,8 @@ func (m *model) saveAppSettings(values map[string]string) {
 	if !found {
 		next.Providers = append(next.Providers, a)
 	}
-	if len(next.Providers) == 1 || m.settings.Agent.Name == m.form.profile {
-		if m.settings.Agent.Name == m.form.profile && m.settings.Agent.Provider == a.Provider {
+	if len(next.Providers) == 1 || m.settings.Agent.Name == m.form.Profile {
+		if m.settings.Agent.Name == m.form.Profile && m.settings.Agent.Provider == a.Provider {
 			next.Agent = a
 			next.Agent.Model = m.settings.Agent.Model
 		} else {
@@ -268,9 +264,8 @@ func (m *model) saveAppSettings(values map[string]string) {
 		}
 		return
 	}
-	m.form = nil
-	m.openSettings()
-	m.status = "AI connection saved. Use /model in chat to switch."
+	m.returnToAgent(m.form.Parent)
+	m.status = "Provider connection saved. Use /model in Plous chat to switch models."
 	if err := m.store.PruneCredentials(); err != nil {
 		m.status += " " + err.Error()
 	}
@@ -290,6 +285,7 @@ func (m *model) saveAISettings(next workspace.Settings) bool {
 }
 
 func (m *model) openSettings() {
+	m.removeForm = nil
 	m.toolSetup = nil
 	m.beginSettingsOverlay()
 	m.page = "settings"
@@ -298,129 +294,30 @@ func (m *model) openSettings() {
 	m.detail = ""
 	m.status = ""
 }
+
 func (m *model) cancelForm() {
+	m.nativeChange = nil
+	if m.form.Kind == "contextname" && m.toolSetup != nil {
+		m.finishContextName(false)
+		return
+	}
 	if m.toolSetup != nil {
-		if m.form.kind == "kube" {
+		if m.form.Kind == "kube" || m.toolSetup.RepositoryOnly {
 			m.backFromToolSetup()
 		} else {
 			m.form = nil
 			m.status = ""
-			m.page, m.cursor = "tools", 0
+			m.page = "tools"
 		}
 		return
 	}
-	m.form = nil
-	m.openSettings()
-	m.status = "Edits canceled"
-}
-func (m *model) settingsItems() []string {
-	items := []string{}
-	for _, c := range m.settings.Configs() {
-		items = append(items, c.Name)
-	}
-	items = append(items, "Add AI connection")
-	if w := m.current(); w != nil {
-		items = append(items, "Rename workspace", "Add tool")
-		for _, c := range w.Connections {
-			items = append(items, "Edit "+toolNames[c.Tool]+" / "+c.Name)
-		}
+	if m.form.Parent != nil {
+		m.returnToAgent(m.form.Parent)
 	} else {
-		items = append(items, "Create workspace")
+		m.form = nil
+		m.openSettings()
 	}
-	return append(items, "Close")
-}
-func (m *model) updateSettings(key string) {
-	items := m.settingsItems()
-	count := len(m.settings.Configs())
-	m.cursor = max(0, min(m.cursor, len(items)-1))
-	switch key {
-	case "up":
-		m.cursor = max(0, m.cursor-1)
-	case "down":
-		m.cursor = min(len(items)-1, m.cursor+1)
-	case "enter":
-		switch {
-		case m.cursor < count:
-			m.beginAISettings(m.cursor)
-		case m.cursor == count:
-			m.beginAppSettings()
-		case m.cursor == len(items)-1:
-			m.closeSettings()
-		case m.current() == nil:
-			m.beginWorkspace()
-		case m.cursor == count+1:
-			m.beginRename()
-		case m.cursor == count+2:
-			m.beginToolSetup(false)
-		default:
-			c := m.current().Connections[m.cursor-count-3]
-			m.beginConnection(c.Tool, &c)
-		}
-	}
-}
-func (m *model) settingsBody(width, height int) string {
-	items := m.settingsItems()
-	configs := m.settings.Configs()
-	scope := "Current workspace (none selected)"
-	if w := m.current(); w != nil {
-		scope = "Current workspace: " + w.Name
-	}
-	lines := []string{sectionHeadingStyle.Render("Application"), muted.Render("AI connections · shared across workspaces"), ""}
-	selectedRow := 0
-	for i, item := range items {
-		if i == len(configs)+1 {
-			lines = append(lines, "", sectionHeadingStyle.Render(clipped(oneLine(scope), width)))
-			if m.current() != nil {
-				lines = append(lines, workspaceLocation(width)...)
-			}
-			lines = append(lines, "")
-		}
-		if i == len(items)-1 {
-			lines = append(lines, "")
-		}
-		if i == m.cursor {
-			selectedRow = len(lines)
-		}
-		label := item
-		if i < len(configs) && configs[i].SupportedProvider() != nil {
-			label += " · unavailable"
-		}
-		lines = append(lines, settingsChoiceLine(label, i == m.cursor, width))
-		if i < len(configs) {
-			vendor := providerLabel(configs[i].Provider)
-			if !strings.EqualFold(strings.TrimSpace(configs[i].Name), vendor) {
-				lines = append(lines, muted.Render(clipped("  "+oneLine(vendor), width)))
-			}
-		}
-	}
-	return scrollSelection(lines, selectedRow, height)
-}
-
-func workspaceLocation(width int) []string {
-	label := muted.Background(surface)
-	return []string{
-		clipped(label.Render("Location  ")+shortcutStyle.Background(surface).Render("● Local")+label.Render("   ○ Remote (coming soon)"), width),
-		label.Render(clipped("Remote workspaces and sharing need plous-server.", width)),
-	}
-}
-
-func settingsChoiceLine(label string, active bool, width int) string {
-	prefix := "  "
-	style := canvasStyle
-	if active {
-		prefix = "› "
-		style = shortcutStyle.Background(highlight)
-	}
-	return style.Width(width).Render(clipped(prefix+oneLine(label), width))
-}
-
-func (m *model) selectSettingsItem(label string) {
-	for i, item := range m.settingsItems() {
-		if item == label {
-			m.cursor = i
-			return
-		}
-	}
+	m.status = "Edits canceled"
 }
 
 func (m *model) removeAIConnection() {
@@ -444,10 +341,23 @@ func (m *model) removeAIConnection() {
 		}
 	}
 	if m.saveAISettings(next) {
-		m.openSettings()
-		m.status = fmt.Sprintf("Removed AI connection %s", m.removeProfile)
+		var parent *appsettings.Form
+		if m.removeForm != nil {
+			parent = m.removeForm.Parent
+		}
+		m.removeForm = nil
+		m.returnToAgent(parent)
+		m.status = fmt.Sprintf("Removed provider connection %s", m.removeProfile)
 		if err := m.store.PruneCredentials(); err != nil {
 			m.status += " " + err.Error()
 		}
+	}
+}
+
+func (m *model) cancelProviderRemoval() {
+	m.form, m.removeForm = m.removeForm, nil
+	m.page, m.status = "", ""
+	if m.form == nil {
+		m.beginAgentSettings()
 	}
 }

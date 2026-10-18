@@ -1,16 +1,18 @@
 package app
 
 import (
+	tea "charm.land/bubbletea/v2"
 	"flag"
 	"fmt"
-	"os"
-	"path/filepath"
-
-	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/term"
 	"github.com/go-logr/logr"
+	"github.com/simjay/plous/internal/ai/history"
 	"github.com/simjay/plous/internal/workspace"
-	"k8s.io/klog/v2"
+	"io"
+	klog "k8s.io/klog/v2"
+	"log"
+	"os"
+	"path/filepath"
 )
 
 // Run starts the Plous executable and returns its process exit code.
@@ -44,25 +46,64 @@ func Run(version string) int {
 		fmt.Fprintln(os.Stderr, "Plous:", err)
 		return 1
 	}
-	app, err := newModel(store, version)
+	output, err := reserveTerminalOutput()
 	if err != nil {
 		store.Close()
-		fmt.Fprintln(os.Stderr, "Plous:", err)
+		fmt.Fprintln(os.Stderr, "Plous: cannot reserve terminal output:", err)
 		return 1
 	}
-	// client-go diagnostics bypass the renderer and move the terminal cursor.
-	// Explore renders request failures inside its panel instead.
+	defer output.Close()
+	archive, err := history.Open(store)
+	if err != nil {
+		store.Close()
+		fmt.Fprintln(output.diagnostics, "Plous:", err)
+		return 1
+	}
+	app, err := newModel(store, archive, version)
+	if err != nil {
+		store.Close()
+		fmt.Fprintln(output.diagnostics, "Plous:", err)
+		return 1
+	}
+	app.clipboard = systemClipboard()
+	// Dependency diagnostics bypass the renderer and move the terminal cursor.
+	// Explore renders request failures and Helm lint findings inside its panel.
 	klog.SetLoggerWithOptions(logr.Discard(), klog.ContextualLogger(true))
-	_, runErr := tea.NewProgram(app).Run()
-	app.stopExplore()
+	logOutput := log.Writer()
+	log.SetOutput(io.Discard)
+	defer log.SetOutput(logOutput)
+	_, runErr := tea.NewProgram(app, tea.WithInput(&utf8TerminalInput{File: os.Stdin}), tea.WithOutput(output.renderer)).Run()
+	app.stopViews()
 	app.stopChat()
+	app.drainNativeAgent()
+	app.drainChatRestores()
+	app.drainChat()
 	saveErr := app.saveSession()
 	closeErr := store.Close()
 	if err := firstError(runErr, saveErr, closeErr); err != nil {
-		fmt.Fprintln(os.Stderr, "Plous:", err)
+		fmt.Fprintln(output.diagnostics, "Plous:", err)
 		return 1
 	}
 	return 0
+}
+
+func (m *model) stopViews() {
+	if m.uiDone != nil && !m.uiStopped {
+		close(m.uiDone)
+		m.uiStopped = true
+	}
+	m.stopNativeAgent()
+	m.cancelClipboardPaste()
+	m.stopActivity()
+	m.stopHelm()
+	m.stopClusters()
+	for _, v := range m.overviews {
+		v.stop()
+	}
+	m.stopGitOps()
+	m.stopCode()
+	m.exploreClosed = true
+	m.stopExplore()
 }
 
 func firstError(errs ...error) error {

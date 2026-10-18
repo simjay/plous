@@ -1,100 +1,69 @@
-// Package ai provides model configuration and Eino provider adapters.
 package ai
 
 import (
 	"errors"
-	"net"
-	"net/url"
-	"regexp"
-	"strings"
+	"fmt"
+	"github.com/simjay/plous/internal/workspace"
+	"go.yaml.in/yaml/v3"
+	"io"
+	"os"
+	"path/filepath"
+	"time"
 )
 
-type Config struct {
-	Name          string `json:"name"`
-	Provider      string `json:"provider"`
-	Endpoint      string `json:"endpoint"`
-	Model         string `json:"model,omitempty"`
-	KeyEnv        string `json:"key_env"`
-	CredentialRef string `json:"credential_ref,omitempty"`
-	Instructions  string `json:"instructions"`
+// RuntimeConfig is read once at operation start. Credentials remain in the
+// existing credential store or the named environment variable.
+type RuntimeConfig struct {
+	MaxSteps       int `json:"max_calls" yaml:"max_calls"`
+	MaxTokens      int `json:"max_tokens" yaml:"max_tokens"`
+	TimeoutSeconds int `json:"timeout_seconds" yaml:"timeout_seconds"`
+	Embedding      struct {
+		Connection string `json:"-" yaml:"connection"`
+		Model      string `json:"model" yaml:"model"`
+	} `json:"embedding" yaml:"embedding"`
 }
 
-// Connection removes a request's model selection while preserving its vendor settings.
-func (c Config) Connection() Config {
-	c.Model = ""
-	return c
+func DefaultRuntimeConfig() RuntimeConfig {
+	return RuntimeConfig{MaxSteps: 128, MaxTokens: 1000000, TimeoutSeconds: 900}
 }
+func (c RuntimeConfig) Timeout() time.Duration { return time.Duration(c.TimeoutSeconds) * time.Second }
 
-func DefaultConfig() Config {
-	return Config{Name: "Assistant", Provider: "openai", KeyEnv: "OPENAI_API_KEY"}
-}
-func (c Config) BaseURL() string {
-	if c.Endpoint != "" {
-		return strings.TrimRight(c.Endpoint, "/")
+func loadRuntimeConfig(store *workspace.Store, override *RuntimeConfig) (RuntimeConfig, error) {
+	c := DefaultRuntimeConfig()
+	root, err := store.DataRoot()
+	if err != nil {
+		return c, err
 	}
-	switch c.Provider {
-	case "anthropic":
-		return "https://api.anthropic.com"
+	path := os.Getenv("PLOUS_AGENT_CONFIG")
+	if path == "" {
+		path = filepath.Join(root, "agent", "config.yaml")
 	}
-	return "https://api.openai.com/v1"
-}
+	f, err := os.Open(path)
+	if err == nil {
+		defer f.Close()
+		d := yaml.NewDecoder(f)
+		d.KnownFields(true)
+		if err = d.Decode(&c); err != nil {
+			return c, fmt.Errorf("agent configuration (supported settings: max_calls, max_tokens, timeout_seconds, embedding): %w", err)
+		}
+		var extra any
+		if err = d.Decode(&extra); err != io.EOF {
+			return c, errors.New("agent configuration must contain one YAML document")
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return c, err
+	} else if os.Getenv("PLOUS_AGENT_CONFIG") != "" {
+		return c, fmt.Errorf("agent configuration (supported settings: max_calls, max_tokens, timeout_seconds, embedding): %w", err)
+	}
+	if override != nil {
+		c = *override
+	}
 
-var credentialID = regexp.MustCompile(`^[a-f0-9]{32}$`)
-
-var envName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
-
-// Validate checks saved connection settings without contacting a provider.
-func (c Config) Validate() error {
-	if strings.TrimSpace(c.Name) == "" {
-		return errors.New("AI connection name is required")
+	if c.MaxSteps < 1 || c.MaxTokens < 1 || c.TimeoutSeconds < 1 {
+		return c, errors.New("turn budgets must be positive")
 	}
-	switch c.Provider {
-	case "openai", "anthropic":
-	default:
-		return errors.New("choose a supported provider in Settings")
+	if (c.Embedding.Connection == "") != (c.Embedding.Model == "") {
+		return c, errors.New("embedding connection and model must be configured together")
 	}
-	if c.KeyEnv != "" && !envName.MatchString(c.KeyEnv) {
-		return errors.New("credential must be an environment-variable name, not an API key")
-	}
-	if c.CredentialRef != "" && !credentialID.MatchString(c.CredentialRef) {
-		return errors.New("invalid saved credential reference")
-	}
-	u, err := url.Parse(c.BaseURL())
-	if err != nil || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-		return errors.New("endpoint must be a base URL without credentials, query, or fragment")
-	}
-	ip := net.ParseIP(u.Hostname())
-	local := u.Hostname() == "localhost" || (ip != nil && ip.IsLoopback())
-	if u.Scheme != "https" && !(u.Scheme == "http" && local) {
-		return errors.New("endpoint must use HTTPS (HTTP is allowed for localhost)")
-	}
-	return nil
-}
-func (c Config) Ready(key string) error {
-	if err := c.Validate(); err != nil {
-		return err
-	}
-	if err := c.Supported(); err != nil {
-		return err
-	}
-	if (c.CredentialRef != "" || c.KeyEnv != "" || c.Endpoint == "") && key == "" {
-		return errors.New("enter an API key in Settings (:s)")
-	}
-	return nil
-}
-
-type Message struct {
-	Role string `json:"role"`
-	Text string `json:"text"`
-}
-
-type Usage struct {
-	Input  int64 `json:"input_tokens"`
-	Output int64 `json:"output_tokens"`
-	Total  int64 `json:"total_tokens"`
-}
-type Result struct {
-	Text   string
-	Usage  Usage
-	Finish string
+	return c, nil
 }

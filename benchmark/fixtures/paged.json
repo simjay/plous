@@ -1,0 +1,4763 @@
+{
+  "scope": "cluster",
+  "routes": [
+    {
+      "path": "/cluster/api/v1",
+      "body": {
+        "apiVersion": "v1",
+        "kind": "APIResourceList",
+        "groupVersion": "v1",
+        "resources": [
+          {
+            "name": "pods",
+            "kind": "Pod",
+            "namespaced": true,
+            "verbs": [
+              "get",
+              "list"
+            ]
+          },
+          {
+            "name": "services",
+            "kind": "Service",
+            "namespaced": true,
+            "verbs": [
+              "get",
+              "list"
+            ]
+          },
+          {
+            "name": "events",
+            "kind": "Event",
+            "namespaced": true,
+            "verbs": [
+              "get",
+              "list"
+            ]
+          },
+          {
+            "name": "secrets",
+            "kind": "Secret",
+            "namespaced": true,
+            "verbs": [
+              "get",
+              "list"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "path": "/cluster/apis/apps",
+      "body": {
+        "kind": "APIGroup",
+        "preferredVersion": {
+          "groupVersion": "apps/v1",
+          "version": "v1"
+        },
+        "versions": [
+          {
+            "groupVersion": "apps/v1",
+            "version": "v1"
+          }
+        ]
+      }
+    },
+    {
+      "path": "/cluster/apis/apps/v1",
+      "body": {
+        "apiVersion": "v1",
+        "kind": "APIResourceList",
+        "groupVersion": "apps/v1",
+        "resources": [
+          {
+            "name": "deployments",
+            "kind": "Deployment",
+            "namespaced": true,
+            "verbs": [
+              "get",
+              "list"
+            ]
+          },
+          {
+            "name": "replicasets",
+            "kind": "ReplicaSet",
+            "namespaced": true,
+            "verbs": [
+              "get",
+              "list"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "path": "/cluster/api/v1/namespaces/apps/pods",
+      "body": {
+        "apiVersion": "v1",
+        "kind": "PodList",
+        "metadata": {
+          "continue": "50",
+          "resourceVersion": "1"
+        },
+        "items": [
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-000",
+              "namespace": "apps",
+              "uid": "pod-000-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Pending",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-001",
+              "namespace": "apps",
+              "uid": "pod-001-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Pending",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-002",
+              "namespace": "apps",
+              "uid": "pod-002-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Pending",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-003",
+              "namespace": "apps",
+              "uid": "pod-003-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Pending",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-004",
+              "namespace": "apps",
+              "uid": "pod-004-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Pending",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-005",
+              "namespace": "apps",
+              "uid": "pod-005-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-006",
+              "namespace": "apps",
+              "uid": "pod-006-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-007",
+              "namespace": "apps",
+              "uid": "pod-007-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-008",
+              "namespace": "apps",
+              "uid": "pod-008-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-009",
+              "namespace": "apps",
+              "uid": "pod-009-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-010",
+              "namespace": "apps",
+              "uid": "pod-010-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-011",
+              "namespace": "apps",
+              "uid": "pod-011-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-012",
+              "namespace": "apps",
+              "uid": "pod-012-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-013",
+              "namespace": "apps",
+              "uid": "pod-013-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-014",
+              "namespace": "apps",
+              "uid": "pod-014-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-015",
+              "namespace": "apps",
+              "uid": "pod-015-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-016",
+              "namespace": "apps",
+              "uid": "pod-016-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-017",
+              "namespace": "apps",
+              "uid": "pod-017-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-018",
+              "namespace": "apps",
+              "uid": "pod-018-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-019",
+              "namespace": "apps",
+              "uid": "pod-019-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-020",
+              "namespace": "apps",
+              "uid": "pod-020-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-021",
+              "namespace": "apps",
+              "uid": "pod-021-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-022",
+              "namespace": "apps",
+              "uid": "pod-022-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-023",
+              "namespace": "apps",
+              "uid": "pod-023-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-024",
+              "namespace": "apps",
+              "uid": "pod-024-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-025",
+              "namespace": "apps",
+              "uid": "pod-025-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-026",
+              "namespace": "apps",
+              "uid": "pod-026-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-027",
+              "namespace": "apps",
+              "uid": "pod-027-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-028",
+              "namespace": "apps",
+              "uid": "pod-028-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-029",
+              "namespace": "apps",
+              "uid": "pod-029-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-030",
+              "namespace": "apps",
+              "uid": "pod-030-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-031",
+              "namespace": "apps",
+              "uid": "pod-031-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-032",
+              "namespace": "apps",
+              "uid": "pod-032-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-033",
+              "namespace": "apps",
+              "uid": "pod-033-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-034",
+              "namespace": "apps",
+              "uid": "pod-034-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-035",
+              "namespace": "apps",
+              "uid": "pod-035-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-036",
+              "namespace": "apps",
+              "uid": "pod-036-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-037",
+              "namespace": "apps",
+              "uid": "pod-037-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-038",
+              "namespace": "apps",
+              "uid": "pod-038-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-039",
+              "namespace": "apps",
+              "uid": "pod-039-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-040",
+              "namespace": "apps",
+              "uid": "pod-040-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-041",
+              "namespace": "apps",
+              "uid": "pod-041-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-042",
+              "namespace": "apps",
+              "uid": "pod-042-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-043",
+              "namespace": "apps",
+              "uid": "pod-043-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-044",
+              "namespace": "apps",
+              "uid": "pod-044-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-045",
+              "namespace": "apps",
+              "uid": "pod-045-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-046",
+              "namespace": "apps",
+              "uid": "pod-046-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-047",
+              "namespace": "apps",
+              "uid": "pod-047-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-048",
+              "namespace": "apps",
+              "uid": "pod-048-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-049",
+              "namespace": "apps",
+              "uid": "pod-049-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "query": {
+        "continue": ""
+      }
+    },
+    {
+      "path": "/cluster/api/v1/namespaces/apps/pods",
+      "body": {
+        "apiVersion": "v1",
+        "kind": "PodList",
+        "metadata": {
+          "continue": "100",
+          "resourceVersion": "1"
+        },
+        "items": [
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-050",
+              "namespace": "apps",
+              "uid": "pod-050-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-051",
+              "namespace": "apps",
+              "uid": "pod-051-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-052",
+              "namespace": "apps",
+              "uid": "pod-052-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-053",
+              "namespace": "apps",
+              "uid": "pod-053-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-054",
+              "namespace": "apps",
+              "uid": "pod-054-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-055",
+              "namespace": "apps",
+              "uid": "pod-055-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-056",
+              "namespace": "apps",
+              "uid": "pod-056-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-057",
+              "namespace": "apps",
+              "uid": "pod-057-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-058",
+              "namespace": "apps",
+              "uid": "pod-058-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-059",
+              "namespace": "apps",
+              "uid": "pod-059-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-060",
+              "namespace": "apps",
+              "uid": "pod-060-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-061",
+              "namespace": "apps",
+              "uid": "pod-061-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-062",
+              "namespace": "apps",
+              "uid": "pod-062-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-063",
+              "namespace": "apps",
+              "uid": "pod-063-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-064",
+              "namespace": "apps",
+              "uid": "pod-064-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-065",
+              "namespace": "apps",
+              "uid": "pod-065-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-066",
+              "namespace": "apps",
+              "uid": "pod-066-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-067",
+              "namespace": "apps",
+              "uid": "pod-067-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-068",
+              "namespace": "apps",
+              "uid": "pod-068-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-069",
+              "namespace": "apps",
+              "uid": "pod-069-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-070",
+              "namespace": "apps",
+              "uid": "pod-070-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-071",
+              "namespace": "apps",
+              "uid": "pod-071-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-072",
+              "namespace": "apps",
+              "uid": "pod-072-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-073",
+              "namespace": "apps",
+              "uid": "pod-073-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-074",
+              "namespace": "apps",
+              "uid": "pod-074-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-075",
+              "namespace": "apps",
+              "uid": "pod-075-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-076",
+              "namespace": "apps",
+              "uid": "pod-076-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-077",
+              "namespace": "apps",
+              "uid": "pod-077-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-078",
+              "namespace": "apps",
+              "uid": "pod-078-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-079",
+              "namespace": "apps",
+              "uid": "pod-079-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-080",
+              "namespace": "apps",
+              "uid": "pod-080-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-081",
+              "namespace": "apps",
+              "uid": "pod-081-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-082",
+              "namespace": "apps",
+              "uid": "pod-082-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-083",
+              "namespace": "apps",
+              "uid": "pod-083-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-084",
+              "namespace": "apps",
+              "uid": "pod-084-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-085",
+              "namespace": "apps",
+              "uid": "pod-085-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-086",
+              "namespace": "apps",
+              "uid": "pod-086-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-087",
+              "namespace": "apps",
+              "uid": "pod-087-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-088",
+              "namespace": "apps",
+              "uid": "pod-088-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-089",
+              "namespace": "apps",
+              "uid": "pod-089-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-090",
+              "namespace": "apps",
+              "uid": "pod-090-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-091",
+              "namespace": "apps",
+              "uid": "pod-091-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-092",
+              "namespace": "apps",
+              "uid": "pod-092-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-093",
+              "namespace": "apps",
+              "uid": "pod-093-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-094",
+              "namespace": "apps",
+              "uid": "pod-094-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-095",
+              "namespace": "apps",
+              "uid": "pod-095-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-096",
+              "namespace": "apps",
+              "uid": "pod-096-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-097",
+              "namespace": "apps",
+              "uid": "pod-097-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-098",
+              "namespace": "apps",
+              "uid": "pod-098-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-099",
+              "namespace": "apps",
+              "uid": "pod-099-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "query": {
+        "continue": "50"
+      }
+    },
+    {
+      "path": "/cluster/api/v1/namespaces/apps/pods",
+      "body": {
+        "apiVersion": "v1",
+        "kind": "PodList",
+        "metadata": {
+          "continue": "",
+          "resourceVersion": "1"
+        },
+        "items": [
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-100",
+              "namespace": "apps",
+              "uid": "pod-100-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-101",
+              "namespace": "apps",
+              "uid": "pod-101-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-102",
+              "namespace": "apps",
+              "uid": "pod-102-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-103",
+              "namespace": "apps",
+              "uid": "pod-103-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "pod-104",
+              "namespace": "apps",
+              "uid": "pod-104-uid",
+              "creationTimestamp": "2026-10-01T00:00:00Z",
+              "resourceVersion": "1",
+              "labels": {
+                "app": "web"
+              },
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-rs",
+                  "uid": "web-rs-uid",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "app",
+                  "image": "web:v3"
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "containerStatuses": [
+                {
+                  "name": "app",
+                  "ready": true,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {}
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "query": {
+        "continue": "100"
+      }
+    }
+  ]
+}

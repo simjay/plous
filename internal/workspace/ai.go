@@ -10,13 +10,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/simjay/plous/internal/ai"
+	"github.com/simjay/plous/internal/ai/agent"
+	ai "github.com/simjay/plous/internal/ai/model"
 )
 
 type Settings struct {
-	Revision  uint64      `json:"revision"`
-	Agent     ai.Config   `json:"agent"`
-	Providers []ai.Config `json:"providers,omitempty"`
+	MainAgent     agent.Kind  `json:"main_agent,omitempty"`
+	MouseDisabled bool        `json:"mouse_disabled,omitempty"`
+	Revision      uint64      `json:"revision"`
+	Agent         ai.Config   `json:"agent"`
+	Providers     []ai.Config `json:"providers,omitempty"`
 }
 
 // Agent is the selected model; Providers contains the saved connections.
@@ -29,6 +32,9 @@ func (s Settings) Configs() []ai.Config {
 }
 
 func (s Settings) validate() error {
+	if !s.MainAgent.Valid() {
+		return errors.New("unknown main agent")
+	}
 	if err := s.Agent.Validate(); err != nil {
 		return err
 	}

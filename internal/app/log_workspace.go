@@ -1,25 +1,29 @@
 package app
 
 import (
-	tea "charm.land/bubbletea/v2"
 	"fmt"
-	"github.com/charmbracelet/x/ansi"
-	"github.com/simjay/plous/internal/kubernetes"
-	"github.com/simjay/plous/internal/logview"
-	"github.com/simjay/plous/internal/textview"
 	"strings"
+
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/simjay/plous/internal/app/monitor"
+	kubernetes "github.com/simjay/plous/internal/integrations/kubernetes/monitor"
+	"github.com/simjay/plous/internal/ui"
+	logview "github.com/simjay/plous/internal/ui/logs"
+	textview "github.com/simjay/plous/internal/ui/text"
 )
 
 func (m *model) logWorkspaceActive() bool {
-	return m.exploreVisible() && m.explore.detail != nil && m.explore.tab == 4 && m.explore.picker == "" && m.explore.action == nil && m.explore.terminal == nil
+	return m.explore != nil && m.exploreVisible() && m.explore.Detail != nil && m.explore.Tab == 4 && m.explore.Picker == "" && m.explore.Action == nil && m.explore.Terminal == nil
 }
+
 func (m *model) podLogViewer() *logview.Model {
 	e := m.explorer()
-	if e.logViewer == nil {
-		e.logViewer = logview.New(exploreLogBufferLimit, 5000)
-		e.logViewer.SetFormatter(podLogFormatter(e.logTimestamps, e.mergedLogs))
+	if e.LogViewer == nil {
+		e.LogViewer = logview.New(monitor.ExploreLogBufferLimit, 5000)
+		e.LogViewer.SetFormatter(monitor.PodLogFormatter(e.LogTimestamps, e.MergedLogs))
 	}
-	return e.logViewer
+	return e.LogViewer
 }
 
 func (m *model) logWorkspaceKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
@@ -38,42 +42,39 @@ func (m *model) logWorkspaceKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		}
 	}
 	m.shortcutPrefix = ""
-	if !v.Reader.Searching && key == "z" {
-		m.viewCommand("zoom")
-		return true, nil
-	}
 	handled, copied := v.Key(key, msg.Text)
 	if !handled {
 		return false, nil
 	}
 	return true, m.copyWorkspaceText(copied)
 }
+
 func (m *model) podLogHeader(width, height int) logview.Header {
 	e := m.explorer()
 	state := "Connecting"
-	failed := e.logError != "" || e.detailError != "" || !e.detailValid && e.detailRun == nil && e.detailText != ""
+	failed := e.LogError != "" || e.DetailError != "" || !e.DetailValid && e.DetailRun == nil && e.DetailText != ""
 	switch {
 	case failed:
 		state = "Disconnected"
-	case e.log != nil && e.logConnected:
+	case e.Log != nil && e.LogConnected:
 		state = "Live"
-		if e.previous {
+		if e.Previous {
 			state = "Loading"
 		}
-	case e.log == nil && e.logKey != "":
+	case e.Log == nil && e.LogKey != "":
 		state = "Ended"
 	}
-	if e.mergedLogs && !failed {
-		status := e.workloadLogStatus
+	if e.MergedLogs && !failed {
+		status := e.WorkloadLogStatus
 		switch {
 		case status.Active > 0:
 			state = "Live"
 		case status.Finished > 0:
 			state = "Watching Pods"
-			if e.resource.Key() == "pods" {
+			if e.Resource.Key() == "pods" {
 				state = "Watching containers"
 			}
-			if e.previous {
+			if e.Previous {
 				state = "Ended"
 			}
 		default:
@@ -92,16 +93,16 @@ func (m *model) podLogHeader(width, height int) logview.Header {
 		state += " · Following"
 	}
 	source := "Current instance"
-	if e.previous {
+	if e.Previous {
 		source = "Previous instance"
 	}
 	if width < 48 {
 		source = strings.TrimSuffix(source, " instance")
 	}
 	rangeLabel := "Latest 200 lines"
-	for _, entry := range logRanges {
-		if entry.seconds == e.logSince {
-			rangeLabel = entry.label
+	for _, entry := range monitor.LogRanges {
+		if entry.Seconds == e.LogSince {
+			rangeLabel = entry.Label
 		}
 	}
 	follow := "Pause"
@@ -117,11 +118,11 @@ func (m *model) podLogHeader(width, height int) logview.Header {
 		return "Off"
 	}
 	expand := m.expandAction()
-	expand.Key = "z"
+	expand.Key = "ff"
 	actions := []textview.ActionGroup{
 		{Label: "Stream", Actions: []textview.Action{{Key: "Space", Label: follow}, {Key: "g", Label: "Reload logs"}}},
-		{Label: "Source", Actions: []textview.Action{{Key: "o", Label: "Container"}, {Key: "u", Label: "Time range"}, {Key: "p", Label: "Previous instance", Value: value(e.previous)}}},
-		{Label: "Display", Actions: []textview.Action{expand, {Key: "t", Label: "Timestamps", Value: value(e.logTimestamps)}, {Key: "w", Label: "Wrap lines", Value: value(m.podLogViewer().Reader.Wrap)}}},
+		{Label: "Source", Actions: []textview.Action{{Key: "o", Label: "Container"}, {Key: "u", Label: "Time range"}, {Key: "p", Label: "Previous instance", Value: value(e.Previous)}}},
+		{Label: "Display", Actions: []textview.Action{expand, {Key: "t", Label: "Timestamps", Value: value(e.LogTimestamps)}, {Key: "w", Label: "Wrap lines", Value: value(m.podLogViewer().Reader.Wrap)}}},
 	}
 	if width < 64 {
 		actions[2].Actions = actions[2].Actions[1:]
@@ -129,26 +130,26 @@ func (m *model) podLogHeader(width, height int) logview.Header {
 	}
 	title := "Plous Log Viewer · Logs"
 	if width < 64 {
-		title = "Logs · " + e.container
+		title = "Logs · " + e.Container
 	}
-	target := e.detail.GetNamespace() + " / " + e.detail.GetName() + " / " + e.container
+	target := e.Detail.GetNamespace() + " / " + e.Detail.GetName() + " / " + e.Container
 	note := source + " · " + rangeLabel
-	if e.mergedLogs {
-		container := e.container
+	if e.MergedLogs {
+		container := e.Container
 		if container == "" {
 			container = "application containers"
 		}
 		scope := "All Pods"
-		if e.resource.Key() == "pods" {
+		if e.Resource.Key() == "pods" {
 			scope = "All containers"
-			target = e.detail.GetNamespace() + " / " + e.detail.GetName() + " / " + allApplicationContainers
+			target = e.Detail.GetNamespace() + " / " + e.Detail.GetName() + " / " + monitor.AllApplicationContainers
 		} else {
-			target = e.detail.GetNamespace() + " / " + e.detail.GetName() + " / All Pods · " + container
+			target = e.Detail.GetNamespace() + " / " + e.Detail.GetName() + " / All Pods · " + container
 		}
 		if width < 64 {
 			title = "Logs · " + scope
 		}
-		status := e.workloadLogStatus
+		status := e.WorkloadLogStatus
 		note += fmt.Sprintf("\n%d Pods · %d sources", status.Pods, status.Sources)
 		note += "\n" + ansi.Wrap(fmt.Sprintf("%d failed · %d waiting · %d live · %d ended", status.Failed, status.Waiting, status.Active, status.Finished), max(1, width), "")
 		if status.Skipped > 0 {
@@ -164,11 +165,11 @@ func (m *model) podLogHeader(width, height int) logview.Header {
 			if failed {
 				state = "Disconnected · " + position
 			}
-			if e.previous {
+			if e.Previous {
 				state = "Previous · " + position
 			}
 			rangeText := rangeLabel
-			if e.logSince == 0 {
+			if e.LogSince == 0 {
 				rangeText = "200/source"
 			}
 			note = source + " · " + rangeText
@@ -181,31 +182,32 @@ func (m *model) podLogHeader(width, height int) logview.Header {
 	}
 	return logview.Header{Title: title, Target: target, State: state, Note: note, Actions: actions}
 }
+
 func (m *model) exploreLogBody(width, height int) string {
 	e := m.explorer()
 	v := m.podLogViewer()
-	message := strings.TrimSpace(e.detailError + "\n" + e.logError + "\n" + e.workloadLogStatus.MembershipError)
-	if message == "" && !e.detailValid && e.detailRun == nil {
-		message = e.detailText
+	message := strings.TrimSpace(e.DetailError + "\n" + e.LogError + "\n" + e.WorkloadLogStatus.MembershipError)
+	if message == "" && !e.DetailValid && e.DetailRun == nil {
+		message = e.DetailText
 	}
 	if message != "" {
 		recovery := "g Reload logs after resolving the problem."
-		if e.previous {
+		if e.Previous {
 			recovery += "\np Return to current instance logs."
 		}
 		message = recovery + "\no Choose another container.\nEsc Return to the resource.\n\n" + message
 	}
 	if v.Text == "" && message == "" {
 		switch {
-		case e.detailRun != nil:
+		case e.DetailRun != nil:
 			message = m.loading("Loading container…")
-		case e.mergedLogs:
+		case e.MergedLogs:
 			message = "Waiting for matching Pod containers. Membership updates every 3 seconds."
-		case e.container == "":
+		case e.Container == "":
 			message = "No containers available."
-		case e.log != nil && !e.logConnected:
+		case e.Log != nil && !e.LogConnected:
 			message = m.loading("Connecting to logs…")
-		case e.log != nil:
+		case e.Log != nil:
 			message = "Waiting for output. New lines will appear here."
 		default:
 			message = "No logs returned for this source and time range."
@@ -213,5 +215,5 @@ func (m *model) exploreLogBody(width, height int) string {
 	}
 	v.Message = message
 	v.Refresh()
-	return v.View(m.podLogHeader(width, height), width, height, workspaceTheme())
+	return v.View(m.podLogHeader(width, height), width, height, ui.WorkspaceTheme())
 }

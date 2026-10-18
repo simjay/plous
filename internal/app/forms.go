@@ -1,168 +1,222 @@
 package app
 
 import (
-	"fmt"
-	"strings"
-
 	tea "charm.land/bubbletea/v2"
-	"github.com/simjay/plous/internal/ai"
+	"fmt"
+	"github.com/charmbracelet/x/ansi"
+	appcode "github.com/simjay/plous/internal/app/code"
+
+	appsettings "github.com/simjay/plous/internal/app/settings"
+	"github.com/simjay/plous/internal/ui"
+	textview "github.com/simjay/plous/internal/ui/text"
 	"github.com/simjay/plous/internal/workspace"
+	"strings"
 )
 
-type field struct {
-	key, label string
-	required   bool
-	value      editor
-	options    []string
-	secret     bool
-}
-type form struct {
-	kind, title, tool, connection string
-	profile                       string
-	fields                        []field
-	index                         int
-	remove                        bool
-	advanced                      bool
-	agent                         ai.Config
-	apiKey                        string
-}
-
-func (f *form) paste(s string) {
-	if f.index < len(f.fields) && len(f.fields[f.index].options) == 0 {
-		f.fields[f.index].value.insert(s, false)
-	}
-}
 func (m *model) beginWorkspace() {
 	m.toolSetup = nil
 	m.beginSettingsOverlay()
 	m.status = ""
-	m.form = &form{kind: "workspace", title: "Create workspace", fields: []field{{key: "name", label: "Workspace name", required: true, value: newEditor("")}}}
+	m.form = &appsettings.Form{Kind: "workspace", Title: "Create Workspace", Fields: []appsettings.Field{{Key: "name", Label: "Workspace Name", Required: true, Value: textview.NewField("")}}}
 }
+
 func (m *model) beginRename() {
 	w := m.current()
 	if w == nil {
 		return
 	}
-	m.form = &form{kind: "rename", title: "Rename workspace", fields: []field{{key: "name", label: "Workspace name", required: true, value: newEditor(w.Name)}}}
+	m.form = &appsettings.Form{Kind: "rename", Title: "Rename Workspace", Fields: []appsettings.Field{{Key: "name", Label: "Workspace Name", Required: true, Value: textview.NewField(w.Name)}}}
 	m.status = ""
 }
+
 func (m *model) beginConnection(tool string, c *workspace.Connection) {
-	f := &form{kind: "connection", title: "Add " + toolNames[tool], tool: tool, fields: []field{{key: "name", label: "Connection name", required: true}}}
+	f := &appsettings.Form{Kind: "connection", Title: "Add " + appsettings.ToolNames[tool], Tool: tool, Fields: []appsettings.Field{{Key: "name", Label: "Name", Required: true}}}
 	switch tool {
 	case "kubernetes", "helm", "kargo":
-		f.fields = append(f.fields, field{key: "kubeconfig", label: "Kubeconfig path (optional)"}, field{key: "context", label: "Kube context", required: true}, field{key: "namespace", label: "Namespace / project (optional)"})
-	case "kustomize":
-		f.fields = append(f.fields, field{key: "path", label: "Directory / overlay path", required: true})
+		f.Fields = append(f.Fields, appsettings.Field{Key: "kubeconfig", Label: "Kubeconfig Path (Optional)"}, appsettings.Field{Key: "context", Label: "Kube Context", Required: true}, appsettings.Field{Key: "namespace", Label: "Namespace / Project (Optional)"})
+	case "kustomize", "code":
+		f.Source = appsettings.NewSourceSetup()
+		f.Fields = append(f.Fields,
+			appsettings.Field{Key: "source_type", Label: "Location", Options: []string{"Local directory", "Git repository"}, Value: textview.NewField("Local directory")},
+			appsettings.Field{Key: "path", Label: "Local Directory", Required: true},
+			appsettings.Field{Key: "branch", Label: "Branch (Optional)"},
+			appsettings.Field{Key: "browse_path", Label: "Path (Optional)"})
 	case "terraform":
-		f.fields = append(f.fields, field{key: "path", label: "Working directory", required: true}, field{key: "workspace", label: "Terraform workspace (optional)"})
+		f.Fields = append(f.Fields, appsettings.Field{Key: "path", Label: "Working Directory", Required: true}, appsettings.Field{Key: "workspace", Label: "Terraform Workspace (Optional)"})
 	case "argo":
-		f.fields = append(f.fields, field{key: "repo", label: "Git repository URL or path", required: true}, field{key: "server", label: "Argo server (optional)"}, field{key: "revision", label: "Git revision (optional)"}, field{key: "path", label: "Repository path (optional)"})
+		f.Fields = append(f.Fields, appsettings.Field{Key: "repo", Label: "Git Repository URL or path", Required: true}, appsettings.Field{Key: "server", Label: "Argo Server (Optional)"}, appsettings.Field{Key: "revision", Label: "Git Revision (Optional)"}, appsettings.Field{Key: "path", Label: "Repository Path (Optional)"})
+	}
+	if monitorCluster(tool) {
+		f.Fields = append(f.Fields, appsettings.Field{Key: "driver", Label: "Release Storage", Options: []string{"secret", "configmap"}, Value: textview.NewField("secret")}, appsettings.Field{Key: "repository_config", Label: "Repository Config Path (Optional)"}, appsettings.Field{Key: "repository_cache", Label: "Repository Cache Path (Optional)"}, appsettings.Field{Key: "registry_config", Label: "Registry Config Path (Optional)"})
 	}
 	if c != nil {
-		f.connection = c.ID
-		f.remove = true
-		f.title = "Edit " + toolNames[tool]
-		for i := range f.fields {
-			v := c.Settings[f.fields[i].key]
-			if f.fields[i].key == "name" {
+		f.Connection = c.ID
+		f.Remove = true
+		f.Title = "Edit " + appsettings.ToolNames[tool]
+		for i := range f.Fields {
+			v := c.Settings[f.Fields[i].Key]
+			if (tool == "kustomize" || tool == "code") && f.Fields[i].Key == "source_type" && v == "" {
+				v = "Local directory"
+			}
+			if f.Fields[i].Key == "name" {
 				v = c.Name
 			}
-			f.fields[i].value = newEditor(v)
+			if monitorCluster(tool) && f.Fields[i].Key == "driver" && v == "" {
+				v = "secret"
+			}
+			f.Fields[i].Value = textview.NewField(v)
 		}
+	}
+	if f.Source != nil {
+		f.Title = "Add Source"
+		if c != nil {
+			f.Title = "Edit Source"
+			f.Source.SavedRevision = c.Settings["revision"]
+			if c.Settings["branch"] == "" && f.Source.SavedRevision != "" {
+				f.Note = "Saved Git reference: " + ui.OneLine(f.Source.SavedRevision) + "\nKept unless you enter a branch."
+			}
+			if subdir := c.Settings["subdirectory"]; subdir != "" {
+				f.Source.Drafts["browse_path"] = textview.NewField(subdir)
+				if _, set := c.Settings["browse_path"]; !set {
+					for i := range f.Fields {
+						if f.Fields[i].Key == "browse_path" {
+							f.Fields[i].Value = textview.NewField(subdir)
+						}
+					}
+				}
+			}
+		}
+		if f.Fields[1].Value.Text == "Git repository" {
+			f.Fields[2].Label = "Git Repository URL"
+		}
+		f.ChangeSourceType()
 	}
 	m.form = f
 	m.status = ""
 }
+
 func (m *model) updateForm(k tea.KeyPressMsg) {
 	f := m.form
-	if f.kind == "kube" {
+	if f.Source != nil && m.updateSourceSetup(k) {
+		return
+	}
+	if f.Kind == "kube" {
 		m.updateContextPicker(k)
 		return
 	}
-	n := len(f.fields)
-	maxIndex := n + len(f.actions()) - 1
+	n := len(f.Fields)
+	maxIndex := n + len(f.Actions()) - 1
 	switch k.String() {
 	case "esc":
 		m.cancelForm()
 	case "up":
-		f.index = max(0, f.index-1)
+		f.Index = max(0, f.Index-1)
 	case "down":
-		f.index = min(maxIndex, f.index+1)
+		f.Index = min(maxIndex, f.Index+1)
 	case "enter":
-		if f.index < n {
-			if f.fields[f.index].required && strings.TrimSpace(f.fields[f.index].value.text) == "" {
-				m.status = f.fields[f.index].label + " is required"
+		if f.Index < n {
+			if f.Fields[f.Index].Required && strings.TrimSpace(f.Fields[f.Index].Value.Text) == "" {
+				m.status = f.Fields[f.Index].Label + " is required"
 				return
 			}
-			f.index++
+			f.Index++
 			return
 		}
-		if f.index == n {
+		if f.Kind == "mainagent" {
+			m.activateAgentRow(f.Rows[f.Index-n])
+			return
+		}
+		if f.Index == n {
 			m.submitForm()
 			return
 		}
-		if f.index == n+1 {
+		if f.Index == n+1 {
 			m.cancelForm()
 			return
 		}
-		if f.kind == "appsettings" && f.index == n+2 {
+		if f.Kind == "appsettings" && f.Index == n+2 {
 			m.captureAIFields()
-			f.advanced = !f.advanced
+			f.Advanced = !f.Advanced
 			m.buildAIFields()
-			f.index = len(f.fields)
-			if f.advanced {
-				f.index = 2
+			f.Index = len(f.Fields)
+			if f.Advanced {
+				f.Index = 2
 			}
 			return
 		}
-		m.removeID = f.connection
-		m.removeProfile = f.profile
+		m.removeID = f.Connection
+		m.removeProfile = f.Profile
 		m.form = nil
 		m.page = "remove"
-		if f.kind == "appsettings" {
+		if f.Kind == "appsettings" {
 			m.page = "removeprovider"
+			m.removeForm = f
 		}
 		m.cursor = 0
 		m.status = ""
 	default:
-		if f.index < n {
-			field := &f.fields[f.index]
-			if len(field.options) == 0 {
-				field.value.key(k, false)
-			} else if len(field.options) > 0 && (k.String() == "left" || k.String() == "right" || k.String() == "space") {
+		if f.Index < n {
+			field := &f.Fields[f.Index]
+			if len(field.Options) == 0 {
+				field.Value.Key(k, false)
+			} else if len(field.Options) > 0 && (k.String() == "left" || k.String() == "right" || k.String() == "space") {
 				i := -1
-				for index, value := range field.options {
-					if value == field.value.text {
+				for index, value := range field.Options {
+					if value == field.Value.Text {
 						i = index
 					}
 				}
 				delta := 1
 				if k.String() == "left" {
-					delta = len(field.options) - 1
+					delta = len(field.Options) - 1
 				}
-				field.value = newEditor(field.options[max(0, (i+delta)%len(field.options))])
-				if field.key == "provider" {
+				field.Value = textview.NewField(field.Options[max(0, (i+delta)%len(field.Options))])
+				if field.Key == "agent" {
+					m.nativeChange = nil
+					kind := appsettings.AgentKind(field.Value.Text)
+					f.RefreshAgent(m.settings.Configs())
+					m.status = appsettings.AgentAvailability(kind)
+				}
+				if field.Key == "provider" {
 					m.changeAIProvider()
+				}
+				if field.Key == "source_type" && f.Source != nil {
+					f.ChangeSourceType()
 				}
 			}
 		}
 	}
 }
+
 func (m *model) submitForm() {
 	f := m.form
+	if f.LocalDirectory() && !m.validateLocalDirectory() {
+		return
+	}
 	values := map[string]string{}
-	for i, v := range f.fields {
-		value := strings.TrimSpace(v.value.text)
-		if v.required && value == "" {
-			m.status = v.label + " is required"
-			f.index = i
+	for i, v := range f.Fields {
+		value := strings.TrimSpace(v.Value.Text)
+		if v.Required && value == "" {
+			m.status = v.Label + " is required"
+			f.Index = i
 			return
 		}
-		values[v.key] = value
+		values[v.Key] = value
 	}
-	switch f.kind {
+	switch f.Kind {
+	case "contextname":
+		m.finishContextName(true)
+	case "mainagent":
+		m.saveMainAgent(appsettings.AgentKind(values["agent"]))
 	case "appsettings":
 		m.saveAppSettings(values)
+	case "currentpath":
+		m.currentPaths = values["path"]
+		m.form = nil
+		m.closeSettings()
+		m.requestCurrent("", true)
+	case "savecurrent":
+		m.saveCurrentWorkspace(values["name"])
 	case "workspace":
 		if m.saveWorkspace(workspace.Workspace{Name: values["name"]}) {
 			m.connection = ""
@@ -171,7 +225,7 @@ func (m *model) submitForm() {
 			m.closeSettings()
 			m.page, m.detail, m.focus = "", "", 1
 			m.beginToolSetup(false)
-			m.status = "Workspace created. Choose a tool, or Esc to start empty."
+			m.status = "Workspace created. Choose a connection, or Esc to start empty."
 		}
 	case "rename":
 		w := m.current()
@@ -191,10 +245,50 @@ func (m *model) submitForm() {
 		}
 		copy := *w
 		copy.Connections = append([]workspace.Connection(nil), w.Connections...)
-		c := workspace.Connection{ID: f.connection, Tool: f.tool, Name: values["name"], Settings: map[string]string{}}
+		c := workspace.Connection{ID: f.Connection, Tool: f.Tool, Name: values["name"], Settings: map[string]string{}}
+		for _, existing := range copy.Connections {
+			if existing.ID == c.ID && c.ID != "" {
+				for k, v := range existing.Settings {
+					c.Settings[k] = v
+				}
+				break
+			}
+		}
 		for k, v := range values {
-			if k != "name" && v != "" {
-				c.Settings[k] = v
+			if k != "name" {
+				if v == "" && k != "browse_path" {
+					delete(c.Settings, k)
+				} else {
+					c.Settings[k] = v
+				}
+			}
+		}
+		if sourceConnection(c.Tool) {
+			if c.Settings["source_type"] == "Git repository" && c.Settings["branch"] != "" {
+				if err := appsettings.ValidateRepositoryBranch(c.Settings["branch"]); err != nil {
+					m.status = err.Error()
+					f.Index = 3
+					return
+				}
+				delete(c.Settings, "revision")
+			}
+			if err := appcode.ConfigForConnection(&c).Validate(); err != nil {
+				m.status = err.Error()
+				return
+			}
+		}
+		unchanged := false
+		for _, existing := range copy.Connections {
+			if c.ID != "" && existing.ID == c.ID && sameClusterTarget(existing, c) {
+				unchanged = true
+			}
+		}
+		if !unchanged {
+			for _, existing := range copy.Connections {
+				if existing.ID != c.ID && sameClusterTarget(existing, c) {
+					m.status = fmt.Sprintf("This cluster connection already exists as %q. Edit it in Settings.", existing.Name)
+					return
+				}
 			}
 		}
 		found := false
@@ -209,10 +303,14 @@ func (m *model) submitForm() {
 			copy.Connections = append(copy.Connections, c)
 		}
 		if m.saveWorkspace(copy) {
-			m.expanded[m.active+"/"+f.tool] = true
+			m.expanded[m.active+"/"+f.Tool] = true
+			if !found && sourceConnection(f.Tool) {
+				connections := m.current().Connections
+				m.expanded[connections[len(connections)-1].ID] = true
+			}
 			m.form = nil
 			if m.toolSetup != nil {
-				m.finishToolSetup(f.tool)
+				m.finishToolSetup(f.Tool)
 			} else {
 				m.page = "settings"
 				m.cursor = 0
@@ -220,12 +318,50 @@ func (m *model) submitForm() {
 		}
 	}
 }
+
 func (m *model) updateMain(key string) {
+	if m.mode == 2 && m.page == "" && m.form == nil {
+		if (key == "right" || key == "left") && m.detail == "" {
+			step := 1
+			if key == "left" {
+				step = -1
+			}
+			m.cycleActivityType(step)
+			return
+		}
+		if key == "O" && m.activityCommand("observations") || key == "g" && m.activityCommand("refresh") || key == "d" && m.activityCommand("describe") {
+			return
+		}
+	}
+	if m.scrollActivityDetail(key) {
+		return
+	}
+	if m.mode == 2 && m.detail != "" && m.page == "" && m.operationDetail != nil && key == "enter" {
+		m.openOperationRelease()
+		return
+	}
+	if m.codeVisible() {
+		m.updateCode(key)
+		return
+	}
+
+	if m.gitOpsVisible() {
+		m.updateGitOps(key)
+		return
+	}
+	if m.helmVisible() {
+		m.updateHelm(key)
+		return
+	}
 	if m.exploreVisible() {
 		m.updateExplore(key)
 		return
 	}
 	if key == "esc" {
+		if m.page == "removeprovider" {
+			m.cancelProviderRemoval()
+			return
+		}
 		if m.page == "" && m.detail == "" {
 			m.focusRootSidebar()
 			return
@@ -240,6 +376,9 @@ func (m *model) updateMain(key string) {
 			return
 		} else if m.detail != "" {
 			m.detail = ""
+			if m.mode == 2 {
+				m.restoreActivitySearch()
+			}
 		} else if m.page == "tools" || m.page == "contexts" || m.page == "remove" || m.page == "removeprovider" {
 			m.openSettings()
 		} else {
@@ -258,7 +397,7 @@ func (m *model) updateMain(key string) {
 		}
 		if key == "enter" {
 			if m.cursor == 0 {
-				m.openSettings()
+				m.cancelProviderRemoval()
 			} else {
 				m.removeAIConnection()
 			}
@@ -268,13 +407,14 @@ func (m *model) updateMain(key string) {
 			m.cursor = max(0, m.cursor-1)
 		}
 		if key == "down" {
-			m.cursor = min(len(toolTypes)-1, m.cursor+1)
+			m.cursor = min(len(appsettings.ToolTypes)-1, m.cursor+1)
 		}
 		if key == "enter" {
-			if toolTypes[m.cursor] == "kubernetes" {
+			if appsettings.ToolTypes[m.cursor] == "kubernetes" || appsettings.ToolTypes[m.cursor] == "helm" {
+				m.toolSetup.Tool = appsettings.ToolTypes[m.cursor]
 				m.beginKube()
 			} else {
-				m.beginConnection(toolTypes[m.cursor], nil)
+				m.beginConnection(appsettings.ToolTypes[m.cursor], nil)
 			}
 		}
 	case "remove":
@@ -304,6 +444,12 @@ func (m *model) updateMain(key string) {
 			}
 		}
 	default:
+		if m.currentRoot && m.current() == nil {
+			if key == "enter" {
+				m.executeExplore("connections")
+			}
+			return
+		}
 		if m.current() == nil {
 			if key == "enter" {
 				m.beginWorkspace()
@@ -316,16 +462,32 @@ func (m *model) updateMain(key string) {
 			return
 		}
 		if m.mode == 2 && m.page == "" && m.detail == "" {
-			changes := m.filteredChanges()
-			if key == "up" {
-				pos = max(0, pos-1)
+			changes := m.activityEntries()
+			pos = min(max(0, m.activityPosition()), max(0, len(changes)-1))
+			if len(changes) == 0 && (m.activityUI.Pending || m.activityUI.Load != nil) {
+				return
 			}
-			if key == "down" {
-				pos = min(max(0, len(changes)-1), pos+1)
+			step := 1
+			if key == "pgup" || key == "pgdown" {
+				step = max(1, (m.height-12)/2)
+			}
+			if key == "up" || key == "pgup" {
+				pos = max(0, pos-step)
+			}
+			if key == "down" || key == "pgdown" {
+				pos = min(max(0, len(changes)-1), pos+step)
+			}
+			if key == "home" {
+				pos = 0
+			}
+			if key == "end" {
+				pos = max(0, len(changes)-1)
 			}
 			if key == "enter" && len(changes) > 0 {
-				m.setActivityDetail(changes[min(pos, len(changes)-1)])
+				m.openActivityEntry(changes[min(pos, len(changes)-1)])
 			}
+			m.setActivityPosition(pos)
+			return
 		} else {
 			step := 1
 			if key == "pgup" || key == "pgdown" {
@@ -350,9 +512,10 @@ func (m *model) updateMain(key string) {
 		m.positions[m.viewKey()] = pos
 	}
 }
+
 func (m *model) addContexts() {
 	if !m.contextsReady() {
-		m.status = "Refresh contexts before adding."
+		m.status = "Refresh Contexts before adding."
 		return
 	}
 	w := m.current()
@@ -374,17 +537,10 @@ func (m *model) addContexts() {
 		if !m.chosen[i] {
 			continue
 		}
-		exists := false
-		for _, old := range copy.Connections {
-			if old.Tool == "kubernetes" && old.Settings["context"] == c.Name && old.Settings["kubeconfig"] == c.Kubeconfig {
-				exists = true
-				break
-			}
-		}
-		if exists {
+		if m.contextAlreadyAdded(i) {
 			continue
 		}
-		copy.Connections = append(copy.Connections, workspace.Connection{Tool: "kubernetes", Name: c.Name, Settings: map[string]string{"kubeconfig": c.Kubeconfig, "context": c.Name, "namespace": c.Namespace}})
+		copy.Connections = append(copy.Connections, workspace.Connection{Tool: m.toolSetup.Tool, Name: m.pendingContextName(i), Settings: map[string]string{"kubeconfig": c.Kubeconfig, "context": c.Name, "namespace": c.Namespace}})
 		added++
 	}
 	if added == 0 {
@@ -392,90 +548,160 @@ func (m *model) addContexts() {
 		return
 	}
 	if m.saveWorkspace(copy) {
-		m.finishToolSetup("kubernetes")
-		m.status = fmt.Sprintf("Added %d Kubernetes connection(s)", added)
+		tool := m.toolSetup.Tool
+		m.finishToolSetup(tool)
+		m.status = fmt.Sprintf("Added %d %s connection(s)", added, appsettings.ToolNames[tool])
 	}
 }
 
 func (m *model) formBody(width, height int) string {
 	f := m.form
 	lines := []string{}
-	if f.kind == "workspace" {
-		lines = append(lines, workspaceLocation(width)...)
+	if f.Note != "" && f.Kind != "mainagent" {
+		lines = append(lines, strings.Split(ui.Muted.Render(ansi.Wrap(f.Note, width, "")), "\n")...)
+		lines = append(lines, "")
+	}
+	if f.Kind == "workspace" {
+		lines = append(lines, appsettings.WorkspaceLocation(width)...)
 		if height >= 10 {
 			lines = append(lines, "")
 		}
 	}
-	selectedRow := 0
-	for i, field := range f.fields {
-		label := field.label
-		if field.required {
+	selectedRow, selectedEnd := 0, 2
+	fieldRows := []int{}
+	for i, field := range f.Fields {
+		fieldRows = append(fieldRows, len(lines))
+		label := field.Label
+		if field.Required {
 			label += " *"
 		}
-		active := m.focus == 1 && f.index == i
-		value := editorLine(field.value, width-4, active)
-		if field.secret {
-			masked := newEditor(strings.Repeat("•", len([]rune(field.value.text))))
-			masked.cursor = field.value.cursor
-			value = editorLine(masked, width-4, active)
+		active := m.focus == 1 && f.Index == i
+		value := ui.EditorLine(field.Value, width-4, active, "field/"+field.Key)
+		if field.Secret {
+			masked := textview.NewField(strings.Repeat("•", len([]rune(field.Value.Text))))
+			masked.Cursor = field.Value.Cursor
+			masked.Anchor, masked.Selecting = field.Value.Anchor, field.Value.Selecting
+			value = ui.EditorLine(masked, width-4, active, "secret/"+field.Key)
 		}
-		if len(field.options) > 0 {
-			value = "‹ " + field.value.text + " ›"
-			if field.key == "provider" {
-				value = "‹ " + providerLabel(field.value.text) + " ›"
+		if len(field.Options) > 0 {
+			value = "‹ " + field.Value.Text + " ›"
+			if field.Key == "source_type" {
+				value = "‹ Local Directory ›"
+				if field.Value.Text == "Git repository" {
+					value = "‹ Git Repository ›"
+				}
+			}
+			if field.Key == "provider" {
+				value = "‹ " + appsettings.ProviderLabel(field.Value.Text) + " ›"
 			}
 		}
 		if value == "" {
 			value = "(empty)"
+			if field.Key == "branch" {
+				value = ui.Muted.Render("Default branch")
+				if f.Source != nil && f.Source.SavedRevision != "" {
+					value = ui.Muted.Render("Keep saved reference")
+				}
+			}
 		}
-		style := canvasStyle.Width(width).Padding(0, 1)
-		labelStyle := muted
-		if f.index == i {
+		style := ui.CanvasStyle.Width(width).Padding(0, 1)
+		labelStyle := ui.Muted
+		if f.Index == i {
 			selectedRow = len(lines)
-			style = style.Background(highlight)
-			labelStyle = shortcutStyle
+			style = style.Background(ui.Highlight)
+			labelStyle = ui.ShortcutStyle
 		}
-		lines = append(lines, labelStyle.Render(clipped(label, width)), style.Render(value))
+		target := "field/" + field.Key
+		if len(field.Options) > 0 {
+			target = "option/" + field.Key
+		}
+		lines = append(lines, ui.MouseTarget(labelStyle.Render(ui.Clipped(label, width)), "field/"+field.Key), ui.MouseTarget(style.Render(value), target))
+		if f.Source != nil && field.Key == "branch" {
+			hint := "Leave blank to use the default branch."
+			if f.Source.SavedRevision != "" {
+				hint = "Leave blank to keep the saved reference."
+			}
+			lines = append(lines, ui.Muted.Render(ui.Clipped(hint, width)))
+		}
+		if f.LocalDirectory() && field.Key == "path" {
+			lines = append(lines, strings.Split(f.DirectoryHint(width), "\n")...)
+		}
+		if f.Index == i {
+			selectedEnd = len(lines)
+		}
 		if height >= 10 {
 			lines = append(lines, "")
 		}
 	}
-	if f.kind == "appsettings" {
-		lines = append(lines, muted.Render(clipped(m.aiCredentialHint(), width)), "")
+	if f.Kind == "appsettings" {
+		lines = append(lines, ui.Muted.Render(ui.Clipped(m.aiCredentialHint(), width)), "")
 	}
-	actions := f.actions()
+	if f.Kind == "mainagent" {
+		lines = append(lines, strings.Split(ui.Muted.Render(ansi.Wrap(f.Note, width, "")), "\n")...)
+		lines = append(lines, "")
+	}
+	actionsStart := len(lines)
+	actions := f.Actions()
+	section := ""
 	for i, action := range actions {
-		if f.index == len(f.fields)+i {
+		if f.Kind == "mainagent" && f.Rows[i].Section != section {
+			section = f.Rows[i].Section
+			if section != "" {
+				lines = append(lines, ui.SectionHeadingStyle.Render(section))
+			} else {
+				lines = append(lines, "")
+			}
+		}
+		if f.Index == len(f.Fields)+i {
 			selectedRow = len(lines)
 		}
-		lines = append(lines, formAction(action, i == 0, f.index == len(f.fields)+i, width))
+		primary := i == 0
+		if f.LocalDirectory() {
+			primary = i == 1
+		}
+		if f.Kind == "mainagent" {
+			primary = f.Rows[i].Kind == appsettings.SaveAgentRow
+		}
+		label := ui.FormAction(action, primary, f.Index == len(f.Fields)+i, width)
+		if f.Kind == "mainagent" && f.Rows[i].Section != "" {
+			label = ui.SettingsChoiceLine(action, f.Index == len(f.Fields)+i, width)
+		}
+		lines = append(lines, ui.MouseTarget(label, fmt.Sprintf("formaction/%d", i)))
+		if f.Kind == "mainagent" && f.Rows[i].Detail != "" {
+			lines = append(lines, ui.Muted.Render(ui.Clipped("  "+ui.OneLine(f.Rows[i].Detail), width)))
+		}
 	}
-	available := max(1, height-2)
+	heading := ui.SectionHeadingStyle.Render(ui.Clipped(f.Title, width)) + "\n\n"
+	if f.Source != nil && m.settingsOverlay != nil {
+		heading = ""
+	}
+	available := max(1, height-strings.Count(heading, "\n"))
+	if f.Source != nil {
+		// Keep source actions visible while the fields scroll in compact terminals.
+		fieldHeight := max(2, available-len(actions)-1)
+		start := max(0, actionsStart-fieldHeight)
+		if f.Index < len(f.Fields) {
+			start = max(0, min(selectedEnd-fieldHeight, selectedRow, start))
+		}
+		if start > 0 {
+			for _, row := range fieldRows {
+				if row >= start && row <= selectedRow {
+					start = row
+					break
+				}
+			}
+		}
+		visible := append([]string(nil), lines[start:min(actionsStart, start+fieldHeight)]...)
+		for len(visible) < fieldHeight+1 {
+			visible = append(visible, "")
+		}
+		return heading + strings.Join(append(visible, lines[actionsStart:]...), "\n")
+	}
 	// Keep the current field label and input together when scrolling.
 	start := max(0, selectedRow-available+2)
-	if f.index < len(f.fields) {
+	if f.Index < len(f.Fields) {
 		start = min(start, selectedRow)
 	}
 	end := min(len(lines), start+available)
-	return sectionHeadingStyle.Render(clipped(f.title, width)) + "\n\n" + strings.Join(lines[start:end], "\n")
-}
-
-func (f *form) actions() []string {
-	action := "Save"
-	actions := []string{action, "Cancel"}
-	if f.kind == "appsettings" {
-		label := "Advanced…"
-		if f.advanced {
-			label = "Hide advanced"
-		}
-		actions = append(actions, label)
-	}
-	if f.remove {
-		label := "Remove connection"
-		if f.kind == "appsettings" {
-			label = "Remove AI connection"
-		}
-		actions = append(actions, label)
-	}
-	return actions
+	return heading + strings.Join(lines[start:end], "\n")
 }

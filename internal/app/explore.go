@@ -1,191 +1,51 @@
 package app
 
 import (
-	"cmp"
 	"context"
 	"fmt"
 	"slices"
-	"sort"
-	"strconv"
 	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/simjay/plous/internal/kubernetes"
-	"github.com/simjay/plous/internal/logview"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"github.com/simjay/plous/internal/app/monitor"
+	kubernetes "github.com/simjay/plous/internal/integrations/kubernetes/monitor"
 )
 
-type explorePreference struct {
-	Resource   string `json:"resource"`
-	Namespace  string `json:"namespace"`
-	Filter     string `json:"filter,omitempty"`
-	Selector   string `json:"selector,omitempty"`
-	Sort       int    `json:"sort,omitempty"`
-	Descending bool   `json:"descending,omitempty"`
-}
-type detailSectionReturn struct {
-	tab, scroll, relatedCursor int
-}
-
-type exploreLocation struct {
-	yamlOrigin                 *detailSectionReturn
-	preference                 explorePreference
-	resource                   kubernetes.Resource
-	selected                   string
-	object                     *unstructured.Unstructured
-	tab, scroll, relatedCursor int
-	container                  string
-}
-type exploreState struct {
-	key                                string
-	generation                         uint64
-	client                             *kubernetes.Client
-	resources                          []kubernetes.Resource
-	resource                           kubernetes.Resource
-	preference                         explorePreference
-	collection                         kubernetes.Collection
-	listed                             bool
-	selected                           string
-	status, err, warning               string
-	connecting                         bool
-	defaultNamespace                   bool
-	connectionCancel                   context.CancelFunc
-	stream                             *exploreStream
-	detail                             *unstructured.Unstructured
-	detailIdentity                     string
-	detailLoaded                       bool
-	detailSections                     [4]detailSection
-	detailValid                        bool
-	supplement                         []kubernetes.DetailSection
-	supplementNote                     string
-	supplementAt                       time.Time
-	detailRun                          *exploreDetailRun
-	detailText, detailError, detailKey string
-	references                         []kubernetes.Reference
-	relatedCursor                      int
-	yamlDocument                       *yamlDocument
-	yamlOrigin                         *detailSectionReturn
-	tab, scroll                        int
-	trail                              []exploreLocation
-	logOrigin                          *exploreLocation
-	log                                *exploreLogRun
-	logError, logKey, container        string
-	logViewer                          *logview.Model
-	previous, reveal                   bool
-	picker                             string
-	pickerCursor, group                int
-	input                              *editor
-	inputKind                          string
-	requested                          string
-	pendingCommand                     string
-	namespaces                         *namespacePicker
-	action                             *resourceActionState
-	terminal                           *resourceTerminal
-	logSince                           int64
-	logTimestamps                      bool
-	mergedLogs                         bool
-	workloadLogStatus                  kubernetes.WorkloadLogStatus
-	logConnected                       bool
-}
-type exploreConnected struct {
-	generation uint64
-	client     *kubernetes.Client
-	resources  []kubernetes.Resource
-	warning    string
-	err        error
-}
-type exploreStream struct {
-	key    string
-	cancel context.CancelFunc
-	ctx    context.Context
-	events chan kubernetes.Snapshot
-}
-type exploreUpdate struct {
-	stream   *exploreStream
-	snapshot kubernetes.Snapshot
-	done     bool
-}
-type detailSection struct {
-	text, note string
-	references []kubernetes.Reference
-	supplement []kubernetes.DetailSection
-	at         time.Time
-	loaded     bool
-}
-type exploreDetailRun struct{ cancel context.CancelFunc }
-type exploreDetailResult struct {
-	run          *exploreDetailRun
-	object       *unstructured.Unstructured
-	text         string
-	references   []kubernetes.Reference
-	supplement   []kubernetes.DetailSection
-	note         string
-	supplementAt time.Time
-	err          error
-}
-type exploreLogRun struct {
-	cancel context.CancelFunc
-	ctx    context.Context
-	events chan exploreLogEvent
-}
-type exploreLogEvent struct {
-	workloadStatus *kubernetes.WorkloadLogStatus
-	run            *exploreLogRun
-	text           string
-	err            error
-	done           bool
-	connected      bool
-}
-
-func (m *model) explorer() *exploreState {
+func (m *model) explorer() *monitor.ExploreState {
 	if m.explore == nil {
-		m.explore = &exploreState{}
+		m.explore = &monitor.ExploreState{}
 	}
 	if m.explorePreferences == nil {
-		m.explorePreferences = map[string]explorePreference{}
+		m.explorePreferences = map[string]monitor.ExplorePreference{}
 	}
 	return m.explore
 }
+
 func (m *model) exploreActive() bool {
-	c := m.currentConnection()
+	c := m.connectionView(m.selectedConnection())
 	return m.mode == 1 && c != nil && c.Tool == "kubernetes"
 }
+
 func (m *model) exploreVisible() bool {
-	return m.mode == 1 && m.page == "" && m.form == nil && (m.exploreActive() || (m.explore != nil && m.explore.picker == "connections"))
+	return m.explore != nil && m.mode == 1 && m.page == "" && m.form == nil && (m.exploreActive() || (m.explore != nil && m.explore.Picker == "connections"))
 }
+
 func (m *model) rememberExplore() {
+	if m.gitOpsReturn != nil || m.overviewBack != nil {
+		return
+	}
 	e := m.explorer()
+	if e.Temporary {
+		return
+	}
 	if c := m.currentConnection(); c != nil && c.Tool == "kubernetes" {
-		m.explorePreferences[m.active+"/"+m.connection] = e.preference
+		m.explorePreferences[m.active+"/"+m.connection] = e.Preference
 	}
 	m.persist()
 }
-func (m *model) stopExplore() {
-	if e := m.explore; e != nil {
-		m.stopResourceAction()
-		m.stopResourceTerminal()
-		m.stopNamespacePicker()
-		if e.connectionCancel != nil {
-			e.connectionCancel()
-			e.connectionCancel = nil
-		}
-		if e.stream != nil {
-			e.stream.cancel()
-			e.stream = nil
-		}
-		if e.detailRun != nil {
-			e.detailRun.cancel()
-			e.detailRun = nil
-		}
-		if e.log != nil {
-			e.log.cancel()
-			e.log = nil
-		}
-		e.detailKey = ""
-		e.logKey = ""
-	}
-}
+
+func (m *model) stopExplore() { m.explore.Stop() }
 
 func (m *model) syncExplore() tea.Cmd {
 	if m.exploreClosed {
@@ -194,9 +54,9 @@ func (m *model) syncExplore() tea.Cmd {
 	if !m.exploreActive() {
 		if m.explore != nil {
 			m.stopExplore()
-			m.explore.key = ""
-			if m.explore.picker != "connections" {
-				m.explore.pendingCommand = ""
+			m.explore.Key = ""
+			if m.explore.Picker != "connections" {
+				m.explore.PendingCommand = ""
 			}
 		}
 		return nil
@@ -204,13 +64,13 @@ func (m *model) syncExplore() tea.Cmd {
 	e := m.explorer()
 	c := m.currentConnection()
 	key := strings.Join([]string{m.active, c.ID, c.Settings["kubeconfig"], c.Settings["context"], c.Settings["namespace"]}, "\x00")
-	if key != e.key {
-		request, picker, pending := e.requested, e.picker, e.pendingCommand
+	if key != e.Key {
+		request, pending := e.Requested, e.PendingCommand
 		m.stopExplore()
 		m.exploreGeneration++
 		preference, restored := m.explorePreferences[m.active+"/"+c.ID]
 		if !restored {
-			preference = explorePreference{Resource: "pods", Namespace: c.Settings["namespace"]}
+			preference = monitor.ExplorePreference{Resource: "pods", Namespace: c.Settings["namespace"]}
 		}
 		if request != "" {
 			preference.Resource = request
@@ -218,150 +78,124 @@ func (m *model) syncExplore() tea.Cmd {
 		if preference.Resource == "" {
 			preference.Resource = "pods"
 		}
-		ctx, cancel := context.WithCancel(context.Background())
-		*e = exploreState{key: key, generation: m.exploreGeneration, preference: preference, connecting: true, status: "Connecting…", connectionCancel: cancel, defaultNamespace: !restored && preference.Namespace == ""}
-		e.pendingCommand = pending
-		if picker == "kinds" {
-			e.picker = "kinds"
-			input := newEditor("")
-			e.input = &input
-			e.inputKind = "kinds"
-		}
-		paths, contextName, namespace, generation := c.Settings["kubeconfig"], c.Settings["context"], c.Settings["namespace"], e.generation
-		return func() tea.Msg {
-			client, err := kubernetes.New(paths, contextName, namespace)
-			if err != nil {
-				return exploreConnected{generation: generation, err: err}
+		*e = monitor.ExploreState{Key: key, Generation: m.exploreGeneration, Preference: preference, Connecting: true, Status: "Connecting…", DefaultNamespace: !restored && preference.Namespace == ""}
+		e.PreserveTree = request == ""
+		e.PendingCommand = pending
+	}
+	if e.Connecting {
+		cluster := m.clusterFor(m.active, *m.savedConnection())
+		if !cluster.Loaded {
+			if cluster.Cancel == nil {
+				return m.discoverCluster(cluster)
 			}
-			resources, warning, err := client.Discover(ctx)
-			if !restored && preference.Namespace == "" {
-				namespace = client.Namespace
-			} else {
-				namespace = preference.Namespace
-			}
-			client.Namespace = namespace
-			return exploreConnected{generation: generation, client: client, resources: resources, warning: warning, err: err}
+			return nil
 		}
+		m.updateExploreMessage(monitor.ExploreConnected{Generation: e.Generation, Client: cluster.Client, Resources: cluster.Catalog, Warning: cluster.Warning, Err: cluster.Err})
 	}
 	namespaceCommand := m.syncNamespacePicker()
-	if e.connecting || e.client == nil {
+	if e.Connecting || e.Client == nil {
 		return namespaceCommand
 	}
-	resource, ok := kubernetes.Find(e.resources, e.preference.Resource)
+	resource, ok := kubernetes.Find(e.Resources, e.Preference.Resource)
 	if !ok {
-		e.err = "Resource type unavailable or ambiguous. Use :kinds and choose an API group."
+		m.stopExploreUsage()
+		e.Err = "Resource type unavailable or ambiguous. Choose a resource in the sidebar, or use its API-qualified name."
 		return namespaceCommand
 	}
-	e.resource = resource
-	ns := e.preference.Namespace
+	e.Resource = resource
+	ns := e.Preference.Namespace
 	if !resource.Namespaced {
 		ns = ""
 	}
-	streamKey := resource.Key() + "/" + resource.Version + "/" + ns + "/" + e.preference.Selector
+	streamKey := resource.Key() + "/" + resource.Version + "/" + ns + "/" + e.Preference.Selector
 	commands := []tea.Cmd{namespaceCommand}
-	if e.stream == nil || e.stream.key != streamKey {
-		if e.stream != nil {
-			e.stream.cancel()
+	if e.Stream == nil || e.Stream.Key != streamKey {
+		if e.Stream != nil {
+			e.Stream.Cancel()
 		}
 		ctx, cancel := context.WithCancel(context.Background())
-		stream := &exploreStream{key: streamKey, cancel: cancel, ctx: ctx, events: make(chan kubernetes.Snapshot, 4)}
-		e.stream = stream
-		e.collection = kubernetes.Collection{}
-		e.listed = false
-		e.status = "Loading…"
-		e.err = ""
-		client, selector := e.client, e.preference.Selector
+		stream := &monitor.ExploreStream{Key: streamKey, Cancel: cancel, Ctx: ctx, Events: make(chan kubernetes.Snapshot, 4)}
+		e.Stream = stream
+		if !e.Preloaded {
+			e.Collection = kubernetes.Collection{}
+			e.Listed = false
+		}
+		e.Preloaded = false
+		e.Status = "Loading…"
+		e.Err = ""
+		client, selector := e.Client, e.Preference.Selector
 		commands = append(commands, func() tea.Msg {
 			go func() {
-				defer close(stream.events)
+				defer close(stream.Events)
 				client.Observe(ctx, resource, ns, selector, func(snapshot kubernetes.Snapshot) {
 					select {
-					case stream.events <- snapshot:
+					case stream.Events <- snapshot:
 					case <-ctx.Done():
 					}
 				})
 			}()
-			return waitExplore(stream)()
+			return monitor.WaitExplore(stream)()
 		})
 	}
-	commands = append(commands, m.syncExploreDetail())
+	commands = append(commands, m.syncExploreDetail(), m.syncExploreUsage())
 	return tea.Batch(commands...)
 }
 
-func waitExplore(stream *exploreStream) tea.Cmd {
-	return func() tea.Msg {
-		select {
-		case snapshot, ok := <-stream.events:
-			return exploreUpdate{stream: stream, snapshot: snapshot, done: !ok}
-		case <-stream.ctx.Done():
-			return exploreUpdate{stream: stream, done: true}
-		}
-	}
-}
 func (m *model) updateExploreMessage(msg tea.Msg) tea.Cmd {
 	e := m.explorer()
 	switch msg := msg.(type) {
-	case namespaceResult:
+	case monitor.ExploreUsageResult:
+		return m.updateExploreUsage(msg)
+	case monitor.NamespaceResult:
 		m.updateNamespaceResult(msg)
-	case exploreConnected:
-		if msg.generation != e.generation || !e.connecting || !m.exploreActive() {
+	case monitor.ExploreConnected:
+		if msg.Generation != e.Generation || !e.Connecting || !m.exploreActive() {
 			return nil
 		}
-		e.connecting = false
-		if msg.err != nil {
-			if msg.client == nil {
-				e.err = msg.err.Error()
+		e.Connecting = false
+		if msg.Err != nil {
+			if msg.Client == nil {
+				e.Err = msg.Err.Error()
 			} else {
-				e.err = kubernetes.ErrorText(msg.err)
+				e.Err = kubernetes.ErrorText(msg.Err)
 			}
-			e.status = "Connection unavailable"
+			e.Status = "Connection unavailable"
 			return nil
 		}
-		e.client, e.resources, e.warning = msg.client, msg.resources, msg.warning
-		if e.defaultNamespace {
-			e.preference.Namespace = msg.client.Namespace
-			e.defaultNamespace = false
+		e.Client, e.Resources, e.Warning = msg.Client, msg.Resources, msg.Warning
+		if e.DefaultNamespace {
+			e.Preference.Namespace = msg.Client.Namespace
+			e.DefaultNamespace = false
 		}
-		e.err = ""
+		e.Err = ""
 		m.rememberExplore()
-		if command := e.pendingCommand; command != "" {
-			e.pendingCommand = ""
+		if command := e.PendingCommand; command != "" {
+			e.PendingCommand = ""
 			m.runExploreCommand(command, false)
 		}
-	case exploreUpdate:
-		if msg.stream != e.stream || msg.done {
+	case monitor.ExploreUpdate:
+		if msg.Stream != e.Stream || msg.Done {
 			return nil
 		}
-		e.status = msg.snapshot.Status
-		if msg.snapshot.Err != nil {
-			e.err = kubernetes.ErrorText(msg.snapshot.Err)
+		e.Status = msg.Snapshot.Status
+		if msg.Snapshot.Err != nil {
+			e.Err = kubernetes.ErrorText(msg.Snapshot.Err)
 		}
-		if msg.snapshot.Collection != nil {
-			e.collection = *msg.snapshot.Collection
-			e.listed = true
-			e.err = ""
-			_, rows := m.exploreRows()
-			found := false
-			for _, row := range rows {
-				if kubernetes.Identity(row.Object) == e.selected {
-					found = true
-				}
-			}
-			if !found {
-				e.selected = ""
-				if len(rows) > 0 {
-					e.selected = kubernetes.Identity(rows[0].Object)
-				}
-			}
-			if e.detail != nil {
-				for _, object := range e.collection.Objects {
-					if object.GetUID() == e.detail.GetUID() {
-						e.detail = object.DeepCopy()
-						if e.resource.Key() == "services" {
-							if readiness, found := e.collection.ServiceEndpoints[kubernetes.Identity(object)]; found && (e.supplementAt.IsZero() || readiness.ObservedAt.After(e.supplementAt)) && (e.detailSections[0].at.IsZero() || readiness.ObservedAt.After(e.detailSections[0].at)) {
-								e.supplement, e.supplementNote = kubernetes.EndpointReadinessSummary(readiness)
-								e.supplementAt = readiness.ObservedAt
-								e.detailSections[0].supplement, e.detailSections[0].note, e.detailSections[0].at = e.supplement, e.supplementNote, e.supplementAt
+		if msg.Snapshot.Collection != nil {
+			e.Collection = *msg.Snapshot.Collection
+			e.Inventory = nil
+			e.Listed = true
+			e.Err = ""
+			m.reconcileExploreSelection()
+			if e.Detail != nil {
+				for _, object := range e.Collection.Objects {
+					if object.GetUID() == e.Detail.GetUID() {
+						e.Detail = object.DeepCopy()
+						if e.Resource.Key() == "services" {
+							if readiness, found := e.Collection.ServiceEndpoints[kubernetes.Identity(object)]; found && (e.SupplementAt.IsZero() || readiness.ObservedAt.After(e.SupplementAt)) && (e.DetailSections[0].At.IsZero() || readiness.ObservedAt.After(e.DetailSections[0].At)) {
+								e.Supplement, e.SupplementNote = kubernetes.EndpointReadinessSummary(readiness)
+								e.SupplementAt = readiness.ObservedAt
+								e.DetailSections[0].Supplement, e.DetailSections[0].Note, e.DetailSections[0].At = e.Supplement, e.SupplementNote, e.SupplementAt
 							}
 						}
 						break
@@ -369,223 +203,185 @@ func (m *model) updateExploreMessage(msg tea.Msg) tea.Cmd {
 				}
 			}
 		}
-		return waitExplore(e.stream)
-	case exploreDetailResult:
-		if msg.run != e.detailRun {
+		return monitor.WaitExplore(e.Stream)
+	case monitor.ExploreDetailResult:
+		if msg.Run != e.DetailRun {
 			return nil
 		}
-		e.detailRun = nil
-		e.detailValid = msg.object != nil && msg.err == nil
-		e.detailError = kubernetes.ErrorText(msg.err)
-		e.detailText = msg.text
-		if e.resource.Key() != "services" || !e.supplementAt.After(msg.supplementAt) {
-			e.supplement, e.supplementNote = msg.supplement, msg.note
-			e.supplementAt = msg.supplementAt
+		e.DetailRun = nil
+		e.DetailValid = msg.Object != nil && msg.Err == nil
+		e.DetailError = kubernetes.ErrorText(msg.Err)
+		e.DetailText = msg.Text
+		if e.Resource.Key() != "services" || !e.SupplementAt.After(msg.SupplementAt) {
+			e.Supplement, e.SupplementNote = msg.Supplement, msg.Note
+			e.SupplementAt = msg.SupplementAt
 		}
-		e.references = sortedReferences(msg.references)
-		e.detailLoaded = msg.err == nil && msg.object != nil
-		if e.tab < 4 {
-			e.detailSections[e.tab] = detailSection{e.detailText, e.supplementNote, e.references, e.supplement, e.supplementAt, e.detailLoaded}
+		e.References = monitor.SortedReferences(msg.References)
+		e.DetailLoaded = msg.Err == nil && msg.Object != nil
+		if e.Tab < 4 {
+			e.DetailSections[e.Tab] = monitor.DetailSection{Text: e.DetailText, Note: e.SupplementNote, References: e.References, Supplement: e.Supplement, At: e.SupplementAt, Loaded: e.DetailLoaded}
 		}
-		if msg.object != nil {
-			e.detail = msg.object
-			if !e.mergedLogs && e.resource.Key() == "pods" && !slices.Contains(kubernetes.Containers(*msg.object), e.container) {
-				e.container = preferredPodContainer(*msg.object)
+		if msg.Object != nil {
+			e.Detail = msg.Object
+			if !e.MergedLogs && e.Resource.Key() == "pods" && !slices.Contains(kubernetes.Containers(*msg.Object), e.Container) {
+				e.Container = monitor.PreferredPodContainer(*msg.Object)
 			}
 		}
-	case exploreLogEvent:
-		if e.log == nil || msg.run != e.log {
+	case monitor.ExploreLogEvent:
+		if e.Log == nil || msg.Run != e.Log {
 			return nil
 		}
-		if msg.workloadStatus != nil {
-			e.workloadLogStatus = *msg.workloadStatus
+		if msg.WorkloadStatus != nil {
+			e.WorkloadLogStatus = *msg.WorkloadStatus
 		}
-		if msg.connected {
-			e.logConnected = true
+		if msg.Connected {
+			e.LogConnected = true
 		}
-		if msg.err != nil {
-			e.logError = kubernetes.LogErrorText(msg.err, e.previous)
+		if msg.Err != nil {
+			e.LogError = kubernetes.LogErrorText(msg.Err, e.Previous)
 		}
-		m.appendExploreLogs(msg.text)
-		if msg.done {
-			e.log.cancel()
-			e.log = nil
+		m.appendExploreLogs(msg.Text)
+		if msg.Done {
+			e.Log.Cancel()
+			e.Log = nil
 			return nil
 		}
-		return waitExploreLog(e.log)
+		return monitor.WaitExploreLog(e.Log)
 	}
 	return nil
 }
 
 func (m *model) syncExploreDetail() tea.Cmd {
 	e := m.explorer()
-	if e.detail == nil || m.mode != 1 {
+	if e.Detail == nil || m.mode != 1 {
 		return nil
 	}
-	object := e.detail.DeepCopy()
-	resource, client := e.resource, e.client
-	key := resource.Key() + "/" + resource.Version + "/" + kubernetes.Identity(*object) + "/" + fmt.Sprint(e.tab)
+	object := e.Detail.DeepCopy()
+	resource, client := e.Resource, e.Client
+	key := resource.Key() + "/" + resource.Version + "/" + kubernetes.Identity(*object) + "/" + fmt.Sprint(e.Tab)
 	var commands []tea.Cmd
-	if e.detailKey != key {
-		if e.detailRun != nil {
-			e.detailRun.cancel()
+	if e.DetailKey != key {
+		if e.DetailRun != nil {
+			e.DetailRun.Cancel()
 		}
 		ctx, cancel := context.WithCancel(context.Background())
-		run := &exploreDetailRun{cancel: cancel}
-		e.detailRun = run
+		run := &monitor.ExploreDetailRun{Cancel: cancel}
+		e.DetailRun = run
 		identity := resource.Key() + "/" + resource.Version + "/" + kubernetes.Identity(*object) + "/" + string(object.GetUID())
-		if e.detailIdentity != identity {
-			e.detailSections = [4]detailSection{}
-			e.detailIdentity = identity
+		if e.DetailIdentity != identity {
+			e.DetailSections = [4]monitor.DetailSection{}
+			e.DetailIdentity = identity
 		}
-		section := detailSection{}
-		if e.tab < 4 {
-			section = e.detailSections[e.tab]
+		section := monitor.DetailSection{}
+		if e.Tab < 4 {
+			section = e.DetailSections[e.Tab]
 		}
-		e.detailValid, e.detailLoaded = section.loaded, section.loaded
-		e.detailKey, e.detailError = key, ""
-		e.detailText, e.references = section.text, section.references
-		e.supplement, e.supplementNote, e.supplementAt = section.supplement, section.note, section.at
-		tab, resources := e.tab, slices.Clone(e.resources)
+		e.DetailValid, e.DetailLoaded = section.Loaded, section.Loaded
+		e.DetailKey, e.DetailError = key, ""
+		e.DetailText, e.References = section.Text, section.References
+		e.Supplement, e.SupplementNote, e.SupplementAt = section.Supplement, section.Note, section.At
+		tab, resources := e.Tab, slices.Clone(e.Resources)
 		commands = append(commands, func() tea.Msg {
 			defer cancel()
 			current, err := client.Get(ctx, resource, object.GetNamespace(), object.GetName())
-			result := exploreDetailResult{run: run, object: current, err: err}
+			result := monitor.ExploreDetailResult{Run: run, Object: current, Err: err}
 			if err != nil {
 				return result
 			}
 			if object.GetUID() != "" && current.GetUID() != object.GetUID() {
-				result.object = nil
-				result.text = "This object was deleted and replaced. Go back and select the replacement."
+				result.Object = nil
+				result.Text = "This object was deleted and replaced. Go back and select the replacement."
 				return result
 			}
 			if tab == 2 {
-				result.text, result.err = client.Events(ctx, *current)
+				result.Text, result.Err = client.Events(ctx, *current)
 			}
 			if tab == 0 {
-				result.supplement, result.note = client.SummarySupplement(ctx, resource, *current, resources)
-				result.supplementAt = time.Now()
+				result.Supplement, result.Note = client.SummarySupplement(ctx, resource, *current, resources)
+				result.SupplementAt = time.Now()
 			}
 			if tab == 3 {
-				result.references, result.text = client.Related(ctx, resource, *current, resources)
+				result.References, result.Text = client.Related(ctx, resource, *current, resources)
 			}
 			return result
 		})
 	}
-	if e.tab != 4 {
-		if e.log != nil {
-			e.log.cancel()
-			e.log = nil
+	if e.Tab != 4 {
+		if e.Log != nil {
+			e.Log.Cancel()
+			e.Log = nil
 		}
-		e.logKey = ""
+		e.LogKey = ""
 		return tea.Batch(commands...)
 	}
-	if !e.detailValid {
+	if !e.DetailValid {
 		return tea.Batch(commands...)
 	}
 	containers := kubernetes.Containers(*object)
-	if !e.mergedLogs && !slices.Contains(containers, e.container) {
-		e.container = preferredPodContainer(*object)
+	if !e.MergedLogs && !slices.Contains(containers, e.Container) {
+		e.Container = monitor.PreferredPodContainer(*object)
 	}
-	logKey := key + "/" + e.container + fmt.Sprint(e.previous, e.logSince)
-	if e.container == "" && !e.mergedLogs {
-		if e.log != nil {
-			e.log.cancel()
-			e.log = nil
+	logKey := key + "/" + e.Container + fmt.Sprint(e.Previous, e.LogSince)
+	if e.Container == "" && !e.MergedLogs {
+		if e.Log != nil {
+			e.Log.Cancel()
+			e.Log = nil
 		}
 		return tea.Batch(commands...)
 	}
-	if e.logKey != logKey {
-		if e.log != nil {
-			e.log.cancel()
+	if e.LogKey != logKey {
+		if e.Log != nil {
+			e.Log.Cancel()
 		}
 		ctx, cancel := context.WithCancel(context.Background())
-		run := &exploreLogRun{cancel: cancel, ctx: ctx, events: make(chan exploreLogEvent, 32)}
-		e.log = run
-		e.logKey = logKey
+		run := &monitor.ExploreLogRun{Cancel: cancel, Ctx: ctx, Events: make(chan monitor.ExploreLogEvent, 32)}
+		e.Log = run
+		e.LogKey = logKey
 		m.resetExploreLogs()
-		options := kubernetes.LogOptions{Namespace: object.GetNamespace(), Pod: object.GetName(), UID: object.GetUID(), Container: e.container, Previous: e.previous, Follow: !e.previous}
+		options := kubernetes.LogOptions{Namespace: object.GetNamespace(), Pod: object.GetName(), UID: object.GetUID(), Container: e.Container, Previous: e.Previous, Follow: !e.Previous}
 		timestamps := true
 		options.Timestamps = &timestamps
-		if e.logSince > 0 {
-			since := e.logSince
+		if e.LogSince > 0 {
+			since := e.LogSince
 			options.SinceSeconds = &since
 		}
-		merged, resources := e.mergedLogs, slices.Clone(e.resources)
+		merged, resources := e.MergedLogs, slices.Clone(e.Resources)
 		commands = append(commands, func() tea.Msg {
 			go func() {
-				defer close(run.events)
-				send := func(event exploreLogEvent) {
+				defer close(run.Events)
+				send := func(event monitor.ExploreLogEvent) {
 					select {
-					case run.events <- event:
+					case run.Events <- event:
 					case <-ctx.Done():
 					}
 				}
-				options.OnConnect = func() { send(exploreLogEvent{run: run, connected: true}) }
+				options.OnConnect = func() { send(monitor.ExploreLogEvent{Run: run, Connected: true}) }
 				var err error
 				if merged {
 					err = client.WorkloadLogs(ctx, resource, object, resources, options, func(event kubernetes.WorkloadLogEvent) {
-						send(exploreLogEvent{run: run, text: event.Text, workloadStatus: event.Status})
+						send(monitor.ExploreLogEvent{Run: run, Text: event.Text, WorkloadStatus: event.Status})
 					})
 				} else {
-					err = client.Logs(ctx, options, func(text string) { send(exploreLogEvent{run: run, text: text}) })
+					err = client.Logs(ctx, options, func(text string) { send(monitor.ExploreLogEvent{Run: run, Text: text}) })
 				}
-				send(exploreLogEvent{run: run, err: err, done: true})
+				send(monitor.ExploreLogEvent{Run: run, Err: err, Done: true})
 			}()
-			return waitExploreLog(run)()
+			return monitor.WaitExploreLog(run)()
 		})
 	}
 	return tea.Batch(commands...)
 }
-func waitExploreLog(run *exploreLogRun) tea.Cmd {
-	return func() tea.Msg {
-		select {
-		case event, ok := <-run.events:
-			if ok {
-				return event
-			}
-			return exploreLogEvent{run: run, done: true}
-		case <-run.ctx.Done():
-			return exploreLogEvent{run: run, done: true}
-		}
-	}
-}
 
-func (m *model) exploreRows() ([]string, []kubernetes.Row) {
+func (m *model) reconcileExploreSelection() {
 	e := m.explorer()
-	columns, all := kubernetes.Table(e.resource, e.collection, time.Now())
-	rows := make([]kubernetes.Row, 0, len(all))
-	filter := strings.ToLower(e.preference.Filter)
-	for _, row := range all {
-		if filter == "" || strings.Contains(strings.ToLower(strings.Join(row.Cells, " ")), filter) {
-			rows = append(rows, row)
+	_, rows := m.exploreRows()
+	for _, row := range rows {
+		if kubernetes.Identity(row.Object) == e.Selected {
+			return
 		}
 	}
-	column := max(0, min(e.preference.Sort, len(columns)-1))
-	sort.SliceStable(rows, func(i, j int) bool {
-		a, b := rows[i].Cells[column], rows[j].Cells[column]
-		order := strings.Compare(a, b)
-		if columns[column] == "Age" {
-			order = rows[j].Object.GetCreationTimestamp().Time.Compare(rows[i].Object.GetCreationTimestamp().Time)
-		} else if columns[column] != "Name" && columns[column] != "Namespace" {
-			av, aErr := strconv.ParseFloat(a, 64)
-			bv, bErr := strconv.ParseFloat(b, 64)
-			switch {
-			case aErr == nil && bErr == nil:
-				order = cmp.Compare(av, bv)
-			case aErr == nil:
-				order = -1
-			case bErr == nil:
-				order = 1
-			}
-		}
-		if order == 0 {
-			order = strings.Compare(rows[i].Object.GetNamespace()+"/"+rows[i].Object.GetName(), rows[j].Object.GetNamespace()+"/"+rows[j].Object.GetName())
-		}
-		if e.preference.Descending {
-			return order > 0
-		}
-		return order < 0
-	})
-	return columns, rows
+	e.Selected = ""
+	if len(rows) > 0 {
+		e.Selected = kubernetes.Identity(rows[0].Object)
+	}
 }

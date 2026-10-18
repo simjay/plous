@@ -1,13 +1,70 @@
 package app
 
 import (
+	tea "charm.land/bubbletea/v2"
+	lipgloss "charm.land/lipgloss/v2"
 	"fmt"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/simjay/plous/internal/ui"
+	textview "github.com/simjay/plous/internal/ui/text"
 	"strings"
 	"testing"
-
-	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
 )
+
+func TestMainPanelTabOutlinesFollowFocus(t *testing.T) {
+	m, _ := testModel(t)
+	for mode := range modes {
+		m.mode = mode
+		for _, focus := range []int{1, 0, 2, 1} {
+			m.focus = focus
+			color := ui.BorderColor
+			if focus == 1 {
+				color = ui.FocusedBorder
+			}
+			edge := lipgloss.NewStyle().Foreground(color)
+			panel, _ := textview.MouseLayout(m.mainPanel(60, 14))
+			lines := strings.Split(panel, "\n")
+			for _, cellWidth := range tabWidths(60) {
+				if !strings.Contains(lines[0], edge.Render("╭"+strings.Repeat("─", cellWidth-2)+"╮")) {
+					t.Fatalf("mode %d, focus %d: tab outline does not match panel focus", mode, focus)
+				}
+			}
+			if !strings.Contains(lines[1], edge.Render("│")) || !strings.Contains(lines[2], edge.Render("╯")) {
+				t.Fatalf("mode %d, focus %d: tab sides or baseline do not match panel focus", mode, focus)
+			}
+		}
+	}
+}
+
+func TestPanelTravelKeepsWidths(t *testing.T) {
+	for _, overview := range []bool{false, true} {
+		m, _ := testModel(t)
+		if overview {
+			m, _ = overviewModel(t)
+		}
+		for _, hidden := range [][2]bool{{false, false}, {true, false}, {false, true}} {
+			m.leftHidden, m.rightHidden = hidden[0], hidden[1]
+			for _, size := range []assistantSize{assistantNormal, assistantDouble} {
+				m.assistantSize = size
+				for width := 80; width <= 320; width++ {
+					m.width, m.focus = width, 1
+					want := m.panelWidths()
+					for _, backward := range []bool{false, true} {
+						for range 3 {
+							m.travelPanel(backward)
+							if got := m.panelWidths(); got != want {
+								t.Fatalf("overview=%t, hidden=%v, size=%s, width=%d, focus=%d: widths changed from %v to %v", overview, hidden, size, width, m.focus, want, got)
+							}
+							if want[m.focus] < 24 {
+								t.Fatalf("focused panel is too narrow: %v", want)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
 
 func TestMainPanelTabsFillTopRow(t *testing.T) {
 	m, _ := testModel(t)
@@ -74,7 +131,7 @@ func TestChatComposerRemainsAtBottom(t *testing.T) {
 			for i, draft := range drafts {
 				t.Run(fmt.Sprintf("%dx%d/focus%d/draft%d", size[0], size[1], focus, i), func(t *testing.T) {
 					m.focus, m.chatEditing = focus, true
-					*m.draft() = newEditor(draft)
+					*m.draft() = textview.NewField(draft)
 					lines := strings.Split(ansi.Strip(m.render()), "\n")
 					found := -1
 					for row, line := range lines {
@@ -106,7 +163,7 @@ func TestChatComposerFollowsEditingCursor(t *testing.T) {
 	m, _ := testModel(t)
 	createWorkspace(t, m, "Payments")
 	m.focus, m.chatEditing = 2, true
-	*m.draft() = newEditor("first-line\n" + strings.Repeat("middle\n", 20) + "last-line")
+	*m.draft() = textview.NewField("first-line\n" + strings.Repeat("middle\n", 20) + "last-line")
 	for _, size := range [][2]int{{80, 16}, {120, 30}, {200, 60}} {
 		m.Update(tea.WindowSizeMsg{Width: size[0], Height: size[1]})
 		press(t, m, "home")

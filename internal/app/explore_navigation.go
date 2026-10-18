@@ -4,32 +4,12 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/simjay/plous/internal/kubernetes"
-	"github.com/simjay/plous/internal/workspace"
+	"github.com/simjay/plous/internal/app/monitor"
+	kubernetes "github.com/simjay/plous/internal/integrations/kubernetes/monitor"
+	textview "github.com/simjay/plous/internal/ui/text"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/util/validation"
 )
-
-var resourceCommands = map[string]string{
-	"po": "pods", "pod": "pods", "pods": "pods",
-	"deploy": "deployments.apps", "deployment": "deployments.apps", "deployments": "deployments.apps",
-	"sts": "statefulsets.apps", "statefulsets": "statefulsets.apps",
-	"ds": "daemonsets.apps", "daemonsets": "daemonsets.apps",
-	"rs": "replicasets.apps", "replicasets": "replicasets.apps",
-	"job": "jobs.batch", "jobs": "jobs.batch", "cj": "cronjobs.batch", "cronjobs": "cronjobs.batch",
-	"svc": "services", "services": "services", "ep": "endpoints", "endpoints": "endpoints",
-	"eps": "endpointslices.discovery.k8s.io", "endpointslices": "endpointslices.discovery.k8s.io",
-	"ing": "ingresses.networking.k8s.io", "ingresses": "ingresses.networking.k8s.io",
-	"netpol": "networkpolicies.networking.k8s.io", "networkpolicies": "networkpolicies.networking.k8s.io",
-	"cm": "configmaps", "configmaps": "configmaps", "sec": "secrets", "secrets": "secrets",
-	"pvc": "persistentvolumeclaims", "persistentvolumeclaims": "persistentvolumeclaims",
-	"pv": "persistentvolumes", "persistentvolumes": "persistentvolumes",
-	"sc": "storageclasses.storage.k8s.io", "storageclasses": "storageclasses.storage.k8s.io",
-	"no": "nodes", "nodes": "nodes", "ns": "namespaces", "namespaces": "namespaces",
-	"ev": "events", "events": "events", "sa": "serviceaccounts", "serviceaccounts": "serviceaccounts",
-	"crd": "customresourcedefinitions.apiextensions.k8s.io", "customresourcedefinitions": "customresourcedefinitions.apiextensions.k8s.io",
-}
 
 func (m *model) executeExplore(command string) bool {
 	return m.runExploreCommand(command, true)
@@ -48,7 +28,7 @@ func (m *model) runExploreCommand(command string, route bool) bool {
 			m.status = "Finish or cancel the open form first."
 			return true
 		}
-		if !m.exploreVisible() || m.explore == nil || m.explore.detail == nil {
+		if !m.exploreVisible() || m.explore == nil || m.explore.Detail == nil {
 			m.status = "Open the resource details first to use its actions."
 			return true
 		}
@@ -59,14 +39,14 @@ func (m *model) runExploreCommand(command string, route bool) bool {
 	}
 	special := ""
 	switch name {
-	case "kinds", "namespace", "connections", "refresh", "yaml", "describe":
+	case "namespace", "connections", "refresh", "yaml", "describe":
 		special = name
 	}
 	resource, known := "", false
 	if special == "" {
-		resource, known = resourceCommands[name]
+		resource, known = monitor.ResourceCommands[name]
 		if !known && m.explore != nil {
-			if found, ok := kubernetes.Find(m.explore.resources, name); ok {
+			if found, ok := kubernetes.Find(m.explore.Resources, name); ok {
 				resource, known = found.Key(), true
 			}
 		}
@@ -82,7 +62,7 @@ func (m *model) runExploreCommand(command string, route bool) bool {
 		m.status = "This command does not take arguments."
 		return true
 	}
-	if arg != "" && (known || special == "namespace") && !validExploreNamespace(arg) {
+	if arg != "" && (known || special == "namespace") && !monitor.ValidExploreNamespace(arg) {
 		m.status = "Use a valid namespace name or * for all namespaces."
 		return true
 	}
@@ -94,40 +74,39 @@ func (m *model) runExploreCommand(command string, route bool) bool {
 	}
 	e := m.explorer()
 	if special == "connections" || !m.exploreActive() {
-		e.picker = "connections"
-		e.pickerCursor = 0
-		e.inputKind = "connections"
-		input := newEditor("")
-		e.input = &input
-		e.requested = resource
-		e.pendingCommand = command
+		if m.currentRoot {
+			m.requestCurrent("", false)
+		}
+		e.Picker = "connections"
+		e.PickerCursor = 0
+		e.InputKind = "connections"
+		input := textview.NewField("")
+		e.Input = &input
+		e.Requested = resource
+		e.PendingCommand = command
 		return true
 	}
-	if e.key == "" || e.connecting {
-		e.pendingCommand = command
+	if e.Key == "" || e.Connecting {
+		e.PendingCommand = command
 		if known {
-			e.requested = resource
+			e.Requested = resource
 		}
 		return true
 	}
-	e.pendingCommand = ""
+	e.PendingCommand = ""
 	if known {
 		m.chooseExploreResource(resource)
 		if arg != "" {
-			e.preference.Namespace = exploreNamespace(arg)
-			e.defaultNamespace = false
+			e.Preference.Namespace = monitor.ExploreNamespace(arg)
+			e.DefaultNamespace = false
 		}
 		m.rememberExplore()
 		return true
 	}
 	switch special {
-	case "kinds":
-		m.openExploreInput("kinds", "")
-		e.picker = "kinds"
-		e.pickerCursor = 0
 	case "namespace":
 		if arg != "" {
-			m.chooseExploreNamespace(exploreNamespace(arg))
+			m.chooseExploreNamespace(monitor.ExploreNamespace(arg))
 		} else {
 			m.openNamespacePicker()
 		}
@@ -140,59 +119,53 @@ func (m *model) runExploreCommand(command string, route bool) bool {
 	}
 	return true
 }
-func validExploreNamespace(text string) bool {
-	return text == "*" || len(validation.IsDNS1123Label(text)) == 0
-}
-func exploreNamespace(text string) string {
-	if text == "*" {
-		return ""
-	}
-	return text
-}
+
 func (m *model) openExploreInput(kind, text string) {
 	e := m.explorer()
-	input := newEditor(text)
-	e.input = &input
-	e.inputKind = kind
-	e.pickerCursor = 0
+	input := textview.NewField(text)
+	e.Input = &input
+	e.InputKind = kind
+	e.PickerCursor = 0
 	m.shortcutPrefix = ""
 }
+
 func (m *model) clearExploreDetail() {
 	e := m.explorer()
 	m.stopResourceAction()
 	m.stopResourceTerminal()
-	if e.detailRun != nil {
-		e.detailRun.cancel()
-		e.detailRun = nil
+	if e.DetailRun != nil {
+		e.DetailRun.Cancel()
+		e.DetailRun = nil
 	}
-	if e.log != nil {
-		e.log.cancel()
-		e.log = nil
+	if e.Log != nil {
+		e.Log.Cancel()
+		e.Log = nil
 	}
-	e.detail = nil
-	e.detailSections = [4]detailSection{}
-	e.detailIdentity, e.detailLoaded = "", false
-	e.yamlDocument = nil
-	e.yamlOrigin = nil
-	e.detailKey = ""
-	e.logKey = ""
+	e.Detail = nil
+	e.DetailSections = [4]monitor.DetailSection{}
+	e.DetailIdentity, e.DetailLoaded = "", false
+	e.YamlDocument = nil
+	e.YamlOrigin = nil
+	e.DetailKey = ""
+	e.LogKey = ""
 	m.resetExploreLogs()
-	e.trail = nil
-	e.logOrigin = nil
-	e.scroll = 0
-	e.reveal = false
-	e.detailValid = false
-	e.container = ""
-	e.previous = false
-	e.mergedLogs = false
+	e.Trail = nil
+	e.LogOrigin = nil
+	e.Scroll = 0
+	e.Reveal = false
+	e.DetailValid = false
+	e.Container = ""
+	e.Previous = false
+	e.MergedLogs = false
 }
+
 func (m *model) chooseExploreResource(resource string) {
 	e := m.explorer()
-	if e.action != nil {
+	if e.Action != nil {
 		m.status = "Finish or cancel the open resource action first."
 		return
 	}
-	if e.key == "" {
+	if e.Key == "" {
 		preference, ok := m.explorePreferences[m.active+"/"+m.connection]
 		if !ok {
 			preference.Namespace = "default"
@@ -200,111 +173,130 @@ func (m *model) chooseExploreResource(resource string) {
 				preference.Namespace = c.Settings["namespace"]
 			}
 		}
-		e.preference = preference
+		e.Preference = preference
 	}
 	m.clearExploreDetail()
-	e.preference.Resource = resource
-	e.preference.Filter = ""
-	e.preference.Selector = ""
-	e.preference.Sort = 0
-	e.preference.Descending = false
-	e.picker = ""
-	e.input = nil
-	e.inputKind = ""
-	e.selected = ""
-	if e.key == "" {
-		e.requested = resource
+	e.Preference.Resource = resource
+	e.PreserveTree = false
+	m.exploreTreeSelection = ""
+	e.Preference.Filter = ""
+	e.Preference.Selector = ""
+	e.Preference.Sort = 0
+	e.Preference.Descending = false
+	e.Picker = ""
+	e.Input = nil
+	e.InputKind = ""
+	e.Selected = ""
+	if e.Key == "" {
+		e.Requested = resource
 	} else {
-		e.requested = ""
+		e.Requested = ""
 	}
 	m.rememberExplore()
 }
+
 func (m *model) refreshExplore() {
 	e := m.explorer()
-	if e.detail != nil {
-		if e.detailRun != nil {
-			e.detailRun.cancel()
-			e.detailRun = nil
+	if e.Detail != nil {
+		if e.DetailRun != nil {
+			e.DetailRun.Cancel()
+			e.DetailRun = nil
 		}
-		if e.log != nil {
-			e.log.cancel()
-			e.log = nil
+		if e.Log != nil {
+			e.Log.Cancel()
+			e.Log = nil
 		}
-		e.detailKey, e.logKey = "", ""
+		e.DetailKey, e.LogKey = "", ""
 		return
 	}
 	m.rememberExplore()
 	m.stopExplore()
-	e.key = ""
-	e.requested = e.preference.Resource
+	if c := m.savedConnection(); c != nil {
+		m.clusterFor(m.active, *c).refresh()
+	}
+	e.Key = ""
+	e.Requested = e.Preference.Resource
 }
+
 func (m *model) openExploreSelection(tab int) {
 	e := m.explorer()
-	if tab != 4 && e.tab == 4 {
+	if tab != 4 && e.Tab == 4 {
 		m.returnFromExploreLogs()
 	}
-	if tab == 4 && e.resource.Key() != "pods" {
-		if e.detail != nil && kubernetes.HasPodTargets(e.resource) {
+	if tab == 4 && e.Resource.Key() != "pods" {
+		if e.Detail != nil && kubernetes.HasPodTargets(e.Resource) {
 			m.openResourceActions("logs")
 		} else {
 			m.status = "Open a Pod or workload's details to choose its logs."
 		}
 		return
 	}
-	if tab == 1 && e.detail != nil && e.tab != 1 {
-		e.yamlOrigin = &detailSectionReturn{tab: e.tab, scroll: e.scroll, relatedCursor: e.relatedCursor}
+	if tab == 1 && e.Detail != nil && e.Tab != 1 {
+		e.YamlOrigin = &monitor.DetailSectionReturn{Tab: e.Tab, Scroll: e.Scroll, RelatedCursor: e.RelatedCursor}
 	} else if tab != 1 && tab != 4 {
-		e.yamlOrigin = nil
+		e.YamlOrigin = nil
 	}
-	if e.detail == nil {
+	if e.Detail == nil {
 		_, rows := m.exploreRows()
 		if len(rows) == 0 {
 			return
 		}
 		object := rows[0].Object
 		for _, row := range rows {
-			if kubernetes.Identity(row.Object) == e.selected {
+			if kubernetes.Identity(row.Object) == e.Selected {
 				object = row.Object
 				break
 			}
 		}
-		if len(e.trail) > 0 {
-			e.trail = append(e.trail, exploreLocation{preference: e.preference, selected: kubernetes.Identity(object)})
+		if len(e.Trail) > 0 {
+			e.Trail = append(e.Trail, monitor.ExploreLocation{Preference: e.Preference, Selected: kubernetes.Identity(object)})
 		}
-		e.detail = object.DeepCopy()
-		e.selected = kubernetes.Identity(object)
-		e.detailKey = ""
-		e.detailValid = false
-		e.tab = 0
-		e.container = preferredPodContainer(object)
-		e.previous = false
+		e.Detail = object.DeepCopy()
+		e.Selected = kubernetes.Identity(object)
+		e.DetailKey = ""
+		e.DetailValid = false
+		e.Tab = 0
+		e.Container = monitor.PreferredPodContainer(object)
+		e.Previous = false
 	}
-	if tab == 4 && e.tab != 4 {
-		origin := e.location()
-		e.logOrigin = &origin
+	if tab == 4 && e.Tab != 4 {
+		origin := e.Location()
+		e.LogOrigin = &origin
 	}
-	e.tab = tab
-	e.scroll = 0
-	e.reveal = false
+	if e.Usage != nil && tab != 0 {
+		e.Usage.Charts.Inspect = false
+	}
+	e.Tab = tab
+	e.Scroll = 0
+	e.Reveal = false
 	if tab == 4 {
 		m.podLogViewer().Follow()
 	}
-	e.picker = ""
-	e.input = nil
-	e.inputKind = ""
+	e.Picker = ""
+	e.Input = nil
+	e.InputKind = ""
 }
 
 func (m *model) updateExplore(key string) {
 	e := m.explorer()
+	if m.updateChartKey(key) {
+		return
+	}
+	if key == "I" || key == "W" || key == "P" {
+		if m.chartsAvailable() {
+			m.chartCommand(canonicalCommand(key))
+			return
+		}
+	}
 	if key == "n" {
 		m.openNamespacePicker()
 		return
 	}
-	if key == "g" && e.detail == nil {
+	if key == "g" && e.Detail == nil {
 		m.refreshExplore()
 		return
 	}
-	if e.detail != nil {
+	if e.Detail != nil {
 		if m.runDetailActionKey(key) {
 			return
 		}
@@ -314,14 +306,14 @@ func (m *model) updateExplore(key string) {
 		case "esc":
 			m.backExploreLocation()
 		case "[", "]":
-			if e.tab == 4 {
+			if e.Tab == 4 {
 				m.returnFromExploreLogs()
 			}
 			step := 1
 			if key == "[" {
 				step = -1
 			}
-			m.openExploreSelection((e.tab + 4 + step) % 4)
+			m.openExploreSelection((e.Tab + 4 + step) % 4)
 		case "d":
 			m.openExploreSelection(0)
 		case "y":
@@ -333,48 +325,48 @@ func (m *model) updateExplore(key string) {
 		case "l":
 			m.openExploreSelection(4)
 		case "p":
-			if e.tab == 0 && e.resource.Key() == "pods" {
+			if e.Tab == 0 && e.Resource.Key() == "pods" {
 				m.openExploreSelection(4)
-				e.previous = true
-				e.logKey = ""
-			} else if e.tab == 4 {
-				e.previous = !e.previous
+				e.Previous = true
+				e.LogKey = ""
+			} else if e.Tab == 4 {
+				e.Previous = !e.Previous
 				m.podLogViewer().Follow()
-				e.logKey = ""
+				e.LogKey = ""
 			}
 		case "w":
-			if e.tab == 4 {
+			if e.Tab == 4 {
 				v := m.podLogViewer()
 				v.Reader.Wrap = !v.Reader.Wrap
 			}
 		case "t":
-			if e.tab == 4 {
-				e.logTimestamps = !e.logTimestamps
-				m.podLogViewer().SetFormatter(podLogFormatter(e.logTimestamps, e.mergedLogs))
+			if e.Tab == 4 {
+				e.LogTimestamps = !e.LogTimestamps
+				m.podLogViewer().SetFormatter(monitor.PodLogFormatter(e.LogTimestamps, e.MergedLogs))
 				return
 			}
 		case "g":
-			if e.tab == 4 {
+			if e.Tab == 4 {
 				m.refreshExplore()
 			}
 		case "v":
-			if e.tab == 1 && e.resource.Key() == "secrets" {
-				e.reveal = !e.reveal
+			if e.Tab == 1 && e.Resource.Key() == "secrets" {
+				e.Reveal = !e.Reveal
 			}
 		case "o":
-			if e.resource.Key() == "pods" && (e.tab == 0 || e.tab == 4) || e.mergedLogs && e.tab == 4 {
-				e.picker = "containers"
-				e.pickerCursor = 0
+			if e.Resource.Key() == "pods" && (e.Tab == 0 || e.Tab == 4) || e.MergedLogs && e.Tab == 4 {
+				e.Picker = "containers"
+				e.PickerCursor = 0
 				for i, name := range m.logContainers() {
-					if name == e.container {
-						e.pickerCursor = i
+					if name == e.Container {
+						e.PickerCursor = i
 					}
 				}
 			}
 		case "u":
-			if e.tab == 4 {
-				e.picker = "logrange"
-				e.pickerCursor = 0
+			if e.Tab == 4 {
+				e.Picker = "logrange"
+				e.PickerCursor = 0
 			}
 		case "up", "k", "down", "j", "pgup", "pgdown", "home", "end":
 			step := 1
@@ -384,30 +376,30 @@ func (m *model) updateExplore(key string) {
 			if key == "up" || key == "k" || key == "pgup" {
 				step = -step
 			}
-			if e.tab == 3 {
-				e.scroll = 0
-				e.relatedCursor = max(0, min(len(e.references)-1, e.relatedCursor+step))
+			if e.Tab == 3 {
+				e.Scroll = 0
+				e.RelatedCursor = max(0, min(len(e.References)-1, e.RelatedCursor+step))
 			} else {
 				limit := m.exploreDetailScrollLimit()
-				e.scroll = max(0, min(limit, min(e.scroll, limit)+step))
+				e.Scroll = max(0, min(limit, min(e.Scroll, limit)+step))
 			}
 			if key == "home" {
-				e.scroll = 0
-				e.relatedCursor = 0
+				e.Scroll = 0
+				e.RelatedCursor = 0
 			}
 			if key == "end" {
-				e.scroll = m.exploreDetailScrollLimit()
-				e.relatedCursor = max(0, len(e.references)-1)
+				e.Scroll = m.exploreDetailScrollLimit()
+				e.RelatedCursor = max(0, len(e.References)-1)
 			}
 		case "enter":
-			if e.tab == 3 && len(e.references) > 0 {
-				ref := e.references[min(e.relatedCursor, len(e.references)-1)]
-				trail := append(e.trail, e.location())
+			if e.Tab == 3 && len(e.References) > 0 {
+				ref := e.References[min(e.RelatedCursor, len(e.References)-1)]
+				trail := append(e.Trail, e.Location())
 				m.chooseExploreResource(ref.Resource.Key())
-				e.trail = trail
-				e.resource = ref.Resource
+				e.Trail = trail
+				e.Resource = ref.Resource
 				if ref.Resource.Namespaced {
-					e.preference.Namespace = ref.Namespace
+					e.Preference.Namespace = ref.Namespace
 				}
 				if ref.List {
 					m.rememberExplore()
@@ -419,18 +411,18 @@ func (m *model) updateExplore(key string) {
 				object.SetKind(ref.Resource.Kind)
 				object.SetAPIVersion(ref.Resource.GVR().GroupVersion().String())
 				object.Object["metadata"].(map[string]any)["uid"] = ref.UID
-				e.detail = object
-				e.container = preferredPodContainer(*object)
-				e.tab = 0
-				e.detailValid = false
+				e.Detail = object
+				e.Container = monitor.PreferredPodContainer(*object)
+				e.Tab = 0
+				e.DetailValid = false
 				m.rememberExplore()
 			}
 		}
 		return
 	}
 	if key == "backspace" {
-		if e.preference.Filter != "" {
-			e.preference.Filter = ""
+		if e.Preference.Filter != "" {
+			e.Preference.Filter = ""
 			m.rememberExplore()
 		}
 		return
@@ -438,19 +430,19 @@ func (m *model) updateExplore(key string) {
 	_, rows := m.exploreRows()
 	cursor := 0
 	for i, row := range rows {
-		if kubernetes.Identity(row.Object) == e.selected {
+		if kubernetes.Identity(row.Object) == e.Selected {
 			cursor = i
 			break
 		}
 	}
 	switch key {
 	case "/":
-		m.openExploreInput("filter", e.preference.Filter)
-	case "f":
-		m.openExploreInput("selector", e.preference.Selector)
+		m.openExploreInput("filter", e.Preference.Filter)
+	case "L":
+		m.openExploreInput("selector", e.Preference.Selector)
 	case "S":
-		e.picker = "sort"
-		e.pickerCursor = e.preference.Sort
+		e.Picker = "sort"
+		e.PickerCursor = e.Preference.Sort
 	case "enter", "d":
 		m.openExploreSelection(0)
 	case "y":
@@ -470,16 +462,28 @@ func (m *model) updateExplore(key string) {
 	case "end":
 		cursor = len(rows) - 1
 	case "esc":
-		if len(e.trail) > 0 {
+		if len(e.Trail) > 0 {
 			m.backExploreLocation()
 			return
 		}
-		m.focusRootSidebar()
+		if m.returnToGitOps() || m.returnToOverview() {
+			return
+		}
+		m.browseExploreResources()
 		return
 	}
 	if len(rows) > 0 {
-		e.selected = kubernetes.Identity(rows[max(0, min(len(rows)-1, cursor))].Object)
+		e.Selected = kubernetes.Identity(rows[max(0, min(len(rows)-1, cursor))].Object)
 	}
+}
+
+func (m *model) browseExploreResources() {
+	if !m.exploreVisible() || m.explore.Input != nil || m.explore.Picker != "" || m.explore.Detail != nil || m.form != nil || m.settingsOverlay != nil {
+		return
+	}
+	m.restoreView()
+	m.leftHidden, m.focus = false, 1
+	m.focusRootSidebar()
 }
 
 func (m *model) backExploreLocation() {
@@ -487,50 +491,52 @@ func (m *model) backExploreLocation() {
 	if m.returnFromExploreLogs() || m.returnFromExploreYAML() {
 		return
 	}
-	trail := e.trail
+	if len(e.Trail) == 0 && (m.returnToGitOps() || m.returnToOverview()) {
+		return
+	}
+	trail := e.Trail
 	m.clearExploreDetail()
 	if len(trail) > 0 {
 		previous := trail[len(trail)-1]
-		e.trail = trail[:len(trail)-1]
-		e.restoreLocation(previous)
+		e.Trail = trail[:len(trail)-1]
+		e.RestoreLocation(previous)
 		m.rememberExplore()
 	}
 }
 
 func (m *model) exploreEditing() bool {
-	return m.focus == 1 && m.help == nil && m.form == nil && m.page == "" && m.mode == 1 && m.explore != nil && (m.explore.input != nil || m.explore.picker != "")
+	return m.focus == 1 && !m.helpVisible() && m.form == nil && m.page == "" && m.mode == 1 && m.explore != nil && (m.explore.Input != nil || m.explore.Picker != "")
 }
+
 func (m *model) updateExploreInput(msg tea.KeyPressMsg) {
 	e := m.explorer()
 	key := msg.String()
-	if e.picker == "namespace" {
+	if e.Picker == "namespace" {
 		m.updateNamespaceInput(msg)
 		return
 	}
 	if key == "esc" {
-		e.input = nil
-		e.inputKind = ""
-		e.picker = ""
+		e.Input = nil
+		e.InputKind = ""
+		e.Picker = ""
 		m.status = ""
 		return
 	}
 	count := 0
-	switch e.picker {
-	case "kinds":
-		count = len(m.exploreKinds())
+	switch e.Picker {
 	case "connections":
 		count = len(m.exploreConnections())
 	case "containers":
-		if e.detail != nil {
+		if e.Detail != nil {
 			count = len(m.logContainers())
 		}
 	case "sort":
 		columns, _ := m.exploreRows()
 		count = len(columns)
 	case "logrange":
-		count = len(logRanges)
+		count = len(monitor.LogRanges)
 	}
-	if e.picker != "" && (key == "up" || key == "down" || key == "pgup" || key == "pgdown") {
+	if e.Picker != "" && (key == "up" || key == "down" || key == "pgup" || key == "pgdown") {
 		step := 1
 		if key == "pgup" || key == "pgdown" {
 			step = 10
@@ -538,140 +544,112 @@ func (m *model) updateExploreInput(msg tea.KeyPressMsg) {
 		if key == "up" || key == "pgup" {
 			step = -step
 		}
-		e.pickerCursor = max(0, min(count-1, e.pickerCursor+step))
-		return
-	}
-	if e.picker == "kinds" && (key == "left" || key == "right") {
-		step := 1
-		if key == "left" {
-			step = -1
-		}
-		categories := m.exploreCategories()
-		if len(categories) == 0 {
-			return
-		}
-		e.group = (e.group + len(categories) + step) % len(categories)
-		e.pickerCursor = 0
-		e.input.text = ""
-		e.input.cursor = 0
+		e.PickerCursor = max(0, min(count-1, e.PickerCursor+step))
 		return
 	}
 	if key != "enter" {
-		if e.input != nil {
-			e.input.key(msg, false)
-			e.pickerCursor = 0
+		if e.Input != nil {
+			e.Input.Key(msg, false)
+			e.PickerCursor = 0
 		}
 		return
 	}
-	if e.picker != "" {
+	if e.Picker != "" {
 		if count == 0 {
 			return
 		}
-		index := max(0, min(count-1, e.pickerCursor))
-		switch e.picker {
-		case "kinds":
-			m.chooseExploreResource(m.exploreKinds()[index].Key())
+		index := max(0, min(count-1, e.PickerCursor))
+		switch e.Picker {
 		case "connections":
 			choice := m.exploreConnections()[index]
-			command := e.pendingCommand
-			m.selectScope(choice.workspace, "kubernetes", choice.connection.ID)
+			command := e.PendingCommand
+			if choice.Workspace == "current" {
+				if !m.canSwitchCurrent() {
+					return
+				}
+				m.requestCurrent(choice.Connection.Settings["context"], true)
+				m.currentRequest.Command = command
+				e.Picker, e.InputKind, e.Input = "", "", nil
+				return
+			}
+			m.selectScope(choice.Workspace, "kubernetes", choice.Connection.ID)
 			m.focus = 1
 			m.mode = 1
-			e.picker, e.inputKind = "", ""
-			e.input = nil
+			e.Picker, e.InputKind = "", ""
+			e.Input = nil
 			if command != "" && canonicalCommand(command) != "connections" {
 				m.executeExplore(command)
 			}
 			return
 		case "containers":
-			e.container = m.logContainers()[index]
-			if e.tab == 4 && index == 0 {
-				e.container = ""
+			e.Container = m.logContainers()[index]
+			if e.Tab == 4 && index == 0 {
+				e.Container = ""
 			}
-			if e.tab == 4 && e.resource.Key() == "pods" {
-				e.mergedLogs = index == 0
+			if e.Tab == 4 && e.Resource.Key() == "pods" {
+				e.MergedLogs = index == 0
 			}
-			e.logKey = ""
+			e.LogKey = ""
 			m.podLogViewer().Follow()
 		case "logrange":
-			e.logSince = logRanges[index].seconds
-			e.logKey = ""
+			e.LogSince = monitor.LogRanges[index].Seconds
+			e.LogKey = ""
 			m.podLogViewer().Follow()
 		case "sort":
-			if e.preference.Sort == index {
-				e.preference.Descending = !e.preference.Descending
+			if e.Preference.Sort == index {
+				e.Preference.Descending = !e.Preference.Descending
 			} else {
-				e.preference.Sort = index
-				e.preference.Descending = false
+				e.Preference.Sort = index
+				e.Preference.Descending = false
 			}
 			m.rememberExplore()
 		}
-		e.picker = ""
-		e.input = nil
-		e.inputKind = ""
+		e.Picker = ""
+		e.Input = nil
+		e.InputKind = ""
 		return
 	}
-	value := strings.TrimSpace(e.input.text)
-	switch e.inputKind {
+	value := strings.TrimSpace(e.Input.Text)
+	switch e.InputKind {
 	case "namespace":
-		if !validExploreNamespace(value) {
+		if !monitor.ValidExploreNamespace(value) {
 			m.status = "Use a namespace name or * for all namespaces."
 			return
 		}
 		m.clearExploreDetail()
-		e.preference.Namespace = exploreNamespace(value)
-		e.defaultNamespace = false
+		e.Preference.Namespace = monitor.ExploreNamespace(value)
+		e.DefaultNamespace = false
 	case "filter":
-		e.preference.Filter = value
+		e.Preference.Filter = value
 	case "selector":
 		if _, err := labels.Parse(value); err != nil {
 			m.status = "Invalid label selector. Example: app=checkout"
 			return
 		}
-		e.preference.Selector = value
+		e.Preference.Selector = value
 	}
-	e.input = nil
-	e.inputKind = ""
+	e.Input = nil
+	e.InputKind = ""
 	m.status = ""
 	m.rememberExplore()
 }
 
-func (m *model) exploreKinds() []kubernetes.Resource {
+func (m *model) exploreConnections() []monitor.ExploreConnection {
+	if m.currentRoot {
+		return m.currentChoices()
+	}
 	e := m.explorer()
 	query := ""
-	if e.input != nil {
-		query = strings.ToLower(e.input.text)
+	if e.Input != nil {
+		query = strings.ToLower(e.Input.Text)
 	}
-	var resources []kubernetes.Resource
-	for _, resource := range e.resources {
-		if query != "" {
-			if strings.Contains(strings.ToLower(resource.Kind+" "+resource.Key()+" "+strings.Join(resource.ShortNames, " ")), query) {
-				resources = append(resources, resource)
-			}
-		} else if kubernetes.Category(resource) == m.exploreCategory() {
-			resources = append(resources, resource)
-		}
-	}
-	return resources
-}
-
-type exploreConnection struct {
-	workspace, label string
-	connection       workspace.Connection
-}
-
-func (m *model) exploreConnections() []exploreConnection {
-	e := m.explorer()
-	query := ""
-	if e.input != nil {
-		query = strings.ToLower(e.input.text)
-	}
-	var choices []exploreConnection
+	var choices []monitor.ExploreConnection
 	for _, w := range m.workspaces {
 		for _, c := range w.Connections {
 			label := w.Name + " / " + c.Name
-			if c.Tool == "kubernetes" && strings.Contains(strings.ToLower(label), query) {
-				choices = append(choices, exploreConnection{workspace: w.ID, label: label, connection: c})
+			if monitorCluster(c.Tool) && strings.Contains(strings.ToLower(label), query) {
+				c.Tool = "kubernetes"
+				choices = append(choices, monitor.ExploreConnection{Workspace: w.ID, Label: label, Connection: c})
 			}
 		}
 	}

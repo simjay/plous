@@ -1,29 +1,44 @@
 package app
 
-import tea "charm.land/bubbletea/v2"
+import (
+	tea "charm.land/bubbletea/v2"
+)
+
+var navigationShortcuts = []struct{ key, command, label string }{
+	{"b", "sidebar", "toggle sidebar"},
+	{"i", "aiinteraction", "resize or hide AI panel"},
+	{"s", "settings", "open Settings"},
+	{"c", "chat", "type in chat"},
+	{"h", "help", "open Help"},
+	{"f", "fullscreen", "fullscreen or restore layout"},
+}
 
 func navigationShortcut(key string) (command, label string) {
-	switch key {
-	case "1", "2", "3":
+	if key == "1" || key == "2" || key == "3" {
 		return key, "open " + modes[int(key[0]-'1')]
-	case "b":
-		return "sidebar", "toggle sidebar"
-	case "i":
-		return "aiinteraction", "toggle AI panel"
-	case "s":
-		return "settings", "open Settings"
-	case "c":
-		return "chat", "type in chat"
-	case "h":
-		return "help", "open Help"
+	}
+	for _, shortcut := range navigationShortcuts {
+		if shortcut.key == key {
+			return shortcut.command, shortcut.label
+		}
 	}
 	return "", ""
+}
+
+func navigationBinding(command string) string {
+	for _, shortcut := range navigationShortcuts {
+		if shortcut.command == command {
+			return shortcut.key + shortcut.key
+		}
+	}
+	return ""
 }
 
 // Called only in navigation, after text editors have handled their input.
 func (m *model) updateShortcut(k tea.KeyPressMsg) bool {
 	key := k.String()
 	command, _ := navigationShortcut(key)
+
 	if k.IsRepeat && command != "" {
 		return true
 	}

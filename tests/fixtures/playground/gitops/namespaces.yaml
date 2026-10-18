@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: plous-argo
+  labels:
+    plous.dev/gitops-playground: v1
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: plous-argo-demo
+  labels:
+    plous.dev/gitops-playground: v1
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: plous-flux
+  labels:
+    plous.dev/gitops-playground: v1
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: plous-flux-demo
+  labels:
+    plous.dev/gitops-playground: v1

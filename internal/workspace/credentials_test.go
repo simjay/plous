@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/simjay/plous/internal/ai"
+	ai "github.com/simjay/plous/internal/ai/model"
 )
 
 func TestCredentialStorageRotationAndRemoval(t *testing.T) {

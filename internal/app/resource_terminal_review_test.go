@@ -1,30 +1,31 @@
 package app
 
 import (
+	tea "charm.land/bubbletea/v2"
+	lipgloss "charm.land/lipgloss/v2"
 	"context"
 	"fmt"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/charmbracelet/x/vt"
+	"github.com/simjay/plous/internal/app/monitor"
+	"github.com/simjay/plous/internal/ui"
 	"io"
 	"strings"
 	"sync"
 	"testing"
 	"time"
-
-	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
-	"github.com/charmbracelet/x/vt"
 )
 
-func reviewTerminal(t *testing.T, width, height int) *resourceTerminal {
+func reviewTerminal(t *testing.T, width, height int) *monitor.ResourceTerminal {
 	t.Helper()
 	_, cancel := context.WithCancel(context.Background())
-	tm := &resourceTerminal{emulator: vt.NewSafeEmulator(width, height), cancel: cancel, captured: true}
-	tm.emulator.SetScrollbackSize(terminalScrollbackLimit)
-	t.Cleanup(tm.close)
+	tm := &monitor.ResourceTerminal{Emulator: vt.NewSafeEmulator(width, height), Cancel: cancel, Captured: true}
+	tm.Emulator.SetScrollbackSize(monitor.TerminalScrollbackLimit)
+	t.Cleanup(tm.Close)
 	return tm
 }
 
-func writeTerminalLines(t *testing.T, tm *resourceTerminal, start, count int) {
+func writeTerminalLines(t *testing.T, tm *monitor.ResourceTerminal, start, count int) {
 	t.Helper()
 	for i := start; i < start+count; i++ {
 		if _, err := fmt.Fprintf(tm, "line-%04d\r\n", i); err != nil {
@@ -36,48 +37,48 @@ func writeTerminalLines(t *testing.T, tm *resourceTerminal, start, count int) {
 func TestTerminalReviewRetainsOlderOutputAndFreezesReading(t *testing.T) {
 	tm := reviewTerminal(t, 30, 5)
 	writeTerminalLines(t, tm, 0, 100)
-	tm.beginReview()
-	if tm.captured || len(tm.review.viewer.Reader.Lines) < 100 {
+	tm.BeginReview()
+	if tm.Captured || len(tm.Review.Viewer.Reader.Lines) < 100 {
 		t.Fatal("review did not retain the scrolled output")
 	}
-	tm.reviewKey("home", "")
-	before := tm.review.viewer.Reader.View(30, 5, workspaceTheme())
+	tm.ReviewKey("home", "")
+	before := tm.Review.Viewer.Reader.View(30, 5, ui.WorkspaceTheme())
 	if !strings.Contains(ansi.Strip(before), "line-0000") || strings.Contains(before, "line-0099") {
 		t.Fatalf("earliest output is unavailable: %q", before)
 	}
 	writeTerminalLines(t, tm, 100, 10)
-	if got := tm.review.viewer.Reader.View(30, 5, workspaceTheme()); got != before {
+	if got := tm.Review.Viewer.Reader.View(30, 5, ui.WorkspaceTheme()); got != before {
 		t.Fatal("new output moved or changed the review screen")
 	}
-	_, state := tm.terminalState()
+	_, state := tm.TerminalState()
 	if !strings.Contains(state, "New output available") {
 		t.Fatalf("new output is not discoverable: %s", state)
 	}
-	tm.reviewKey("end", "")
-	if !strings.Contains(tm.review.viewer.Reader.View(30, 5, workspaceTheme()), "line-0109") {
+	tm.ReviewKey("end", "")
+	if !strings.Contains(tm.Review.Viewer.Reader.View(30, 5, ui.WorkspaceTheme()), "line-0109") {
 		t.Fatal("End did not update review with the latest output")
 	}
 }
 
 func TestTerminalReviewHistoryIsBoundedAndAltScreenStaysSeparate(t *testing.T) {
 	tm := reviewTerminal(t, 30, 5)
-	writeTerminalLines(t, tm, 0, terminalScrollbackLimit+20)
-	tm.beginReview()
-	if len(tm.review.viewer.Reader.Lines) != terminalScrollbackLimit+5 || !tm.review.limited {
-		t.Fatalf("unbounded terminal history: %d", len(tm.review.viewer.Reader.Lines))
+	writeTerminalLines(t, tm, 0, monitor.TerminalScrollbackLimit+20)
+	tm.BeginReview()
+	if len(tm.Review.Viewer.Reader.Lines) != monitor.TerminalScrollbackLimit+5 || !tm.Review.Limited {
+		t.Fatalf("unbounded terminal history: %d", len(tm.Review.Viewer.Reader.Lines))
 	}
-	tm.reviewKey("home", "")
-	if strings.Contains(tm.review.viewer.Reader.View(30, 5, workspaceTheme()), "line-0000") {
+	tm.ReviewKey("home", "")
+	if strings.Contains(tm.Review.Viewer.Reader.View(30, 5, ui.WorkspaceTheme()), "line-0000") {
 		t.Fatal("history did not discard its oldest line")
 	}
 	_, _ = tm.Write([]byte("\x1b[?1049h\x1b[HALTERNATE"))
-	tm.beginReview()
-	if !tm.review.alt || len(tm.review.viewer.Reader.Lines) != 5 || !strings.Contains(tm.review.viewer.Reader.View(30, 5, workspaceTheme()), "ALTERNATE") {
+	tm.BeginReview()
+	if !tm.Review.Alt || len(tm.Review.Viewer.Reader.Lines) != 5 || !strings.Contains(tm.Review.Viewer.Reader.View(30, 5, ui.WorkspaceTheme()), "ALTERNATE") {
 		t.Fatal("alternate screen mixed current content with shell scrollback")
 	}
 	_, _ = tm.Write([]byte("\x1b[?1049l"))
-	tm.beginReview()
-	if tm.review.alt || len(tm.review.viewer.Reader.Lines) <= 5 {
+	tm.BeginReview()
+	if tm.Review.Alt || len(tm.Review.Viewer.Reader.Lines) <= 5 {
 		t.Fatal("returning from alternate screen lost main screen history")
 	}
 }
@@ -85,14 +86,14 @@ func TestTerminalReviewHistoryIsBoundedAndAltScreenStaysSeparate(t *testing.T) {
 func TestTerminalReviewPreservesANSIAndWideCharacters(t *testing.T) {
 	tm := reviewTerminal(t, 30, 3)
 	_, _ = tm.Write([]byte("\x1b[31mError 界\x1b[0m\r\nnext\r\nlast\r\n"))
-	tm.beginReview()
-	tm.reviewKey("home", "")
-	view := tm.review.viewer.Reader.View(30, 3, workspaceTheme())
+	tm.BeginReview()
+	tm.ReviewKey("home", "")
+	view := tm.Review.Viewer.Reader.View(30, 3, ui.WorkspaceTheme())
 	if !strings.Contains(view, "\x1b[") || !strings.Contains(ansi.Strip(view), "Error 界") {
 		t.Fatalf("review lost styled terminal cells: %q", view)
 	}
-	tm.resize(8, 2)
-	for _, row := range strings.Split(tm.review.viewer.Reader.View(8, 2, workspaceTheme()), "\n") {
+	tm.Resize(8, 2)
+	for _, row := range strings.Split(tm.Review.Viewer.Reader.View(8, 2, ui.WorkspaceTheme()), "\n") {
 		if lipgloss.Width(row) > 8 {
 			t.Fatalf("resized review overflows: %q", row)
 		}
@@ -102,21 +103,21 @@ func TestTerminalReviewPreservesANSIAndWideCharacters(t *testing.T) {
 func TestTerminalReviewNavigationAndResumeAreLocal(t *testing.T) {
 	m := exploreModel(t)
 	tm := reviewTerminal(t, 30, 5)
-	m.explore.terminal = tm
+	m.explore.Terminal = tm
 	writeTerminalLines(t, tm, 0, 100)
-	tm.beginReview()
+	tm.BeginReview()
 	m.updateResourceTerminalKey(tea.KeyPressMsg{Code: tea.KeyHome})
 	m.updateResourceTerminalKey(tea.KeyPressMsg{Code: 'j', Text: "j"})
-	if tm.review.viewer.Reader.Cursor.Row != 1 || tm.captured {
+	if tm.Review.Viewer.Reader.Cursor.Row != 1 || tm.Captured {
 		t.Fatal("review keys were not handled locally")
 	}
 	m.updateResourceTerminalKey(tea.KeyPressMsg{Code: 'r', Text: "r"})
-	if !tm.captured || tm.review != nil {
+	if !tm.Captured || tm.Review != nil {
 		t.Fatal("Resume did not return to live input")
 	}
-	tm.beginReview()
+	tm.BeginReview()
 	m.updateResourceTerminalKey(tea.KeyPressMsg{Code: 'x', Text: "x"})
-	if m.explore.terminal != nil {
+	if m.explore.Terminal != nil {
 		t.Fatal("Close did not restore the resource detail")
 	}
 }
@@ -124,11 +125,11 @@ func TestTerminalReviewNavigationAndResumeAreLocal(t *testing.T) {
 func TestTerminalInputPreservesCaseUnicodeAndSpecialKeys(t *testing.T) {
 	m := exploreModel(t)
 	tm := reviewTerminal(t, 80, 24)
-	m.explore.terminal = tm
+	m.explore.Terminal = tm
 	var input strings.Builder
 	done := make(chan struct{})
 	go func() {
-		_, _ = io.Copy(&input, tm.emulator)
+		_, _ = io.Copy(&input, tm.Emulator)
 		close(done)
 	}()
 	keys := []tea.KeyPressMsg{
@@ -147,7 +148,7 @@ func TestTerminalInputPreservesCaseUnicodeAndSpecialKeys(t *testing.T) {
 	for _, key := range keys {
 		m.updateResourceTerminalKey(key)
 	}
-	tm.close()
+	tm.Close()
 	select {
 	case <-done:
 	case <-time.After(time.Second):
@@ -160,15 +161,15 @@ func TestTerminalInputPreservesCaseUnicodeAndSpecialKeys(t *testing.T) {
 
 func TestTerminalLaunchErrorShowsCauseWithoutBlankScreenPadding(t *testing.T) {
 	tm := reviewTerminal(t, 84, 28)
-	tm.done, tm.err = true, "Internal error occurred: error executing command in container: failed to exec in container: failed to start exec: OCI runtime exec failed: exec: \"/bin/bash\": stat /bin/bash: no such file or directory"
-	tm.beginReview()
-	view := ansi.Strip(tm.review.viewer.Reader.View(84, 20, workspaceTheme()))
+	tm.Done, tm.Err = true, "Internal error occurred: error executing command in container: failed to exec in container: failed to start exec: OCI runtime exec failed: exec: \"/bin/bash\": stat /bin/bash: no such file or directory"
+	tm.BeginReview()
+	view := ansi.Strip(tm.Review.Viewer.Reader.View(84, 20, ui.WorkspaceTheme()))
 	for _, text := range []string{"Session error", "Internal error", "no such file or directory"} {
 		if !strings.Contains(view, text) {
 			t.Fatalf("launch error hides %q: %s", text, view)
 		}
 	}
-	if len(tm.review.viewer.Reader.Lines) != 2 {
+	if len(tm.Review.Viewer.Reader.Lines) != 2 {
 		t.Fatal("empty terminal rows push the launch error below the viewport")
 	}
 }
@@ -184,10 +185,10 @@ func TestTerminalReviewSurvivesConcurrentOutputAndResize(t *testing.T) {
 		}
 	}()
 	for i := range 20 {
-		tm.beginReview()
-		tm.reviewKey("home", "")
-		tm.resize(30+i, 5+i%3)
-		_ = tm.review.viewer.Reader.View(30+i, 5+i%3, workspaceTheme())
+		tm.BeginReview()
+		tm.ReviewKey("home", "")
+		tm.Resize(30+i, 5+i%3)
+		_ = tm.Review.Viewer.Reader.View(30+i, 5+i%3, ui.WorkspaceTheme())
 	}
 	wg.Wait()
 }
@@ -195,21 +196,21 @@ func TestTerminalReviewSurvivesConcurrentOutputAndResize(t *testing.T) {
 func TestTerminalEndedOutputAndWrappedErrorRemainReviewable(t *testing.T) {
 	m := exploreModel(t)
 	tm := reviewTerminal(t, 30, 5)
-	m.explore.terminal = tm
+	m.explore.Terminal = tm
 	writeTerminalLines(t, tm, 0, 20)
-	m.Update(resourceTerminalResult{terminal: tm, err: fmt.Errorf("The shell could not start because this image does not include the requested executable. Choose another command.")})
-	if !tm.done || tm.captured || tm.review == nil {
+	m.Update(monitor.ResourceTerminalResult{Terminal: tm, Err: fmt.Errorf("The shell could not start because this image does not include the requested executable. Choose another command.")})
+	if !tm.Done || tm.Captured || tm.Review == nil {
 		t.Fatal("ended session did not retain output for review")
 	}
 	parts := []string{}
-	for _, line := range tm.review.viewer.Reader.Lines {
+	for _, line := range tm.Review.Viewer.Reader.Lines {
 		parts = append(parts, line.Text)
 	}
 	all := strings.Join(parts, "\n")
-	if !strings.Contains(all, "line-0000") || !strings.Contains(strings.Join(strings.Fields(all), " "), tm.err) {
+	if !strings.Contains(all, "line-0000") || !strings.Contains(strings.Join(strings.Fields(all), " "), tm.Err) {
 		t.Fatalf("output or full error lost: %s", all)
 	}
-	for _, row := range strings.Split(tm.review.viewer.Reader.View(30, 5, workspaceTheme()), "\n") {
+	for _, row := range strings.Split(tm.Review.Viewer.Reader.View(30, 5, ui.WorkspaceTheme()), "\n") {
 		if lipgloss.Width(row) > 30 {
 			t.Fatalf("error line exceeds terminal: %q", row)
 		}
@@ -222,12 +223,12 @@ func TestTerminalOverlayFitsAndShowsTargetModesAndControls(t *testing.T) {
 		m.width, m.height = size[0], size[1]
 		width, height := m.terminalDimensions()
 		tm := reviewTerminal(t, width, height)
-		tm.context, tm.namespace, tm.pod, tm.container, tm.command = "fixture", "default", "checkout-pod", "app", "sh"
-		m.explore.terminal = tm
+		tm.Context, tm.Namespace, tm.Pod, tm.Container, tm.Command = "fixture", "default", "checkout-pod", "app", "sh"
+		m.explore.Terminal = tm
 		for _, captured := range []bool{true, false} {
 			if !captured {
 				m.status = ""
-				tm.beginReview()
+				tm.BeginReview()
 			}
 			view := m.render()
 			if lipgloss.Width(view) > m.width || lipgloss.Height(view) > m.height {
@@ -257,8 +258,8 @@ func TestTerminalCursorMatchesOutputAndIsHiddenDuringReview(t *testing.T) {
 	m.width, m.height = 120, 30
 	width, height := m.terminalDimensions()
 	tm := reviewTerminal(t, width, height)
-	tm.cursorVisible.Store(true)
-	m.explore.terminal = tm
+	tm.CursorVisible.Store(true)
+	m.explore.Terminal = tm
 	_, _ = tm.Write([]byte("CURSOR"))
 	view := m.View()
 	if view.Cursor == nil {
@@ -272,7 +273,7 @@ func TestTerminalCursorMatchesOutputAndIsHiddenDuringReview(t *testing.T) {
 			}
 		}
 	}
-	tm.beginReview()
+	tm.BeginReview()
 	if m.View().Cursor != nil {
 		t.Fatal("review mode retained a live input cursor")
 	}

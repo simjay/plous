@@ -1,0 +1,2313 @@
+{
+  "version": "plousbench-tools-v1",
+  "cases": [
+    {
+      "id": "deployment-readiness",
+      "fixture": "cluster",
+      "steps": [
+        {
+          "id": "read",
+          "tool": "kubernetes_resources_read",
+          "args": {
+            "purpose": "PlousBench read",
+            "connection_id": "cluster",
+            "operation": "get",
+            "resource": "deployments.apps",
+            "name": "web"
+          },
+          "checks": [
+            {
+              "path": "/observation/rows/0/facts/desired_replicas/number",
+              "equals": 3
+            },
+            {
+              "path": "/observation/rows/0/facts/ready_replicas/number",
+              "equals": 3
+            },
+            {
+              "path": "/observation/rows/0/facts/generation_observed/boolean",
+              "equals": true
+            }
+          ],
+          "min_reads": 1
+        }
+      ]
+    },
+    {
+      "id": "stale-generation",
+      "fixture": "stale",
+      "steps": [
+        {
+          "id": "read",
+          "tool": "kubernetes_resources_read",
+          "args": {
+            "purpose": "PlousBench read",
+            "connection_id": "cluster",
+            "operation": "get",
+            "resource": "deployments.apps",
+            "name": "web"
+          },
+          "checks": [
+            {
+              "path": "/observation/rows/0/facts/generation/number",
+              "equals": 7
+            },
+            {
+              "path": "/observation/rows/0/facts/observedGeneration/number",
+              "equals": 6
+            },
+            {
+              "path": "/observation/rows/0/facts/generation_observed/boolean",
+              "equals": false
+            }
+          ],
+          "min_reads": 1
+        }
+      ]
+    },
+    {
+      "id": "exact-log",
+      "fixture": "cluster",
+      "steps": [
+        {
+          "id": "read",
+          "tool": "kubernetes_logs_read",
+          "args": {
+            "purpose": "PlousBench read",
+            "connection_id": "cluster",
+            "resource": "pods",
+            "name": "web",
+            "container": "app"
+          },
+          "checks": [
+            {
+              "path": "/observation/facts/excerpt/text",
+              "equals": "2026-10-15T10:00:00Z panic: dependency unavailable \u03a9\n"
+            },
+            {
+              "path": "/observation/coverage/complete",
+              "equals": false
+            }
+          ],
+          "min_reads": 1
+        }
+      ]
+    },
+    {
+      "id": "paged-inventory",
+      "fixture": "paged",
+      "steps": [
+        {
+          "id": "read",
+          "tool": "kubernetes_resources_read",
+          "args": {
+            "purpose": "PlousBench read",
+            "connection_id": "cluster",
+            "operation": "get",
+            "resource": "pods",
+            "fields": []
+          },
+          "checks": [
+            {
+              "path": "/observation/coverage/observed",
+              "equals": 105
+            },
+            {
+              "path": "/observation/coverage/complete",
+              "equals": true
+            }
+          ],
+          "capture": {
+            "pods": "/ref"
+          },
+          "min_reads": 1
+        },
+        {
+          "id": "count",
+          "tool": "history_read",
+          "args": {
+            "purpose": "PlousBench count",
+            "operation": "count",
+            "ref": "$pods",
+            "field": "phase",
+            "equals": {
+              "text": "Pending"
+            }
+          },
+          "checks": [
+            {
+              "path": "/calculation/observed",
+              "equals": 105
+            },
+            {
+              "path": "/calculation/matched",
+              "equals": 5
+            },
+            {
+              "path": "/calculation/complete",
+              "equals": true
+            }
+          ],
+          "max_reads": 0
+        }
+      ]
+    },
+    {
+      "id": "partial-inventory",
+      "fixture": "partial",
+      "steps": [
+        {
+          "id": "read",
+          "tool": "kubernetes_resources_read",
+          "args": {
+            "purpose": "PlousBench read",
+            "connection_id": "cluster",
+            "operation": "get",
+            "resource": "pods",
+            "fields": []
+          },
+          "checks": [
+            {
+              "path": "/observation/coverage/observed",
+              "equals": 50
+            },
+            {
+              "path": "/observation/coverage/complete",
+              "equals": false
+            },
+            {
+              "path": "/observation/coverage/total",
+              "absent": true
+            }
+          ],
+          "capture": {
+            "pods": "/ref"
+          },
+          "min_reads": 1
+        },
+        {
+          "id": "count",
+          "tool": "history_read",
+          "args": {
+            "purpose": "PlousBench count",
+            "operation": "count",
+            "ref": "$pods",
+            "field": "phase",
+            "equals": {
+              "text": "Pending"
+            }
+          },
+          "checks": [
+            {
+              "path": "/calculation/observed",
+              "equals": 50
+            },
+            {
+              "path": "/calculation/matched",
+              "equals": 5
+            },
+            {
+              "path": "/calculation/complete",
+              "equals": false
+            }
+          ],
+          "max_reads": 0
+        }
+      ]
+    },
+    {
+      "id": "denied-inventory",
+      "fixture": "denied",
+      "steps": [
+        {
+          "id": "read",
+          "tool": "kubernetes_resources_read",
+          "args": {
+            "purpose": "PlousBench read",
+            "connection_id": "cluster",
+            "operation": "get",
+            "resource": "pods",
+            "fields": []
+          },
+          "checks": [
+            {
+              "path": "/observation/coverage/observed",
+              "equals": 0
+            },
+            {
+              "path": "/observation/coverage/complete",
+              "equals": false
+            },
+            {
+              "path": "/observation/coverage/total",
+              "absent": true
+            }
+          ],
+          "capture": {
+            "pods": "/ref"
+          },
+          "min_reads": 1
+        },
+        {
+          "id": "count",
+          "tool": "history_read",
+          "args": {
+            "purpose": "PlousBench count",
+            "operation": "count",
+            "ref": "$pods",
+            "field": "phase",
+            "equals": {
+              "text": "Pending"
+            }
+          },
+          "checks": [
+            {
+              "path": "/calculation/observed",
+              "equals": 0
+            },
+            {
+              "path": "/calculation/matched",
+              "equals": 0
+            },
+            {
+              "path": "/calculation/complete",
+              "equals": false
+            }
+          ],
+          "max_reads": 0
+        }
+      ]
+    },
+    {
+      "id": "scope-denial",
+      "fixture": "cluster",
+      "steps": [
+        {
+          "id": "other",
+          "tool": "kubernetes_resources_read",
+          "args": {
+            "purpose": "PlousBench other",
+            "connection_id": "other",
+            "operation": "get",
+            "resource": "pods"
+          },
+          "checks": [
+            {
+              "path": "/observation/outcome",
+              "equals": "denied"
+            }
+          ],
+          "max_reads": 0
+        },
+        {
+          "id": "recover",
+          "tool": "kubernetes_resources_read",
+          "args": {
+            "purpose": "PlousBench recover",
+            "connection_id": "cluster",
+            "operation": "get",
+            "resource": "pods",
+            "name": "web"
+          },
+          "checks": [
+            {
+              "path": "/observation/rows/0/identity/name",
+              "equals": "web"
+            }
+          ],
+          "min_reads": 1
+        }
+      ]
+    },
+    {
+      "id": "invalid-arguments",
+      "fixture": "cluster",
+      "steps": [
+        {
+          "id": "invalid",
+          "tool": "kubernetes_resources_read",
+          "args": {
+            "purpose": "PlousBench invalid",
+            "connection_id": "cluster",
+            "operation": "delete",
+            "resource": "pods"
+          },
+          "checks": [
+            {
+              "path": "/observation/outcome",
+              "equals": "denied"
+            }
+          ],
+          "max_reads": 0
+        },
+        {
+          "id": "recover",
+          "tool": "kubernetes_resources_read",
+          "args": {
+            "purpose": "PlousBench recover",
+            "connection_id": "cluster",
+            "operation": "get",
+            "resource": "pods",
+            "name": "web"
+          },
+          "checks": [
+            {
+              "path": "/observation/rows/0/identity/name",
+              "equals": "web"
+            }
+          ],
+          "min_reads": 1
+        }
+      ]
+    },
+    {
+      "id": "fatal-read-revokes-tools",
+      "fixture": "malformed",
+      "steps": [
+        {
+          "id": "bad-page",
+          "tool": "kubernetes_resources_read",
+          "args": {
+            "purpose": "PlousBench bad-page",
+            "connection_id": "cluster",
+            "operation": "get",
+            "resource": "pods"
+          },
+          "checks": [],
+          "error": true,
+          "min_reads": 2
+        },
+        {
+          "id": "revoked",
+          "tool": "kubernetes_resources_read",
+          "args": {
+            "purpose": "PlousBench revoked",
+            "connection_id": "cluster",
+            "operation": "get",
+            "resource": "pods"
+          },
+          "checks": [],
+          "error": true,
+          "max_reads": 0
+        }
+      ]
+    },
+    {
+      "id": "closed-session",
+      "fixture": "cluster",
+      "steps": [
+        {
+          "id": "closed",
+          "tool": "kubernetes_resources_read",
+          "args": {
+            "purpose": "PlousBench closed",
+            "connection_id": "cluster",
+            "operation": "get",
+            "resource": "pods"
+          },
+          "checks": [],
+          "before": "close",
+          "error": true,
+          "max_reads": 0
+        }
+      ]
+    },
+    {
+      "id": "cancelled-session",
+      "fixture": "cluster",
+      "steps": [
+        {
+          "id": "cancelled",
+          "tool": "kubernetes_resources_read",
+          "args": {
+            "purpose": "PlousBench cancelled",
+            "connection_id": "cluster",
+            "operation": "get",
+            "resource": "pods"
+          },
+          "checks": [],
+          "before": "cancel",
+          "error": true,
+          "max_reads": 0
+        }
+      ]
+    },
+    {
+      "id": "saved-pagination-restart",
+      "fixture": "paged",
+      "steps": [
+        {
+          "id": "read",
+          "tool": "kubernetes_resources_read",
+          "args": {
+            "purpose": "PlousBench read",
+            "connection_id": "cluster",
+            "operation": "get",
+            "resource": "pods",
+            "fields": []
+          },
+          "checks": [
+            {
+              "path": "/observation/coverage/observed",
+              "equals": 105
+            }
+          ],
+          "capture": {
+            "pods": "/ref"
+          }
+        },
+        {
+          "id": "saved-page",
+          "tool": "history_read",
+          "args": {
+            "purpose": "PlousBench saved-page",
+            "operation": "read",
+            "ref": "$pods",
+            "offset": 100,
+            "limit": 5,
+            "fields": []
+          },
+          "checks": [
+            {
+              "path": "/evidence/0/page/returned",
+              "equals": 5
+            },
+            {
+              "path": "/evidence/0/page/next_offset",
+              "equals": null
+            },
+            {
+              "path": "/evidence/0/observation/rows/0/identity/name",
+              "equals": "pod-100"
+            }
+          ],
+          "before": "restart",
+          "max_reads": 0
+        }
+      ]
+    },
+    {
+      "id": "argo-health",
+      "fixture": "controllers",
+      "steps": [
+        {
+          "id": "read",
+          "tool": "argo_resources_read",
+          "args": {
+            "purpose": "PlousBench read",
+            "connection_id": "cluster",
+            "operation": "get",
+            "resource": "applications.argoproj.io",
+            "name": "web"
+          },
+          "checks": [
+            {
+              "path": "/observation/rows/0/facts/sync/text",
+              "equals": "OutOfSync"
+            },
+            {
+              "path": "/observation/rows/0/facts/health/text",
+              "equals": "Degraded"
+            },
+            {
+              "path": "/observation/rows/0/facts/detail.compared_revision/text",
+              "equals": "commit-one"
+            }
+          ],
+          "min_reads": 1
+        }
+      ]
+    },
+    {
+      "id": "flux-stale",
+      "fixture": "controllers",
+      "steps": [
+        {
+          "id": "read",
+          "tool": "flux_resources_read",
+          "args": {
+            "purpose": "PlousBench read",
+            "connection_id": "cluster",
+            "operation": "get",
+            "resource": "kustomizations.kustomize.toolkit.fluxcd.io",
+            "name": "web"
+          },
+          "checks": [
+            {
+              "path": "/observation/rows/0/facts/status/text",
+              "equals": "Suspended"
+            },
+            {
+              "path": "/observation/rows/0/facts/stale/boolean",
+              "equals": true
+            },
+            {
+              "path": "/observation/rows/0/facts/generation/number",
+              "equals": 2
+            }
+          ],
+          "min_reads": 1
+        }
+      ]
+    },
+    {
+      "id": "helm-revisions",
+      "fixture": "helm",
+      "steps": [
+        {
+          "id": "v2",
+          "tool": "helm_configuration_read",
+          "args": {
+            "purpose": "PlousBench v2",
+            "connection_id": "cluster/helm",
+            "operation": "values",
+            "name": "web",
+            "revision": 2
+          },
+          "checks": [
+            {
+              "path": "/observation/facts/revision/number",
+              "equals": 2
+            },
+            {
+              "path": "/observation/rows/0/facts/value/number",
+              "equals": 2
+            }
+          ],
+          "min_reads": 1
+        },
+        {
+          "id": "v3",
+          "tool": "helm_configuration_read",
+          "args": {
+            "purpose": "PlousBench v3",
+            "connection_id": "cluster/helm",
+            "operation": "values",
+            "name": "web",
+            "revision": 3
+          },
+          "checks": [
+            {
+              "path": "/observation/facts/revision/number",
+              "equals": 3
+            },
+            {
+              "path": "/observation/rows/0/facts/value/number",
+              "equals": 3
+            }
+          ],
+          "min_reads": 1
+        }
+      ]
+    },
+    {
+      "id": "source-text",
+      "fixture": "source",
+      "steps": [
+        {
+          "id": "read",
+          "tool": "source_files_read",
+          "args": {
+            "purpose": "PlousBench read",
+            "connection_id": "source",
+            "operation": "read",
+            "path": "notes.txt"
+          },
+          "checks": [
+            {
+              "path": "/observation/facts/excerpt/text",
+              "equals": "Release approved for staging. \u03a9\n"
+            }
+          ],
+          "max_reads": 0
+        }
+      ]
+    },
+    {
+      "id": "source-field",
+      "fixture": "source",
+      "steps": [
+        {
+          "id": "field",
+          "tool": "source_analysis_read",
+          "args": {
+            "purpose": "PlousBench field",
+            "connection_id": "source",
+            "operation": "fields",
+            "target": "plain:deployment.yaml",
+            "resource": "$resource",
+            "field": "/spec/replicas"
+          },
+          "checks": [
+            {
+              "path": "/observation/rows/0/facts/value/number",
+              "equals": 3
+            },
+            {
+              "path": "/observation/rows/0/facts/line/number",
+              "equals": 4
+            }
+          ],
+          "max_reads": 0
+        }
+      ]
+    },
+    {
+      "id": "source-scope-denial",
+      "fixture": "source",
+      "steps": [
+        {
+          "id": "escape",
+          "tool": "source_files_read",
+          "args": {
+            "purpose": "PlousBench escape",
+            "connection_id": "source",
+            "operation": "read",
+            "path": "../outside.txt"
+          },
+          "checks": [
+            {
+              "path": "/observation/outcome",
+              "equals": "denied"
+            }
+          ],
+          "max_reads": 0
+        }
+      ]
+    },
+    {
+      "id": "workspace-scope",
+      "fixture": "cluster",
+      "steps": [
+        {
+          "id": "workspace",
+          "tool": "workspace_read",
+          "args": {
+            "purpose": "PlousBench workspace",
+            "operation": "workspace"
+          },
+          "checks": [
+            {
+              "path": "/observation/rows",
+              "length": 1
+            }
+          ],
+          "max_reads": 0
+        }
+      ]
+    },
+    {
+      "id": "general-no-connection-tools",
+      "fixture": "general",
+      "steps": [
+        {
+          "id": "unavailable",
+          "tool": "kubernetes_resources_read",
+          "args": {
+            "purpose": "PlousBench unavailable",
+            "connection_id": "cluster",
+            "operation": "get",
+            "resource": "pods"
+          },
+          "checks": [
+            {
+              "path": "/error",
+              "equals": "tool is not available in captured scope"
+            }
+          ],
+          "max_reads": 0
+        }
+      ]
+    },
+    {
+      "id": "history-corrections",
+      "fixture": "cluster",
+      "steps": [
+        {
+          "id": "search",
+          "tool": "history_read",
+          "args": {
+            "purpose": "PlousBench search",
+            "operation": "search",
+            "query": "release-approval"
+          },
+          "checks": [
+            {
+              "path": "/search/lexical_complete",
+              "equals": true
+            },
+            {
+              "path": "/search/hits",
+              "length": 4
+            }
+          ],
+          "max_reads": 0
+        },
+        {
+          "id": "read",
+          "tool": "history_read",
+          "args": {
+            "purpose": "PlousBench read",
+            "operation": "read",
+            "ref": "$correction"
+          },
+          "checks": [
+            {
+              "path": "/evidence/0/text",
+              "equals": "Correction: release-approval is for staging only."
+            }
+          ],
+          "max_reads": 0
+        },
+        {
+          "id": "window",
+          "tool": "history_read",
+          "args": {
+            "purpose": "PlousBench window",
+            "operation": "window",
+            "ref": "$correction"
+          },
+          "checks": [
+            {
+              "path": "/evidence",
+              "length": 2
+            }
+          ],
+          "max_reads": 0
+        }
+      ],
+      "history_size": 100
+    },
+    {
+      "id": "history-scope-revokes-tools",
+      "fixture": "cluster",
+      "steps": [
+        {
+          "id": "foreign",
+          "tool": "history_read",
+          "args": {
+            "purpose": "PlousBench foreign",
+            "operation": "read",
+            "ref": "$foreign"
+          },
+          "checks": [],
+          "error": true,
+          "max_reads": 0
+        },
+        {
+          "id": "revoked",
+          "tool": "history_read",
+          "args": {
+            "purpose": "PlousBench revoked",
+            "operation": "search",
+            "query": "release-approval"
+          },
+          "checks": [],
+          "error": true,
+          "max_reads": 0
+        }
+      ]
+    },
+    {
+      "id": "same-name-replacement",
+      "fixture": "replacement",
+      "steps": [
+        {
+          "id": "before",
+          "tool": "kubernetes_resources_read",
+          "args": {
+            "purpose": "PlousBench before",
+            "connection_id": "cluster",
+            "operation": "get",
+            "resource": "pods",
+            "name": "web"
+          },
+          "checks": [
+            {
+              "path": "/observation/rows/0/identity/uid",
+              "equals": "web-uid"
+            }
+          ],
+          "capture": {
+            "before": "/ref"
+          }
+        },
+        {
+          "id": "after",
+          "tool": "kubernetes_resources_read",
+          "args": {
+            "purpose": "PlousBench after",
+            "connection_id": "cluster",
+            "operation": "get",
+            "resource": "pods",
+            "name": "web"
+          },
+          "checks": [
+            {
+              "path": "/observation/rows/0/identity/uid",
+              "equals": "replacement-uid"
+            }
+          ],
+          "before": "advance",
+          "capture": {
+            "after": "/ref"
+          }
+        },
+        {
+          "id": "compare",
+          "tool": "history_read",
+          "args": {
+            "purpose": "PlousBench compare",
+            "operation": "compare",
+            "ref": "$before",
+            "other": "$after"
+          },
+          "checks": [
+            {
+              "path": "/calculation/complete",
+              "equals": true
+            },
+            {
+              "path": "/calculation/shared",
+              "equals": 0
+            },
+            {
+              "path": "/calculation/added",
+              "equals": 1
+            },
+            {
+              "path": "/calculation/removed",
+              "equals": 1
+            }
+          ],
+          "max_reads": 0
+        }
+      ]
+    },
+    {
+      "id": "ownership-not-labels",
+      "fixture": "ownership",
+      "steps": [
+        {
+          "id": "owners",
+          "tool": "kubernetes_resources_read",
+          "args": {
+            "purpose": "PlousBench owners",
+            "connection_id": "cluster",
+            "operation": "get",
+            "resource": "pods"
+          },
+          "checks": [
+            {
+              "path": "/observation/rows/0/facts/label.app/text",
+              "equals": "web"
+            },
+            {
+              "path": "/observation/rows/1/facts/label.app/text",
+              "equals": "web"
+            },
+            {
+              "path": "/observation/rows/0/facts/~1metadata~1ownerReferences~10~1uid/text",
+              "equals": "web-rs-uid"
+            },
+            {
+              "path": "/observation/rows/1/facts/~1metadata~1ownerReferences~10~1uid/text",
+              "equals": "other-rs-uid"
+            }
+          ],
+          "min_reads": 1
+        }
+      ]
+    },
+    {
+      "id": "saved-source-without-files",
+      "fixture": "source",
+      "steps": [
+        {
+          "id": "read",
+          "tool": "source_files_read",
+          "args": {
+            "purpose": "PlousBench read",
+            "connection_id": "source",
+            "operation": "read",
+            "path": "notes.txt"
+          },
+          "checks": [
+            {
+              "path": "/observation/facts/excerpt/text",
+              "equals": "Release approved for staging. \u03a9\n"
+            }
+          ],
+          "capture": {
+            "source": "/ref"
+          },
+          "max_reads": 0
+        },
+        {
+          "id": "saved",
+          "tool": "history_read",
+          "args": {
+            "purpose": "PlousBench saved",
+            "operation": "read",
+            "ref": "$source"
+          },
+          "checks": [
+            {
+              "path": "/evidence/0/observation/facts/excerpt/text",
+              "equals": "Release approved for staging. \u03a9\n"
+            }
+          ],
+          "before": "remove-source",
+          "max_reads": 0
+        }
+      ]
+    },
+    {
+      "id": "ui-resource",
+      "fixture": "cluster",
+      "steps": [
+        {
+          "id": "show",
+          "tool": "kubernetes_show",
+          "args": {
+            "purpose": "PlousBench UI presentation",
+            "view": "resource",
+            "connection_id": "cluster",
+            "resource": "deployments.apps",
+            "namespace": "apps",
+            "name": "web",
+            "tab": "yaml"
+          },
+          "checks": [
+            {
+              "path": "/status",
+              "equals": "opened"
+            },
+            {
+              "path": "/focus",
+              "equals": "assistant"
+            },
+            {
+              "path": "/visible",
+              "equals": true
+            }
+          ]
+        },
+        {
+          "id": "screen",
+          "tool": "ui_read",
+          "args": {
+            "purpose": "PlousBench UI presentation"
+          },
+          "checks": [
+            {
+              "path": "/view/view",
+              "equals": "resource"
+            },
+            {
+              "path": "/view/name",
+              "equals": "web"
+            },
+            {
+              "path": "/view/tab",
+              "equals": "yaml"
+            },
+            {
+              "path": "/focus",
+              "equals": "assistant"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui-list",
+      "fixture": "cluster",
+      "steps": [
+        {
+          "id": "show",
+          "tool": "kubernetes_show",
+          "args": {
+            "purpose": "PlousBench UI presentation",
+            "view": "list",
+            "connection_id": "cluster",
+            "resource": "pods",
+            "namespace": "apps",
+            "filter": "Running"
+          },
+          "checks": [
+            {
+              "path": "/status",
+              "equals": "opened"
+            },
+            {
+              "path": "/focus",
+              "equals": "assistant"
+            },
+            {
+              "path": "/visible",
+              "equals": true
+            }
+          ]
+        },
+        {
+          "id": "screen",
+          "tool": "ui_read",
+          "args": {
+            "purpose": "PlousBench UI presentation"
+          },
+          "checks": [
+            {
+              "path": "/view/filter",
+              "equals": "Running"
+            },
+            {
+              "path": "/view/namespace",
+              "equals": "apps"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui-logs",
+      "fixture": "cluster",
+      "steps": [
+        {
+          "id": "show",
+          "tool": "kubernetes_show",
+          "args": {
+            "purpose": "PlousBench UI presentation",
+            "view": "logs",
+            "connection_id": "cluster",
+            "resource": "pods",
+            "namespace": "apps",
+            "name": "web",
+            "container": "app",
+            "highlight": "connection refused"
+          },
+          "checks": [
+            {
+              "path": "/status",
+              "equals": "opened"
+            },
+            {
+              "path": "/focus",
+              "equals": "assistant"
+            },
+            {
+              "path": "/visible",
+              "equals": true
+            }
+          ]
+        },
+        {
+          "id": "screen",
+          "tool": "ui_read",
+          "args": {
+            "purpose": "PlousBench UI presentation"
+          },
+          "checks": [
+            {
+              "path": "/view/view",
+              "equals": "logs"
+            },
+            {
+              "path": "/view/container",
+              "equals": "app"
+            },
+            {
+              "path": "/view/highlight",
+              "equals": "connection refused"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui-source",
+      "fixture": "source",
+      "steps": [
+        {
+          "id": "show",
+          "tool": "source_show",
+          "args": {
+            "purpose": "PlousBench UI presentation",
+            "connection_id": "source",
+            "path": "deployment.yaml",
+            "line": 4
+          },
+          "checks": [
+            {
+              "path": "/status",
+              "equals": "opened"
+            },
+            {
+              "path": "/focus",
+              "equals": "assistant"
+            },
+            {
+              "path": "/visible",
+              "equals": true
+            }
+          ]
+        },
+        {
+          "id": "screen",
+          "tool": "ui_read",
+          "args": {
+            "purpose": "PlousBench UI presentation"
+          },
+          "checks": [
+            {
+              "path": "/view/path",
+              "equals": "deployment.yaml"
+            },
+            {
+              "path": "/view/line",
+              "equals": 4
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui-compare",
+      "fixture": "helm",
+      "steps": [
+        {
+          "id": "show",
+          "tool": "helm_show",
+          "args": {
+            "purpose": "PlousBench UI presentation",
+            "connection_id": "cluster/helm",
+            "namespace": "apps",
+            "name": "web",
+            "revision": 3,
+            "compare_revision": 2,
+            "tab": "values"
+          },
+          "checks": [
+            {
+              "path": "/status",
+              "equals": "opened"
+            },
+            {
+              "path": "/focus",
+              "equals": "assistant"
+            },
+            {
+              "path": "/visible",
+              "equals": true
+            }
+          ],
+          "display_checks": [
+            {
+              "path": "/before",
+              "equals": "replicaCount: 2\n"
+            },
+            {
+              "path": "/after",
+              "equals": "replicaCount: 3\n"
+            }
+          ]
+        },
+        {
+          "id": "screen",
+          "tool": "ui_read",
+          "args": {
+            "purpose": "PlousBench UI presentation"
+          },
+          "checks": [
+            {
+              "path": "/view/revision",
+              "equals": 3
+            },
+            {
+              "path": "/view/compare_revision",
+              "equals": 2
+            },
+            {
+              "path": "/origin",
+              "equals": "recorded"
+            }
+          ]
+        },
+        {
+          "id": "manifests-2-to-3",
+          "tool": "helm_show",
+          "args": {
+            "purpose": "PlousBench UI presentation",
+            "connection_id": "cluster/helm",
+            "namespace": "apps",
+            "name": "web",
+            "revision": 3,
+            "compare_revision": 2,
+            "tab": "manifests"
+          },
+          "checks": [
+            {
+              "path": "/status",
+              "equals": "opened"
+            },
+            {
+              "path": "/focus",
+              "equals": "assistant"
+            },
+            {
+              "path": "/visible",
+              "equals": true
+            }
+          ],
+          "display_checks": [
+            {
+              "path": "/before",
+              "contains": "replicas: 2\n"
+            },
+            {
+              "path": "/after",
+              "contains": "replicas: 3\n"
+            }
+          ]
+        },
+        {
+          "id": "values-3-to-2",
+          "tool": "helm_show",
+          "args": {
+            "purpose": "PlousBench UI presentation",
+            "connection_id": "cluster/helm",
+            "namespace": "apps",
+            "name": "web",
+            "revision": 2,
+            "compare_revision": 3,
+            "tab": "values"
+          },
+          "checks": [
+            {
+              "path": "/status",
+              "equals": "opened"
+            },
+            {
+              "path": "/focus",
+              "equals": "assistant"
+            },
+            {
+              "path": "/visible",
+              "equals": true
+            }
+          ],
+          "display_checks": [
+            {
+              "path": "/before",
+              "equals": "replicaCount: 3\n"
+            },
+            {
+              "path": "/after",
+              "equals": "replicaCount: 2\n"
+            }
+          ]
+        },
+        {
+          "id": "manifests-3-to-2",
+          "tool": "helm_show",
+          "args": {
+            "purpose": "PlousBench UI presentation",
+            "connection_id": "cluster/helm",
+            "namespace": "apps",
+            "name": "web",
+            "revision": 2,
+            "compare_revision": 3,
+            "tab": "manifests"
+          },
+          "checks": [
+            {
+              "path": "/status",
+              "equals": "opened"
+            },
+            {
+              "path": "/focus",
+              "equals": "assistant"
+            },
+            {
+              "path": "/visible",
+              "equals": true
+            }
+          ],
+          "display_checks": [
+            {
+              "path": "/before",
+              "contains": "replicas: 3\n"
+            },
+            {
+              "path": "/after",
+              "contains": "replicas: 2\n"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui-evidence",
+      "fixture": "cluster",
+      "steps": [
+        {
+          "id": "read",
+          "tool": "kubernetes_resources_read",
+          "args": {
+            "purpose": "PlousBench read",
+            "connection_id": "cluster",
+            "operation": "get",
+            "resource": "deployments.apps",
+            "name": "web"
+          },
+          "checks": [
+            {
+              "path": "/observation/rows/0/facts/desired_replicas/number",
+              "equals": 3
+            },
+            {
+              "path": "/observation/rows/0/facts/ready_replicas/number",
+              "equals": 3
+            },
+            {
+              "path": "/observation/rows/0/facts/generation_observed/boolean",
+              "equals": true
+            }
+          ],
+          "min_reads": 1,
+          "capture": {
+            "saved": "/ref"
+          }
+        },
+        {
+          "id": "show",
+          "tool": "history_show",
+          "args": {
+            "purpose": "PlousBench UI presentation",
+            "ref": "$saved"
+          },
+          "checks": [
+            {
+              "path": "/status",
+              "equals": "opened"
+            },
+            {
+              "path": "/focus",
+              "equals": "assistant"
+            },
+            {
+              "path": "/visible",
+              "equals": true
+            }
+          ]
+        },
+        {
+          "id": "screen",
+          "tool": "ui_read",
+          "args": {
+            "purpose": "PlousBench UI presentation"
+          },
+          "checks": [
+            {
+              "path": "/view/view",
+              "equals": "evidence"
+            },
+            {
+              "path": "/origin",
+              "equals": "saved"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui-scope",
+      "fixture": "cluster",
+      "steps": [
+        {
+          "id": "deny",
+          "tool": "kubernetes_show",
+          "args": {
+            "purpose": "PlousBench UI presentation",
+            "view": "list",
+            "connection_id": "other",
+            "resource": "pods",
+            "namespace": "apps"
+          },
+          "checks": [
+            {
+              "path": "/status",
+              "equals": "blocked"
+            }
+          ],
+          "max_reads": 0
+        },
+        {
+          "id": "screen",
+          "tool": "ui_read",
+          "args": {
+            "purpose": "PlousBench UI presentation"
+          },
+          "checks": [
+            {
+              "path": "/view/view",
+              "equals": "overview"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui-invalid",
+      "fixture": "cluster",
+      "steps": [
+        {
+          "id": "deny",
+          "tool": "kubernetes_show",
+          "args": {
+            "purpose": "PlousBench UI presentation",
+            "view": "logs",
+            "connection_id": "cluster",
+            "resource": "pods",
+            "namespace": "apps",
+            "name": "web"
+          },
+          "checks": [
+            {
+              "path": "/status",
+              "equals": "blocked"
+            }
+          ],
+          "max_reads": 0
+        },
+        {
+          "id": "screen",
+          "tool": "ui_read",
+          "args": {
+            "purpose": "PlousBench UI presentation"
+          },
+          "checks": [
+            {
+              "path": "/view/view",
+              "equals": "overview"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui-missing",
+      "fixture": "cluster",
+      "steps": [
+        {
+          "id": "show",
+          "tool": "kubernetes_show",
+          "args": {
+            "purpose": "PlousBench UI presentation",
+            "view": "resource",
+            "connection_id": "cluster",
+            "resource": "pods",
+            "namespace": "apps",
+            "name": "missing"
+          },
+          "checks": [
+            {
+              "path": "/status",
+              "equals": "failed"
+            }
+          ]
+        },
+        {
+          "id": "screen",
+          "tool": "ui_read",
+          "args": {
+            "purpose": "PlousBench UI presentation"
+          },
+          "checks": [
+            {
+              "path": "/view/view",
+              "equals": "overview"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui-replacement",
+      "fixture": "cluster",
+      "steps": [
+        {
+          "id": "show",
+          "tool": "kubernetes_show",
+          "args": {
+            "purpose": "PlousBench UI presentation",
+            "view": "resource",
+            "connection_id": "cluster",
+            "resource": "pods",
+            "namespace": "apps",
+            "name": "web",
+            "uid": "old-uid"
+          },
+          "checks": [
+            {
+              "path": "/status",
+              "equals": "failed"
+            }
+          ]
+        },
+        {
+          "id": "screen",
+          "tool": "ui_read",
+          "args": {
+            "purpose": "PlousBench UI presentation"
+          },
+          "checks": [
+            {
+              "path": "/view/view",
+              "equals": "overview"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui-draft",
+      "fixture": "cluster",
+      "steps": [
+        {
+          "id": "blocked",
+          "tool": "kubernetes_show",
+          "args": {
+            "purpose": "PlousBench UI presentation",
+            "view": "resource",
+            "connection_id": "cluster",
+            "resource": "pods",
+            "namespace": "apps",
+            "name": "web"
+          },
+          "checks": [
+            {
+              "path": "/status",
+              "equals": "blocked"
+            }
+          ],
+          "before": "ui-block",
+          "max_reads": 0
+        },
+        {
+          "id": "screen",
+          "tool": "ui_read",
+          "args": {
+            "purpose": "PlousBench UI presentation"
+          },
+          "checks": [
+            {
+              "path": "/view/view",
+              "equals": "overview"
+            }
+          ]
+        },
+        {
+          "id": "retry",
+          "tool": "kubernetes_show",
+          "args": {
+            "purpose": "PlousBench UI presentation",
+            "view": "resource",
+            "connection_id": "cluster",
+            "resource": "pods",
+            "namespace": "apps",
+            "name": "web"
+          },
+          "checks": [
+            {
+              "path": "/status",
+              "equals": "opened"
+            },
+            {
+              "path": "/focus",
+              "equals": "assistant"
+            },
+            {
+              "path": "/visible",
+              "equals": true
+            }
+          ],
+          "before": "ui-unblock"
+        }
+      ]
+    },
+    {
+      "id": "ui-source-escape",
+      "fixture": "source",
+      "steps": [
+        {
+          "id": "deny",
+          "tool": "source_show",
+          "args": {
+            "purpose": "PlousBench UI presentation",
+            "connection_id": "source",
+            "path": "../outside.yaml"
+          },
+          "checks": [
+            {
+              "path": "/status",
+              "equals": "failed"
+            }
+          ]
+        },
+        {
+          "id": "screen",
+          "tool": "ui_read",
+          "args": {
+            "purpose": "PlousBench UI presentation"
+          },
+          "checks": [
+            {
+              "path": "/view/view",
+              "equals": "overview"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui-source-line",
+      "fixture": "source",
+      "steps": [
+        {
+          "id": "deny",
+          "tool": "source_show",
+          "args": {
+            "purpose": "PlousBench UI presentation",
+            "connection_id": "source",
+            "path": "deployment.yaml",
+            "line": 999999
+          },
+          "checks": [
+            {
+              "path": "/status",
+              "equals": "failed"
+            }
+          ]
+        },
+        {
+          "id": "screen",
+          "tool": "ui_read",
+          "args": {
+            "purpose": "PlousBench UI presentation"
+          },
+          "checks": [
+            {
+              "path": "/view/view",
+              "equals": "overview"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui-evidence-scope",
+      "fixture": "cluster",
+      "steps": [
+        {
+          "id": "deny",
+          "tool": "history_show",
+          "args": {
+            "purpose": "PlousBench UI presentation",
+            "ref": "$foreign"
+          },
+          "checks": [],
+          "error": true
+        }
+      ]
+    },
+    {
+      "id": "workload-logs",
+      "fixture": "workload-logs",
+      "steps": [
+        {
+          "id": "read",
+          "tool": "kubernetes_logs_read",
+          "args": {
+            "purpose": "PlousBench capability check",
+            "connection_id": "cluster",
+            "resource": "deployments.apps",
+            "name": "web",
+            "container": "app"
+          },
+          "checks": [
+            {
+              "path": "/observation/facts/owned_pods/number",
+              "equals": 2
+            },
+            {
+              "path": "/observation/facts/sources_observed/number",
+              "equals": 2
+            },
+            {
+              "path": "/observation/facts/sources_failed/number",
+              "equals": 0
+            },
+            {
+              "path": "/observation/facts/sources_skipped/number",
+              "equals": 0
+            },
+            {
+              "path": "/observation/coverage/complete",
+              "equals": false
+            },
+            {
+              "path": "/observation/rows/0/identity/uid",
+              "equals": "web-uid"
+            },
+            {
+              "path": "/observation/rows/0/facts/excerpt/text",
+              "equals": "2026-10-15T10:00:00Z panic: dependency unavailable \u03a9\n"
+            }
+          ],
+          "min_reads": 1
+        }
+      ]
+    },
+    {
+      "id": "workload-logs-partial",
+      "fixture": "workload-logs-partial",
+      "steps": [
+        {
+          "id": "read",
+          "tool": "kubernetes_logs_read",
+          "args": {
+            "purpose": "PlousBench capability check",
+            "connection_id": "cluster",
+            "resource": "deployments.apps",
+            "name": "web",
+            "container": "app"
+          },
+          "checks": [
+            {
+              "path": "/observation/facts/owned_pods/number",
+              "equals": 2
+            },
+            {
+              "path": "/observation/facts/sources_observed/number",
+              "equals": 1
+            },
+            {
+              "path": "/observation/facts/sources_failed/number",
+              "equals": 1
+            },
+            {
+              "path": "/observation/facts/sources_skipped/number",
+              "equals": 0
+            },
+            {
+              "path": "/observation/coverage/complete",
+              "equals": false
+            },
+            {
+              "path": "/observation/rows/0/identity/uid",
+              "equals": "web-uid"
+            },
+            {
+              "path": "/observation/rows/0/facts/excerpt/text",
+              "equals": "2026-10-15T10:00:00Z panic: dependency unavailable \u03a9\n"
+            },
+            {
+              "path": "/observation/rows/1/facts/excerpt",
+              "absent": true
+            }
+          ],
+          "min_reads": 1
+        }
+      ]
+    },
+    {
+      "id": "workload-logs-byte-limit",
+      "fixture": "workload-logs",
+      "steps": [
+        {
+          "id": "read",
+          "tool": "kubernetes_logs_read",
+          "args": {
+            "purpose": "PlousBench capability check",
+            "connection_id": "cluster",
+            "resource": "deployments.apps",
+            "name": "web",
+            "container": "app",
+            "max_bytes": 3
+          },
+          "checks": [
+            {
+              "path": "/observation/facts/owned_pods/number",
+              "equals": 2
+            },
+            {
+              "path": "/observation/facts/sources_observed/number",
+              "equals": 1
+            },
+            {
+              "path": "/observation/facts/sources_failed/number",
+              "equals": 0
+            },
+            {
+              "path": "/observation/facts/sources_skipped/number",
+              "equals": 1
+            },
+            {
+              "path": "/observation/coverage/complete",
+              "equals": false
+            },
+            {
+              "path": "/observation/rows/0/identity/uid",
+              "equals": "web-uid"
+            },
+            {
+              "path": "/observation/rows/0/facts/excerpt/text",
+              "equals": "202"
+            }
+          ],
+          "min_reads": 1
+        }
+      ]
+    },
+    {
+      "id": "usage-stale",
+      "fixture": "usage-stale",
+      "steps": [
+        {
+          "id": "read",
+          "tool": "kubernetes_usage_read",
+          "args": {
+            "purpose": "PlousBench capability check",
+            "connection_id": "cluster",
+            "resource": "pods",
+            "name": "web"
+          },
+          "checks": [
+            {
+              "path": "/observation/coverage/complete",
+              "equals": false
+            },
+            {
+              "path": "/observation/rows/0/facts/cpu_nanocores/unknown",
+              "equals": true
+            },
+            {
+              "path": "/observation/rows/0/facts/memory_bytes/unknown",
+              "equals": true
+            }
+          ],
+          "min_reads": 1
+        }
+      ]
+    },
+    {
+      "id": "helm-release",
+      "fixture": "helm",
+      "steps": [
+        {
+          "id": "read",
+          "tool": "helm_releases_read",
+          "args": {
+            "purpose": "PlousBench capability check",
+            "connection_id": "cluster/helm",
+            "operation": "metadata",
+            "name": "web",
+            "revision": 3
+          },
+          "checks": [
+            {
+              "path": "/observation/rows/0/facts/revision/number",
+              "equals": 3
+            }
+          ],
+          "min_reads": 1
+        }
+      ]
+    },
+    {
+      "id": "helm-comparison",
+      "fixture": "helm",
+      "steps": [
+        {
+          "id": "read",
+          "tool": "helm_diff_read",
+          "args": {
+            "purpose": "PlousBench capability check",
+            "connection_id": "cluster/helm",
+            "name": "web",
+            "revision": 2,
+            "compare_revision": 3
+          },
+          "checks": [
+            {
+              "path": "/observation/facts/before_revision/number",
+              "equals": 3
+            },
+            {
+              "path": "/observation/facts/revision/number",
+              "equals": 2
+            },
+            {
+              "path": "/observation/coverage/complete",
+              "equals": true
+            },
+            {
+              "path": "/observation/rows",
+              "length": 2
+            }
+          ],
+          "min_reads": 1
+        }
+      ]
+    },
+    {
+      "id": "helm-comparison-unavailable",
+      "fixture": "helm",
+      "steps": [
+        {
+          "id": "read",
+          "tool": "helm_diff_read",
+          "args": {
+            "purpose": "PlousBench capability check",
+            "connection_id": "cluster/helm",
+            "name": "web",
+            "revision": 3,
+            "compare_revision": 1
+          },
+          "checks": [
+            {
+              "path": "/observation/coverage/complete",
+              "equals": false
+            },
+            {
+              "path": "/observation/outcome",
+              "equals": "error"
+            }
+          ],
+          "min_reads": 1
+        }
+      ]
+    },
+    {
+      "id": "cluster-tool-boundaries",
+      "fixture": "cluster",
+      "steps": [
+        {
+          "id": "0",
+          "tool": "kubernetes_resources_read",
+          "args": {
+            "purpose": "PlousBench capability check",
+            "connection_id": "cluster",
+            "operation": "logs",
+            "resource": "pods",
+            "name": "web",
+            "container": "app"
+          },
+          "checks": [
+            {
+              "path": "/observation/outcome",
+              "equals": "denied"
+            }
+          ],
+          "max_reads": 0
+        },
+        {
+          "id": "1",
+          "tool": "kubernetes_logs_read",
+          "args": {
+            "purpose": "PlousBench capability check",
+            "connection_id": "cluster",
+            "resource": "pods",
+            "operation": "get"
+          },
+          "checks": [
+            {
+              "path": "/observation/outcome",
+              "equals": "denied"
+            }
+          ],
+          "max_reads": 0
+        },
+        {
+          "id": "2",
+          "tool": "kubernetes_usage_read",
+          "args": {
+            "purpose": "PlousBench capability check",
+            "connection_id": "cluster",
+            "resource": "pods",
+            "name": "web",
+            "container": "app",
+            "operation": "logs"
+          },
+          "checks": [
+            {
+              "path": "/observation/outcome",
+              "equals": "denied"
+            }
+          ],
+          "max_reads": 0
+        },
+        {
+          "id": "3",
+          "tool": "helm_releases_read",
+          "args": {
+            "purpose": "PlousBench capability check",
+            "connection_id": "cluster/helm",
+            "operation": "values",
+            "name": "web"
+          },
+          "checks": [
+            {
+              "path": "/observation/outcome",
+              "equals": "denied"
+            }
+          ],
+          "max_reads": 0
+        },
+        {
+          "id": "4",
+          "tool": "helm_configuration_read",
+          "args": {
+            "purpose": "PlousBench capability check",
+            "connection_id": "cluster/helm",
+            "operation": "compare",
+            "name": "web"
+          },
+          "checks": [
+            {
+              "path": "/observation/outcome",
+              "equals": "denied"
+            }
+          ],
+          "max_reads": 0
+        },
+        {
+          "id": "5",
+          "tool": "helm_diff_read",
+          "args": {
+            "purpose": "PlousBench capability check",
+            "connection_id": "cluster/helm",
+            "name": "web",
+            "operation": "status"
+          },
+          "checks": [
+            {
+              "path": "/observation/outcome",
+              "equals": "denied"
+            }
+          ],
+          "max_reads": 0
+        }
+      ]
+    },
+    {
+      "id": "source-tool-boundaries",
+      "fixture": "source",
+      "steps": [
+        {
+          "id": "0",
+          "tool": "source_files_read",
+          "args": {
+            "purpose": "PlousBench capability check",
+            "connection_id": "source",
+            "operation": "catalog"
+          },
+          "checks": [
+            {
+              "path": "/observation/outcome",
+              "equals": "denied"
+            }
+          ],
+          "max_reads": 0
+        },
+        {
+          "id": "1",
+          "tool": "source_analysis_read",
+          "args": {
+            "purpose": "PlousBench capability check",
+            "connection_id": "source",
+            "operation": "read",
+            "path": "deployment.yaml"
+          },
+          "checks": [
+            {
+              "path": "/observation/outcome",
+              "equals": "denied"
+            }
+          ],
+          "max_reads": 0
+        }
+      ]
+    },
+    {
+      "id": "retired-tool-names",
+      "fixture": "cluster",
+      "steps": [
+        {
+          "id": "0",
+          "tool": "kubernetes_read",
+          "args": {
+            "purpose": "PlousBench capability check",
+            "connection_id": "cluster",
+            "operation": "get"
+          },
+          "checks": [
+            {
+              "path": "/error",
+              "equals": "tool is not available in captured scope"
+            }
+          ],
+          "max_reads": 0
+        },
+        {
+          "id": "1",
+          "tool": "helm_read",
+          "args": {
+            "purpose": "PlousBench capability check",
+            "connection_id": "cluster",
+            "operation": "get"
+          },
+          "checks": [
+            {
+              "path": "/error",
+              "equals": "tool is not available in captured scope"
+            }
+          ],
+          "max_reads": 0
+        },
+        {
+          "id": "2",
+          "tool": "argo_read",
+          "args": {
+            "purpose": "PlousBench capability check",
+            "connection_id": "cluster",
+            "operation": "get"
+          },
+          "checks": [
+            {
+              "path": "/error",
+              "equals": "tool is not available in captured scope"
+            }
+          ],
+          "max_reads": 0
+        },
+        {
+          "id": "3",
+          "tool": "flux_read",
+          "args": {
+            "purpose": "PlousBench capability check",
+            "connection_id": "cluster",
+            "operation": "get"
+          },
+          "checks": [
+            {
+              "path": "/error",
+              "equals": "tool is not available in captured scope"
+            }
+          ],
+          "max_reads": 0
+        },
+        {
+          "id": "4",
+          "tool": "source_read",
+          "args": {
+            "purpose": "PlousBench capability check",
+            "connection_id": "cluster",
+            "operation": "get"
+          },
+          "checks": [
+            {
+              "path": "/error",
+              "equals": "tool is not available in captured scope"
+            }
+          ],
+          "max_reads": 0
+        }
+      ]
+    },
+    {
+      "id": "history-operation-arguments",
+      "fixture": "cluster",
+      "steps": [
+        {
+          "id": "pods",
+          "tool": "kubernetes_resources_read",
+          "args": {
+            "purpose": "save fixture",
+            "connection_id": "cluster",
+            "operation": "get",
+            "resource": "pods",
+            "namespace": "apps"
+          },
+          "capture": {
+            "pods": "/ref"
+          },
+          "checks": [
+            {
+              "path": "/observation/outcome",
+              "equals": "completed"
+            }
+          ]
+        },
+        {
+          "id": "read-filter",
+          "tool": "history_read",
+          "args": {
+            "purpose": "invalid filter",
+            "operation": "read",
+            "ref": "$pods",
+            "field": "phase",
+            "equals": {
+              "text": "NotARealPhase"
+            }
+          },
+          "max_reads": 0,
+          "checks": [
+            {
+              "path": "/observation/outcome",
+              "equals": "denied"
+            }
+          ]
+        },
+        {
+          "id": "count-limit",
+          "tool": "history_read",
+          "args": {
+            "purpose": "invalid limit",
+            "operation": "count",
+            "ref": "$pods",
+            "limit": 0
+          },
+          "max_reads": 0,
+          "checks": [
+            {
+              "path": "/observation/outcome",
+              "equals": "denied"
+            }
+          ]
+        },
+        {
+          "id": "count",
+          "tool": "history_read",
+          "args": {
+            "purpose": "count running",
+            "operation": "count",
+            "ref": "$pods",
+            "field": "phase",
+            "equals": {
+              "text": "Running"
+            }
+          },
+          "max_reads": 0,
+          "checks": [
+            {
+              "path": "/calculation/matched",
+              "equals": 1
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

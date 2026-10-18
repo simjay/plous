@@ -6,287 +6,152 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/simjay/plous/internal/kubernetes"
+	"github.com/simjay/plous/internal/app/monitor"
+	kubecommon "github.com/simjay/plous/internal/integrations/kubernetes/common"
+	kubernetes "github.com/simjay/plous/internal/integrations/kubernetes/monitor"
+	"github.com/simjay/plous/internal/ui"
+	textview "github.com/simjay/plous/internal/ui/text"
 )
-
-type namespacePicker struct {
-	run        *namespaceRequest
-	names      []string
-	loaded     bool
-	err, query string
-	manual     bool
-}
-
-type namespaceRequest struct{ cancel context.CancelFunc }
-
-type namespaceResult struct {
-	run        *namespaceRequest
-	generation uint64
-	names      []string
-	err        error
-}
-
-type namespaceChoice struct {
-	name, label string
-	manual      bool
-	reload      bool
-}
 
 func (m *model) openNamespacePicker() {
 	m.stopNamespacePicker()
 	e := m.explorer()
 	m.openExploreInput("namespace", "")
-	e.picker = "namespace"
-	e.namespaces = &namespacePicker{}
-	if e.preference.Namespace != "" {
-		e.pickerCursor = 1
+	e.Picker = "namespace"
+	e.Namespaces = &monitor.NamespacePicker{}
+	if e.Preference.Namespace != "" {
+		e.PickerCursor = 1
 	}
 	m.status = ""
 }
 
-func (m *model) stopNamespacePicker() {
-	if e := m.explore; e != nil && e.namespaces != nil {
-		if e.namespaces.run != nil {
-			e.namespaces.run.cancel()
-		}
-		e.namespaces = nil
-	}
-}
+func (m *model) stopNamespacePicker() { m.explore.StopNamespacePicker() }
 
 func (m *model) syncNamespacePicker() tea.Cmd {
 	e := m.explorer()
-	if e.picker != "namespace" {
+	if e.Picker != "namespace" {
 		m.stopNamespacePicker()
 		return nil
 	}
-	if e.namespaces == nil {
-		e.namespaces = &namespacePicker{}
+	if e.Namespaces == nil {
+		e.Namespaces = &monitor.NamespacePicker{}
 	}
-	p := e.namespaces
-	if p.loaded || p.run != nil || e.connecting {
+	p := e.Namespaces
+	if p.Loaded || p.Run != nil || e.Connecting {
 		return nil
 	}
-	if e.client == nil {
-		p.loaded = true
-		p.err = e.err
-		if p.err == "" {
-			p.err = "Connect to Kubernetes to load available namespaces."
+	if e.Client == nil {
+		p.Loaded = true
+		p.Err = e.Err
+		if p.Err == "" {
+			p.Err = "Connect to Kubernetes to load available namespaces."
 		}
 		return nil
 	}
-	resource := kubernetes.Resource{Name: "namespaces", Kind: "Namespace", Version: "v1"}
-	for _, candidate := range e.resources {
+	resource := kubecommon.Resource{Name: "namespaces", Kind: "Namespace", Version: "v1"}
+	for _, candidate := range e.Resources {
 		if candidate.Key() == "namespaces" {
 			resource = candidate
 			break
 		}
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	run := &namespaceRequest{cancel: cancel}
-	p.run = run
-	client, generation := e.client, e.generation
+	run := &monitor.NamespaceRequest{Cancel: cancel}
+	p.Run = run
+	client, generation := e.Client, e.Generation
 	return func() tea.Msg {
 		defer cancel()
 		collection, err := client.List(ctx, resource, "", "")
-		result := namespaceResult{run: run, generation: generation, err: err}
+		result := monitor.NamespaceResult{Run: run, Generation: generation, Err: err}
 		for _, object := range collection.Objects {
-			result.names = append(result.names, object.GetName())
+			result.Names = append(result.Names, object.GetName())
 		}
 		return result
 	}
 }
 
-func (m *model) updateNamespaceResult(result namespaceResult) {
+func (m *model) updateNamespaceResult(result monitor.NamespaceResult) {
 	e := m.explorer()
-	if e.picker != "namespace" || e.namespaces == nil || result.run != e.namespaces.run || result.generation != e.generation {
+	if e.Picker != "namespace" || e.Namespaces == nil || result.Run != e.Namespaces.Run || result.Generation != e.Generation {
 		return
 	}
-	p := e.namespaces
-	p.run = nil
-	p.loaded = true
-	p.err = kubernetes.ErrorText(result.err)
-	p.names = result.names
-	sort.Strings(p.names)
-	e.pickerCursor = min(e.pickerCursor, max(0, len(m.namespaceChoices())-1))
+	p := e.Namespaces
+	p.Run = nil
+	p.Loaded = true
+	p.Err = kubernetes.ErrorText(result.Err)
+	p.Names = result.Names
+	sort.Strings(p.Names)
+	e.PickerCursor = min(e.PickerCursor, max(0, len(m.namespaceChoices())-1))
 }
 
-func (m *model) namespaceChoices() []namespaceChoice {
+func (m *model) namespaceChoices() []monitor.NamespaceChoice {
 	e := m.explorer()
-	query := ""
-	if e.input != nil {
-		query = strings.ToLower(strings.TrimSpace(e.input.text))
-	}
-	var choices []namespaceChoice
-	seen := map[string]bool{}
-	add := func(name, label string) {
-		if seen[name] {
-			return
-		}
-		seen[name] = true
-		if query == "" || strings.Contains(strings.ToLower(label), query) || (name == "" && query == "*") {
-			choices = append(choices, namespaceChoice{name: name, label: label})
-		}
-	}
-	add("", "All namespaces")
-	if e.preference.Namespace != "" {
-		add(e.preference.Namespace, e.preference.Namespace)
-	}
-	if e.namespaces != nil {
-		for _, name := range e.namespaces.names {
-			if name != "" {
-				add(name, name)
-			}
-		}
-	}
-	if query == "" {
-		choices = append(choices, namespaceChoice{label: "Reload namespaces", reload: true})
-	}
-	return append(choices, namespaceChoice{label: "Enter namespace manually…", manual: true})
+	return monitor.NamespaceChoicesFor(e.Namespaces, e.Input, e.Preference.Namespace)
 }
 
 func (m *model) chooseExploreNamespace(namespace string) {
 	e := m.explorer()
 	m.clearExploreDetail()
 	m.stopNamespacePicker()
-	e.preference.Namespace = namespace
-	e.defaultNamespace = false
-	e.picker, e.inputKind = "", ""
-	e.input = nil
-	e.selected = ""
+	e.Preference.Namespace = namespace
+	e.DefaultNamespace = false
+	e.Picker, e.InputKind = "", ""
+	e.Input = nil
+	e.Selected = ""
 	m.status = ""
 	m.rememberExplore()
 }
 
 func (m *model) updateNamespaceInput(msg tea.KeyPressMsg) {
 	e := m.explorer()
-	p := e.namespaces
-	if p == nil || e.input == nil {
-		return
-	}
-	key := msg.String()
-	if key == "esc" {
-		if p.manual {
-			p.manual = false
-			input := newEditor(p.query)
-			e.input = &input
-			e.pickerCursor = 0
-		} else {
-			m.stopNamespacePicker()
-			e.picker, e.inputKind = "", ""
-			e.input = nil
-		}
-		m.status = ""
-		return
-	}
-	if p.manual {
-		if key == "enter" {
-			value := strings.TrimSpace(e.input.text)
-			if !validExploreNamespace(value) {
-				m.status = "Use a namespace name or * for all namespaces."
-				return
-			}
-			m.chooseExploreNamespace(exploreNamespace(value))
-		} else {
-			e.input.key(msg, false)
-		}
-		return
-	}
-	choices := m.namespaceChoices()
-	switch key {
-	case "up", "down", "pgup", "pgdown", "home", "end":
-		step := 1
-		if key == "pgup" || key == "pgdown" {
-			step = 10
-		}
-		if key == "up" || key == "pgup" {
-			step = -step
-		}
-		e.pickerCursor = max(0, min(len(choices)-1, e.pickerCursor+step))
-		if key == "home" {
-			e.pickerCursor = 0
-		} else if key == "end" {
-			e.pickerCursor = len(choices) - 1
-		}
-	case "enter":
-		choice := choices[max(0, min(len(choices)-1, e.pickerCursor))]
-		if choice.reload {
-			if p.run != nil {
-				p.run.cancel()
-				p.run = nil
-			}
-			p.loaded, p.err = false, ""
-		} else if choice.manual {
-			p.manual, p.query = true, e.input.text
-			e.inputKind = "namespace"
-			input := newEditor(strings.TrimSpace(p.query))
-			e.input = &input
-		} else {
-			m.chooseExploreNamespace(choice.name)
-		}
-	default:
-		e.input.key(msg, false)
-		e.pickerCursor = 0
+	value, apply, close, status := monitor.UpdateNamespacePicker(e.Namespaces, &e.Input, &e.PickerCursor, e.Preference.Namespace, msg)
+	m.status = status
+	if apply {
+		m.chooseExploreNamespace(value)
+	} else if close {
+		m.stopNamespacePicker()
+		e.Picker, e.InputKind = "", ""
+		e.Input = nil
 	}
 }
 
 func (m *model) namespacePickerBody(width, height int) string {
 	e := m.explorer()
-	p := e.namespaces
-	if p == nil || e.input == nil {
+	return m.namespacePickerView(e.Namespaces, e.Input, e.Preference.Namespace, e.PickerCursor, width, height)
+}
+
+func (m *model) namespacePickerView(p *monitor.NamespacePicker, input *textview.Field, current string, cursor, width, height int) string {
+	if p == nil || input == nil {
 		return ""
 	}
-	if p.manual {
-		lines := []string{gradientHeading("Namespace"), "", "Enter a namespace name", selected.Render(editorLine(*e.input, width, true)), "", muted.Render("Use * for all namespaces"), "", muted.Render("Enter apply · Esc back")}
+	if p.Manual {
+		lines := []string{ui.Heading("Namespace"), "", "Enter a namespace name", ui.Selected.Render(ui.EditorLine(*input, width, true)), "", ui.Muted.Render("Use * for all namespaces"), "", ui.Muted.Render("Enter apply · Esc back")}
 		if m.status != "" {
-			lines = append(lines, changedStyle.Render(clipped(m.status, width)))
+			lines = append(lines, ui.ChangedStyle.Render(ui.Clipped(m.status, width)))
 		}
-		return styledView(strings.Join(lines, "\n"), width, height)
+		return ui.StyledView(strings.Join(lines, "\n"), width, height)
 	}
-	lines := []string{gradientHeading("Namespace"), selected.Render("/ " + editorLine(*e.input, max(1, width-2), true))}
-	if !p.loaded {
+	lines := []string{ui.Heading("Namespace"), ui.Selected.Render("/ " + ui.EditorLine(*input, max(1, width-2), true))}
+	if !p.Loaded {
 		lines = append(lines, m.loading("Loading namespaces…"))
-	} else if p.err != "" {
-		lines = append(lines, changedStyle.Render(clipped(p.err, width)), muted.Render("Choose the current scope or enter a name manually."))
-	} else if len(p.names) == 0 {
-		lines = append(lines, muted.Render("No namespaces returned by the cluster."))
+	} else if p.Err != "" {
+		lines = append(lines, ui.ChangedStyle.Render(ui.Clipped(p.Err, width)), ui.Muted.Render("Choose the current scope or enter a name manually."))
+	} else if len(p.Names) == 0 {
+		lines = append(lines, ui.Muted.Render("No namespaces returned by the cluster."))
 	}
-	choices := m.namespaceChoices()
-	if len(choices) == 1 && e.input.text != "" {
-		lines = append(lines, muted.Render("No matching namespaces."))
+	choices := monitor.NamespaceChoicesFor(p, input, current)
+	if len(choices) == 1 && input.Text != "" {
+		lines = append(lines, ui.Muted.Render("No matching namespaces."))
 	}
 	items := make([]string, len(choices))
 	for i, choice := range choices {
-		items[i] = choice.label
-		if !choice.manual && !choice.reload && choice.name == e.preference.Namespace {
+		items[i] = choice.Label
+		if !choice.Manual && !choice.Reload && choice.Name == current {
 			items[i] += "  ✓"
 		}
 	}
 	lines = append(lines, "")
 	available := max(1, height-len(lines)-2)
-	lines = append(lines, listView(items, e.pickerCursor, width, available), "", muted.Render("↑↓ Choose · Enter Select · Esc Back"))
-	return styledView(strings.Join(lines, "\n"), width, height)
-}
-
-func (m *model) exploreCategories() []string {
-	available := map[string]bool{}
-	for _, resource := range m.explorer().resources {
-		available[kubernetes.Category(resource)] = true
-	}
-	var categories []string
-	for _, category := range kubernetes.Categories {
-		if available[category] {
-			categories = append(categories, category)
-		}
-	}
-	return categories
-}
-
-func (m *model) exploreCategory() string {
-	categories := m.exploreCategories()
-	if len(categories) == 0 {
-		return "No resource categories"
-	}
-	e := m.explorer()
-	e.group = max(0, min(len(categories)-1, e.group))
-	return categories[e.group]
+	lines = append(lines, ui.ListView(items, cursor, width, available), "", ui.Muted.Render("↑↓ Choose · Enter Select · Esc Back"))
+	return ui.StyledView(strings.Join(lines, "\n"), width, height)
 }

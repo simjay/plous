@@ -1,29 +1,30 @@
 package app
 
 import (
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/simjay/plous/internal/ai/history"
+	ai "github.com/simjay/plous/internal/ai/model"
+	textview "github.com/simjay/plous/internal/ui/text"
+	"github.com/simjay/plous/internal/workspace"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
-	"github.com/simjay/plous/internal/ai"
-	"github.com/simjay/plous/internal/workspace"
 )
 
 func completeAIForm(t *testing.T, m *model, values map[string]string) {
 	t.Helper()
 	setField := func(key, value string) {
 		t.Helper()
-		for i, field := range m.form.fields {
-			if field.key != key {
+		for i, field := range m.form.Fields {
+			if field.Key != key {
 				continue
 			}
-			m.form.index = i
-			if len(field.options) > 0 {
-				for range len(field.options) {
-					if m.form.fields[i].value.text == value {
+			m.form.Index = i
+			if len(field.Options) > 0 {
+				for range len(field.Options) {
+					if m.form.Fields[i].Value.Text == value {
 						return
 					}
 					press(t, m, "right")
@@ -39,33 +40,34 @@ func completeAIForm(t *testing.T, m *model, values map[string]string) {
 	if provider, ok := values["provider"]; ok {
 		setField("provider", provider)
 	}
-	if _, ok := values["api_key"]; !ok && m.form.fields[1].required {
+	if _, ok := values["api_key"]; !ok && m.form.Fields[1].Required {
 		setField("api_key", "test-api-key")
 	}
-	m.form.index = len(m.form.fields) + 2
+	m.form.Index = len(m.form.Fields) + 2
 	press(t, m, "enter")
 	for key, value := range values {
 		if key != "provider" {
 			setField(key, value)
 		}
 	}
-	m.form.index = len(m.form.fields)
+	m.form.Index = len(m.form.Fields)
 	press(t, m, "enter")
-	if m.form != nil {
-		t.Fatalf("AI form did not save: %s", m.status)
+	if m.form == nil || m.form.Kind != "mainagent" {
+		t.Fatalf("provider form did not return to Agent: %s", m.status)
 	}
+	press(t, m, "esc")
 }
 
 func TestAISetupDefaultsAndAdvancedPreservation(t *testing.T) {
 	m, _ := testModel(t)
 	m.beginAppSettings()
-	if len(m.form.fields) != 2 {
+	if len(m.form.Fields) != 2 {
 		t.Fatal("initial setup should ask only for vendor and key")
 	}
 	m.Update(tea.PasteMsg{Content: "invalid-provider"})
 	typeText(m, "invalid-provider")
 	press(t, m, "right")
-	if m.form.fields[0].value.text != "anthropic" || m.form.agent.KeyEnv != "" {
+	if m.form.Fields[0].Value.Text != "anthropic" || m.form.Agent.KeyEnv != "" {
 		t.Fatal("provider picker reused external credentials")
 	}
 	completeAIForm(t, m, map[string]string{"api_key": "test-key"})
@@ -81,7 +83,7 @@ func TestAISetupDefaultsAndAdvancedPreservation(t *testing.T) {
 	}
 	before := m.settings.Agent
 	m.beginAISettings(0)
-	m.form.index = 2
+	m.form.Index = 2
 	press(t, m, "enter")
 	if m.settings.Agent != before {
 		t.Fatal("basic edit changed instructions or credentials")
@@ -133,7 +135,11 @@ func TestOneSettingsEntryAndAllSpellings(t *testing.T) {
 				t.Fatalf("%s did not open Settings", command)
 			}
 			content := ansi.Strip(m.render())
-			for _, label := range []string{"Settings", "Application", "AI connections", "Current workspace"} {
+			scope := "Current Workspace"
+			if withWorkspace {
+				scope = "Current Workspace"
+			}
+			for _, label := range []string{"Settings", "Application", "Shared across workspaces", scope} {
 				if !strings.Contains(content, label) {
 					t.Fatalf("missing %q", label)
 				}
@@ -166,9 +172,13 @@ func TestOneSettingsEntryAndAllSpellings(t *testing.T) {
 func TestSettingsFormsReturnToSamePage(t *testing.T) {
 	m, _ := testModel(t)
 	createWorkspace(t, m, "Payments")
-	for _, item := range []string{"Add AI connection", "Rename workspace"} {
+	for _, item := range []string{"Add provider connection", "Rename Workspace"} {
 		for _, action := range []string{"esc", "cancel", "save"} {
-			openSettingsItem(t, m, item)
+			if item == "Add provider connection" {
+				openProviderItem(t, m, item)
+			} else {
+				openSettingsItem(t, m, item)
+			}
 			form := m.form
 			press(t, m, "tab")
 			press(t, m, "shift+tab")
@@ -179,25 +189,31 @@ func TestSettingsFormsReturnToSamePage(t *testing.T) {
 			case "esc":
 				press(t, m, "esc")
 			case "cancel":
-				for i := 0; i < len(form.fields)+1; i++ {
+				for i := 0; i < len(form.Fields)+1; i++ {
 					press(t, m, "down")
 				}
 				press(t, m, "enter")
 			case "save":
-				if form.kind == "appsettings" {
-					form.fields[1].value = newEditor("test-key")
+				if form.Kind == "appsettings" {
+					form.Fields[1].Value = textview.NewField("test-key")
 				}
-				for range form.fields {
+				for range form.Fields {
 					press(t, m, "down")
 				}
 				press(t, m, "enter")
+			}
+			if item == "Add provider connection" {
+				if m.form != form.Parent {
+					t.Fatal("provider did not restore its Agent form")
+				}
+				press(t, m, "esc")
 			}
 			if m.form != nil || m.page != "settings" {
 				t.Fatalf("%s %s did not return to Settings", item, action)
 			}
 		}
 	}
-	openSettingsItem(t, m, "Add tool")
+	openSettingsItem(t, m, "Add Connection")
 	press(t, m, "esc")
 	if m.page != "settings" {
 		t.Fatal("tool picker did not return to Settings")
@@ -220,7 +236,7 @@ func TestSettingsCreationAndFirstRunHelp(t *testing.T) {
 		t.Fatal("help cannot scroll before creating a workspace")
 	}
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
-	openSettingsItem(t, m, "Create workspace")
+	mainCommand(t, m, "n")
 	completeForm(t, m, "First")
 	if m.page != "tools" || m.toolSetup == nil {
 		t.Fatal("creation did not offer adding a tool")
@@ -229,16 +245,17 @@ func TestSettingsCreationAndFirstRunHelp(t *testing.T) {
 
 func TestRenderingDoesNotRecoverChatOnDisk(t *testing.T) {
 	m, root := testModel(t)
-	id := createWorkspace(t, m, "Payments")
-	c, err := m.store.NewConversation(id, "Interrupted chat")
+	owner := createWorkspace(t, m, "Payments")
+	id := selectChatConnection(t, m)
+	c, err := m.history.NewConversation(id, "Interrupted chat")
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = m.store.StartTurn(id, c.ID, workspace.Request{Prompt: "hello", Agent: ai.DefaultConfig()})
+	_, err = m.history.StartTurn(id, c.ID, history.Request{Prompt: "hello", Agent: ai.DefaultConfig()})
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(root, "workspaces", id, "conversations", c.ID, "conversation.jsonl")
+	path := filepath.Join(root, "connections", id, "conversations", c.ID, "conversation", "000001.jsonl")
 	before, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -255,8 +272,18 @@ func TestRenderingDoesNotRecoverChatOnDisk(t *testing.T) {
 	if m.chats[id] != nil {
 		t.Fatal("rendering loaded chat history")
 	}
-	m.selectScope(id, "", "")
-	if m.chat().turns[0].Response.Status != "interrupted" {
+	if err := m.store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	m.store, err = workspace.Open(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { m.store.Close() })
+	m.history = openTestHistory(t, m.store)
+	m.selectScope(owner, "files", m.connection)
+	finishChatRestore(t, m)
+	if m.chat().Turns[0].Response.Status != "interrupted" {
 		t.Fatal("scope selection did not recover chat")
 	}
 }
@@ -267,7 +294,7 @@ func TestSettingsOverlayFitsTerminal(t *testing.T) {
 	for _, size := range [][2]int{{80, 16}, {120, 30}, {200, 60}} {
 		m.Update(tea.WindowSizeMsg{Width: size[0], Height: size[1]})
 		m.openSettings()
-		for range len(m.settingsItems()) {
+		for range len(m.settingsRows()) {
 			lines := strings.Split(ansi.Strip(m.render()), "\n")
 			if len(lines) != size[1] {
 				t.Fatal("settings changed screen height")
@@ -292,6 +319,8 @@ func TestSettingsOverlayRestoresViewAndTrapsTab(t *testing.T) {
 		t.Fatal("Settings must open an overlay from any navigation panel")
 	}
 	press(t, m, "enter")
+	press(t, m, "enter")
+	press(t, m, "enter")
 	press(t, m, "down")
 	typeText(m, "unsaved-model")
 	form := m.form
@@ -299,11 +328,12 @@ func TestSettingsOverlayRestoresViewAndTrapsTab(t *testing.T) {
 		m.Update(tea.WindowSizeMsg{Width: size[0], Height: size[1]})
 		for _, key := range []string{"tab", "shift+tab"} {
 			press(t, m, key)
-			if m.focus != 1 || m.form != form || form.fields[1].value.text != "unsaved-model" || form.index != 1 {
+			if m.focus != 1 || m.form != form || form.Fields[1].Value.Text != "unsaved-model" || form.Index != 1 {
 				t.Fatal("Tab must leave modal focus and input unchanged")
 			}
 		}
 	}
+	press(t, m, "esc")
 	press(t, m, "esc")
 	press(t, m, "esc")
 	if m.settingsOverlay != nil || m.mode != 2 || m.detail != "Revision details" || m.cursor != 2 || m.focus != 0 {
@@ -320,14 +350,14 @@ func TestOverlayKeepsEveryFieldAndActionReachable(t *testing.T) {
 		m.Update(tea.WindowSizeMsg{Width: size[0], Height: size[1]})
 		m.openSettings()
 		m.beginAppSettings()
-		for i, field := range m.form.fields {
-			m.form.index = i
+		for i, field := range m.form.Fields {
+			m.form.Index = i
 			screen := ansi.Strip(m.render())
-			if !strings.Contains(screen, field.label) || (!strings.Contains(screen, "▏") && len(field.options) == 0) {
-				t.Fatalf("%dx%d hides current field %q or its cursor", size[0], size[1], field.label)
+			if !strings.Contains(screen, field.Label) || (!strings.Contains(screen, "▏") && len(field.Options) == 0) {
+				t.Fatalf("%dx%d hides current field %q or its cursor", size[0], size[1], field.Label)
 			}
 		}
-		m.form.index = len(m.form.fields)
+		m.form.Index = len(m.form.Fields)
 		if !strings.Contains(ansi.Strip(m.render()), "› [ Save ]") {
 			t.Fatal("Save action is unreachable")
 		}

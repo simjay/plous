@@ -1,76 +1,53 @@
 package app
 
 import (
+	tea "charm.land/bubbletea/v2"
 	"context"
 	"encoding/json"
-	"fmt"
-	"strings"
-	"time"
+	agent "github.com/simjay/plous/internal/ai"
+	backend "github.com/simjay/plous/internal/ai/agent"
+	"github.com/simjay/plous/internal/ai/cli"
+	"github.com/simjay/plous/internal/ai/history"
+	aimodel "github.com/simjay/plous/internal/ai/model"
+	appchat "github.com/simjay/plous/internal/app/chat"
+	textview "github.com/simjay/plous/internal/ui/text"
 
-	tea "charm.land/bubbletea/v2"
-	"github.com/simjay/plous/internal/agent"
-	"github.com/simjay/plous/internal/ai"
-	"github.com/simjay/plous/internal/workspace"
+	"strings"
 )
 
-type chatState struct {
-	conversation   workspace.Conversation
-	summary        *workspace.ReasoningEntry
-	progress       string
-	turns          []workspace.Turn
-	dirty          bool
-	history        bool
-	models         bool
-	modelCursor    int
-	choices        []workspace.Conversation
-	cursor, scroll int
-	reading        bool
-	viewRows       int
-	viewHeight     int
-	viewWidth      int
-	anchor         chatRow
-	err            string
-}
-type chatRun struct {
-	chat     *chatState
-	cancel   context.CancelFunc
-	events   chan chatEvent
-	terminal chatEvent
-}
-type chatEvent struct {
-	run      *chatRun
-	text     string
-	status   string
-	progress bool
-	done     bool
-	result   ai.Result
-	err      error
-}
-
-func (m *model) chat() *chatState {
-	if c := m.chats[m.active]; c != nil {
+func (m *model) chat() *appchat.ChatState {
+	if c := m.chats[m.conversationScope()]; c != nil {
 		return c
 	}
-	return &chatState{}
+	return &appchat.ChatState{}
 }
+
 func (m *model) loadChat() {
 	if m.chats == nil {
-		m.chats = map[string]*chatState{}
+		m.chats = map[string]*appchat.ChatState{}
 	}
-	if m.chats[m.active] != nil {
+	m.evictInactiveChats()
+	if c := m.chats[m.conversationScope()]; c != nil {
+		if c.Evicted {
+			m.rehydrateChat(c)
+		}
 		return
 	}
-	c := &chatState{}
-	m.chats[m.active] = c
-	if m.store == nil {
+	c := &appchat.ChatState{}
+	m.chats[m.conversationScope()] = c
+	if m.history == nil {
 		return
 	}
-	choices, err := m.store.Conversations(m.active)
+	if err := m.ensureConversationScope(); err != nil {
+		c.Err = err.Error()
+		return
+	}
+	choices, err := m.history.Conversations(m.conversationScope())
 	if err != nil {
-		c.err = err.Error()
+		c.Err = err.Error()
 		return
 	}
-	id, selected := m.chatIDs[m.active]
+	id, selected := m.chatIDs[m.conversationScope()]
 	if !selected && len(choices) > 0 {
 		id = choices[len(choices)-1].ID
 	}
@@ -81,271 +58,337 @@ func (m *model) loadChat() {
 		}
 	}
 }
-func (m *model) openConversation(c *chatState, conversation workspace.Conversation) {
-	turns, err := m.store.Turns(conversation.WorkspaceID, conversation.ID)
-	if err != nil {
-		c.err = err.Error()
-		return
+
+func (m *model) openConversation(c *appchat.ChatState, conversation history.Conversation) {
+	if c.Restore != nil {
+		c.Restore.Cancel()
 	}
-	// A previous process cannot still own these requests under the store lock.
-	for i := range turns {
-		if turns[i].Response.Status == "streaming" {
-			turns[i].Response.Status = "interrupted"
-			turns[i].Response.Error = "Plous stopped before this response finished. No automatic retry."
-			if err := m.store.SaveResponse(conversation.WorkspaceID, conversation.ID, turns[i].Request.ID, turns[i].Response); err != nil {
-				c.err = err.Error()
-				return
-			}
-		}
-	}
-	summary, err := m.store.LatestCompaction(conversation.WorkspaceID, conversation.ID)
-	if err != nil {
-		c.err = err.Error()
-		return
-	}
-	*c = chatState{conversation: conversation, turns: turns, summary: summary}
+	*c = appchat.ChatState{Conversation: conversation}
+	m.beginChatRestore(c)
 	if m.chatIDs == nil {
 		m.chatIDs = map[string]string{}
 	}
 	m.chatIDs[conversation.WorkspaceID] = conversation.ID
 	m.persist()
 }
-func (m *model) flushChats() error {
-	for _, c := range m.chats {
-		if c.dirty && len(c.turns) > 0 {
-			t := c.turns[len(c.turns)-1]
-			if err := m.store.SaveResponse(c.conversation.WorkspaceID, c.conversation.ID, t.Request.ID, t.Response); err != nil {
-				return err
-			}
-			c.dirty = false
-		}
-	}
-	return nil
-}
+
 func (m *model) contextText() string {
-	if m.current() == nil {
+	if m.savedConnection() == nil {
 		return ""
 	}
 	// Capture identities and filters only; resource bodies are retrieved through tools.
 	value := struct {
-		Workspace     string        `json:"workspace"`
-		Revision      uint64        `json:"revision"`
-		Tool          string        `json:"tool,omitempty"`
-		Connection    string        `json:"connection,omitempty"`
-		KubeContext   string        `json:"kube_context,omitempty"`
-		Namespace     string        `json:"namespace,omitempty"`
-		Page          assistantPage `json:"page"`
-		ReadNamespace string        `json:"read_namespace,omitempty"`
-	}{Workspace: m.current().Name, Revision: m.current().Revision, Tool: m.tool}
-	if c := m.currentConnection(); c != nil {
-		value.Tool = c.Tool
-		value.Connection = c.Name
-		value.KubeContext = c.Settings["context"]
-		value.Namespace = c.Settings["namespace"]
-	}
-	value.Page = m.assistantPageContext()
-	if scope := m.assistantKubernetesScope(); scope != nil {
-		value.ReadNamespace = scope.Namespace
-	}
+		Workspace   string                `json:"workspace"`
+		Revision    uint64                `json:"revision"`
+		Connections []agent.Connection    `json:"connections"`
+		Viewing     appchat.AssistantPage `json:"viewing"`
+	}{m.current().Name, m.current().Revision, m.assistantConnections(), m.assistantPageContext()}
 	data, _ := json.MarshalIndent(value, "", "  ")
 	return string(data)
 }
+
 func (m *model) sendChat() tea.Cmd {
-	c := m.chat()
-	text := strings.TrimSpace(m.draft().text)
-	if text == "" {
-		return nil
-	}
-	if m.run != nil {
-		m.status = "A response is running. Use :X to stop it."
-		return nil
-	}
-	if c.err != "" {
-		m.status = "Chat storage error: " + c.err
-		return nil
-	}
-	key, err := m.store.Credential(m.settings.Agent)
-	if err != nil {
-		m.status = err.Error()
-		return nil
-	}
-	if err := m.settings.Agent.Ready(key); err != nil {
-		m.status = err.Error()
-		return nil
-	}
-	if err := m.flushChats(); err != nil {
-		m.status = err.Error()
-		return nil
-	}
-	if c.conversation.ID == "" {
-		title := strings.Split(text, "\n")[0]
-		runes := []rune(title)
-		if len(runes) > 60 {
-			title = string(runes[:60]) + "…"
-		}
-		conversation, err := m.store.NewConversation(m.active, title)
-		if err != nil {
+	if m.externalAgentSelected() {
+		if _, err := cli.Executable(m.settings.MainAgent); err != nil {
 			m.status = err.Error()
 			return nil
 		}
-		c.conversation = conversation
-		m.chatIDs[m.active] = c.conversation.ID
-	}
-	summary, err := m.store.LatestCompaction(c.conversation.WorkspaceID, c.conversation.ID)
-	if err != nil {
-		m.status = "Could not load conversation summary: " + err.Error()
+		m.focusChat(true)
 		return nil
 	}
-	c.summary = summary
-	messages, contextText := m.chatMessages(text, false)
-	if len(text) > 256*1024 {
-		m.status = "Message exceeds the local size limit."
+	if m.historyView != "" {
+		m.status = "This retained history is read-only. Select a connection or start a new chat to continue."
+		return nil
+	}
+	if err := m.ensureConversationScope(); err != nil {
+		m.status = "Cannot capture connection scope: " + err.Error()
+		return nil
+	}
+	c := m.chat()
+	if c.Conversation.ID != "" && c.Conversation.WorkspaceID != m.conversationScope() {
+		m.status = "This conversation belongs to another connection. Start a new chat to continue."
+		return nil
+	}
+	draft := m.draft().Text
+	text := strings.TrimSpace(draft)
+	if text == "" {
 		return nil
 	}
 
-	request := workspace.Request{Role: "chat", SettingsRevision: m.settings.Revision, Agent: m.settings.Agent, Prompt: text, Context: contextText}
-	turn, err := m.store.StartTurn(m.active, c.conversation.ID, request)
-	if err != nil {
-		m.status = "Could not save request: " + err.Error()
+	if m.run != nil {
+		m.status = "An AI response is still running or being saved."
 		return nil
 	}
-	history := append([]workspace.Turn(nil), c.turns...)
-	c.turns = append(c.turns, turn)
-	c.progress = "Thinking…"
-	c.scroll, c.reading = 0, false
-	*m.draft() = newEditor("")
-	m.chatEditing = true
-	m.persist()
-	m.status = ""
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-	run := &chatRun{chat: c, cancel: cancel, events: make(chan chatEvent, 8)}
+	if c.Restore != nil || m.chatRestore.Worker != nil {
+		m.status = "Wait for saved conversation restoration to finish."
+		return nil
+	}
+	if c.Err != "" {
+		m.status = "Could not load conversation: " + c.Err
+		return nil
+	}
+	kind := m.settings.MainAgent.Effective()
+	config := m.settings.Agent
+	if err := config.Validate(); err != nil {
+		m.status = err.Error()
+		return nil
+	}
+	if err := config.Supported(); err != nil {
+		m.status = err.Error()
+		return nil
+	}
+	if len(text) > 256<<10 {
+		m.status = "The message exceeds the 256 KiB limit. Shorten the draft before sending."
+		return nil
+	}
+	_, contextText := m.chatMessages(text, false)
+	system := agent.Instructions
+	if config.Instructions != "" {
+		system += "\n\n" + config.Instructions
+	}
+	r := history.Request{Backend: kind, Role: "chat", SettingsRevision: m.settings.Revision, Agent: config, Prompt: text, Context: contextText}
+	profile := m.store
+	connections, store, workspaceID, conversation := m.assistantConnections(), m.history, m.conversationScope(), c.Conversation
+	m.captureSourceReads(connections)
+	presentation := m.uiTools(connections)
+	newer := c.Newer
+	ctx, cancel := context.WithCancel(context.Background())
+	run := &appchat.ChatRun{Agent: kind, Chat: c, Cancel: cancel, Events: make(chan appchat.ChatEvent, 8), Starting: true}
 	m.run = run
-	kube := m.assistantKubernetesScope()
-	workspaceID, conversationID := m.active, c.conversation.ID
-	// Only the UI goroutine owns chat state. The worker sends immutable snapshots.
-	go func() {
-		defer cancel()
-		defer close(run.events)
-		result, err := agent.Run(ctx, agent.Options{Store: m.store, WorkspaceID: workspaceID, ConversationID: conversationID, TurnID: turn.Request.ID, Config: request.Agent, Key: key, System: messages[0].Text, Prompt: text, History: history, Kubernetes: kube, Progress: func(status string) {
-			select {
-			case run.events <- chatEvent{run: run, progress: true, status: status}:
-			case <-ctx.Done():
-			}
-		}, Emit: func(text string) error {
-			select {
-			case run.events <- chatEvent{run: run, text: text}:
-				return nil
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-		}})
-		// Closing events publishes the terminal result even when the output buffer is full.
-		run.terminal = chatEvent{run: run, done: true, result: result, err: err}
-	}()
-	return waitChat(run)
-}
-func waitChat(run *chatRun) tea.Cmd {
-	return func() tea.Msg {
-		event, ok := <-run.events
-		if !ok {
-			if run.terminal.done {
-				return run.terminal
-			}
-			return chatEvent{run: run, done: true, err: fmt.Errorf("AI stream ended unexpectedly")}
-		}
-		return event
+	c.Progress = "Saving question…"
+	m.status = ""
+	type startResult struct {
+		conversation history.Conversation
+		turn         history.Turn
+		messages     []aimodel.RequestMessage
+		page         history.HistoryPage
+		key          string
+		err          error
 	}
+	m.enqueuePersistence(&persistenceJob{write: func() any {
+		result := startResult{conversation: conversation}
+		if result.err = ctx.Err(); result.err != nil {
+			return result
+		}
+		if kind == backend.Plous {
+			result.key, result.err = profile.Credential(config)
+			if result.err == nil {
+				result.err = config.Ready(result.key)
+			}
+			if result.err != nil {
+				return result
+			}
+		}
+		if result.conversation.ID == "" {
+			title := strings.Split(text, "\n")[0]
+			if len([]rune(title)) > 60 {
+				title = string([]rune(title)[:60])
+			}
+			result.conversation, result.err = store.NewConversation(workspaceID, title)
+			if result.err != nil {
+				return result
+			}
+		}
+		result.messages, result.err = store.AgentMessages(context.Background(), workspaceID, result.conversation.ID)
+		if result.err != nil {
+			return result
+		}
+		if newer {
+			result.page, result.err = store.TurnPage(ctx, workspaceID, result.conversation.ID, 0, appchat.ChatCacheTurns, appchat.ChatCacheBytes)
+			if result.err != nil {
+				return result
+			}
+		}
+		if result.err = ctx.Err(); result.err != nil {
+			return result
+		}
+		result.turn, result.err = store.StartTurn(workspaceID, result.conversation.ID, r)
+		return result
+	}, apply: func(value any) tea.Cmd {
+		result := value.(startResult)
+		run.Starting = false
+		if result.err != nil {
+			cancel()
+			if result.conversation.ID != "" {
+				c.Conversation = result.conversation
+				m.chatIDs[workspaceID] = result.conversation.ID
+				m.persist()
+			}
+			if result.turn.Request.ID != "" {
+				c.Err = "Question save could not be confirmed. Restart Plous to recover the saved request. " + result.err.Error()
+				if result.turn.Sequence != 0 && !c.Evicted {
+					c.Turns = append(c.Turns, result.turn)
+				}
+			}
+			if m.run == run {
+				m.run = nil
+			}
+			c.Progress = ""
+			m.status = result.err.Error()
+			return nil
+		}
+		c.Conversation, c.Messages = result.conversation, result.messages
+		m.chatIDs[workspaceID] = result.conversation.ID
+		if newer {
+			c.Turns, c.Older = result.page.Turns, result.page.HasOlder
+		}
+		turn := result.turn
+		c.ActiveTurn = &turn
+		if !c.Evicted {
+			c.Turns = append(c.Turns, turn)
+			c.TrimTranscript()
+		}
+		c.Newer, c.Scroll, c.Reading, c.ReplySelected = false, 0, false, false
+		if currentDraft := m.drafts[workspaceID]; currentDraft != nil && currentDraft.Text == draft && !run.Stopping && !m.quitting {
+			*currentDraft = textview.NewField("")
+		}
+		c.Progress = "Thinking…"
+		m.persist()
+		if run.Stopping || m.quitting || ctx.Err() != nil {
+			run.Stopping = true
+			run.Terminal = appchat.ChatEvent{Run: run, Done: true, Err: context.Canceled}
+			close(run.Events)
+			return appchat.WaitChat(run)
+		}
+		options := agent.Options{UI: presentation, Agent: kind, Store: profile, History: store, WorkspaceID: workspaceID, ConversationID: result.conversation.ID, TurnID: turn.Request.ID, Config: config, Key: result.key, System: system, ScopeContext: contextText, Prompt: text, Connections: connections}
+		go run.Produce(ctx, options)
+		return appchat.WaitChat(run)
+	}})
+	return m.syncPersistence()
 }
-func (m *model) updateChatEvent(e chatEvent) tea.Cmd {
-	if m.run != e.run {
+
+func (m *model) updateChatEvent(e appchat.ChatEvent) tea.Cmd {
+	if m.run != e.Run || e.Run.Finished {
 		return nil
 	}
-	c := e.run.chat
-	if e.progress {
-		c.progress = e.status
-		return waitChat(e.run)
+	c := e.Run.Chat
+	if e.ContextLimit > 0 {
+		e.Run.ContextUsed, e.Run.ContextLimit = e.ContextUsed, e.ContextLimit
+		return appchat.WaitChat(e.Run)
 	}
-	t := &c.turns[len(c.turns)-1]
-	if !e.done {
-		t.Response.Text = e.text
-		c.dirty = true
+	if e.Progress {
+		if !e.Run.Stopping {
+			c.Progress = e.Status
+		}
+		return appchat.WaitChat(e.Run)
+	}
+	t := c.ActiveTurn
+	if t == nil {
+		t = &c.Turns[len(c.Turns)-1]
+	}
+	if !e.Done {
+		t.Response.Text = e.Text
+		c.SyncActiveTurn()
+		m.boundStreamingWindow(c)
+		c.Dirty, c.SaveFailed = true, false
+		c.SaveVersion++
 		m.persist()
-		return waitChat(e.run)
+		return appchat.WaitChat(e.Run)
 	}
-	if e.result.Text != "" {
-		t.Response.Text = e.result.Text
+	if e.HasText {
+		t.Response.Text = e.Text
 	}
-	t.Response.Usage = e.result.Usage
-	t.Response.Finish = e.result.Finish
-	t.Response.Status = "completed"
-	if e.err != nil {
-		t.Response.Status = "error"
-		t.Response.Error = e.err.Error()
+	if e.Result.Text != "" && (!e.Run.Stopping || strings.HasPrefix(e.Result.Text, t.Response.Text)) {
+		t.Response.Text = e.Result.Text
 	}
-	c.dirty = true
-	c.progress = ""
-	if summary, err := m.store.LatestCompaction(c.conversation.WorkspaceID, c.conversation.ID); err == nil {
-		c.summary = summary
+	response := t.Response
+	response.Usage, response.Finish = e.Result.Usage, e.Result.Finish
+	response.Status = "completed"
+	if e.Err != nil {
+		response.Status, response.Error = "error", e.Err.Error()
 	}
-	e.run.cancel()
-	m.run = nil
+	if e.Run.Stopping {
+		response.Status, response.Error = "cancelled", ""
+	}
+	e.Run.Finished, e.Run.Response = true, response
+	c.SyncActiveTurn()
+	c.Dirty = true
+	c.SaveVersion++
+	c.Progress = "Saving response…"
+	e.Run.Cancel()
 	m.persist()
-	if err := m.flushChats(); err != nil {
-		m.status = "Could not save response: " + err.Error()
-	}
-	return nil
+	m.queueChatSave(c)
+	return m.syncPersistence()
 }
+
 func (m *model) stopChat() {
-	if m.run == nil {
+	if m.run == nil || m.run.Stopping || m.run.Finished {
 		return
 	}
-	c := m.run.chat
-	m.run.cancel()
-	m.run = nil
-	t := &c.turns[len(c.turns)-1]
-	t.Response.Status = "cancelled"
-	c.progress = ""
-	if summary, err := m.store.LatestCompaction(c.conversation.WorkspaceID, c.conversation.ID); err == nil {
-		c.summary = summary
-	}
-	c.dirty = true
+	m.run.Stopping = true
+	m.run.Cancel()
+	m.run.Chat.Progress = "Stopping…"
 	m.persist()
 }
+
+// After the event loop exits, join the producer before closing its turn or store.
+func (m *model) drainChat() {
+	m.quitting = true
+	m.stopChat()
+	m.drainPersistence()
+	for m.run != nil && !m.run.Finished {
+		run := m.run
+		m.updateChatEvent(appchat.WaitChat(run)().(appchat.ChatEvent))
+		m.drainPersistence()
+	}
+}
+
 func (m *model) chatCommand(command string) {
+	if m.externalAgentSelected() {
+		if command == "newchat" {
+			if m.nativeAgent != nil && !m.nativeAgent.Finished {
+				m.status = "Close the native session with :X first."
+				return
+			}
+			m.nativeFresh = true
+		}
+		m.focusChat(true)
+		if command == "openchat" {
+			m.status = "Use /resume in " + m.settings.MainAgent.Label() + " for its conversation history."
+		}
+		return
+	}
+	if command == "newchat" && m.historyView != "" {
+		m.historyView = ""
+		m.loadChat()
+	}
 	if command == "chat" {
-		m.chat().history = false
-		m.chat().models = false
+		m.chat().History = false
+		m.chat().Models = false
 		m.focusChat(true)
 		return
 	}
 	c := m.chat()
-	c.models = false
-	if m.run != nil && m.run.chat == c {
+	c.Models = false
+	if m.run != nil && m.run.Chat == c {
 		m.status = "Stop this response with :X first."
 		return
 	}
-	if err := m.flushChats(); err != nil {
-		m.status = err.Error()
+	if c.Restore != nil && command == "openchat" {
+		m.status = "Wait for saved conversation restoration to finish."
 		return
 	}
 	if command == "openchat" {
-		choices, err := m.store.Conversations(m.active)
+		choices, err := m.history.Conversations(m.conversationScope())
 		if err != nil {
 			m.status = err.Error()
 			return
 		}
-		c.choices = nil
+		c.Choices = []history.Conversation{{ID: "history-scopes", Title: "Choose history scope…"}}
 		for i := len(choices) - 1; i >= 0; i-- {
-			c.choices = append(c.choices, choices[i])
+			c.Choices = append(c.Choices, choices[i])
 		}
-		c.history = true
-		c.cursor = 0
+		c.History = true
+		c.Cursor = 0
 	} else {
 		if command == "newchat" {
-			*c = chatState{}
-			m.chatIDs[m.active] = ""
+			if c.Restore != nil {
+				c.Restore.Cancel()
+			}
+			*c = appchat.ChatState{}
+			m.chatIDs[m.conversationScope()] = ""
 		}
-		c.history = false
+		c.History = false
 	}
 	m.focusChat(command != "openchat")
 }
@@ -353,55 +396,68 @@ func (m *model) chatCommand(command string) {
 func (m *model) focusChat(typing bool) {
 	m.closeHelp()
 	if typing {
-		m.chat().history, m.chat().models = false, false
+		m.chat().History, m.chat().Models = false, false
 	}
 	m.rightHidden = false
 	m.focus = 2
-	m.chatEditing = typing
+	m.chatEditing = typing && !m.externalAgentSelected()
+	if m.externalAgentSelected() && typing {
+		m.nativeRequested = true
+	}
 	m.status = ""
 	m.persist()
 }
 
 func (m *model) restoreChatPrompt() {
-	if m.draft().text != "" {
+	if m.draft().Text != "" {
 		m.status = "Clear the draft before restoring the last message."
 		return
 	}
 	c := m.chat()
-	if len(c.turns) == 0 {
+	if len(c.Turns) == 0 {
 		m.status = "No previous message in this conversation."
 		return
 	}
-	*m.draft() = newEditor(c.turns[len(c.turns)-1].Request.Prompt)
-	m.draft().literal = true
+	prompt := c.Turns[len(c.Turns)-1].Request.Prompt
+	if c.ActiveTurn != nil {
+		prompt = c.ActiveTurn.Request.Prompt
+	} else if c.Newer {
+		page, err := m.history.TurnPage(context.Background(), c.Conversation.WorkspaceID, c.Conversation.ID, 0, 1, appchat.ChatCacheBytes)
+		if err != nil || len(page.Turns) == 0 {
+			m.status = "Could not restore the latest saved question."
+			return
+		}
+		prompt = page.Turns[0].Request.Prompt
+	}
+	*m.draft() = textview.NewField(prompt)
+	m.draft().Literal = true
 	m.focusChat(true)
 	m.status = "Message restored. Enter sends a new request."
 }
 
 func (m *model) updateChat(k tea.KeyPressMsg) tea.Cmd {
+	if m.externalAgentSelected() {
+		return m.nativeAgentKey(k)
+	}
 	c := m.chat()
 	key := k.String()
-	if c.models {
+	if c.Models {
 		m.updateModelPicker(key)
 		return nil
 	}
-	if c.history {
+	if c.History {
 		choices := m.filteredConversations()
-		c.cursor = max(0, min(c.cursor, len(choices)-1))
+		c.Cursor = max(0, min(c.Cursor, len(choices)-1))
 		switch key {
 		case "esc":
-			c.history = false
+			c.History = false
 		case "up":
-			c.cursor = max(0, c.cursor-1)
+			c.Cursor = max(0, c.Cursor-1)
 		case "down":
-			c.cursor = max(0, min(len(choices)-1, c.cursor+1))
+			c.Cursor = max(0, min(len(choices)-1, c.Cursor+1))
 		case "enter":
 			if len(choices) > 0 {
-				if err := m.flushChats(); err != nil {
-					m.status = err.Error()
-					return nil
-				}
-				m.openConversation(c, choices[c.cursor])
+				m.chooseHistory(choices[c.Cursor])
 			}
 		}
 		return nil
@@ -409,21 +465,30 @@ func (m *model) updateChat(k tea.KeyPressMsg) tea.Cmd {
 	switch key {
 	case "enter":
 		if m.chatEditing {
-			text := m.draft().text
-			if !m.draft().literal && (text == "/model" || text == "/m") {
-				*m.draft() = newEditor("")
+			text := m.draft().Text
+			if m.settings.MainAgent.Effective() == backend.Plous && !m.draft().Literal && (text == "/model" || text == "/m") {
+				*m.draft() = textview.NewField("")
 				m.openModelPicker()
 				return nil
 			}
 			if text == "//model" || text == "//m" {
-				*m.draft() = newEditor(text[1:])
-				m.draft().literal = true
+				*m.draft() = textview.NewField(text[1:])
+				m.draft().Literal = true
 			}
 			return m.sendChat()
 		}
+		return m.openChatSources()
+	case "[", "]":
+		if m.chatEditing {
+			m.draft().Key(k, true)
+		} else if key == "[" {
+			m.selectChatReply(-1)
+		} else {
+			m.selectChatReply(1)
+		}
 	case "shift+enter", "ctrl+j":
 		if m.chatEditing {
-			m.draft().insert("\n", true)
+			m.draft().Insert("\n", true)
 		}
 	case "esc":
 		m.chatEditing = false
@@ -431,7 +496,7 @@ func (m *model) updateChat(k tea.KeyPressMsg) tea.Cmd {
 		m.scrollChat(key)
 	default:
 		if m.chatEditing {
-			m.draft().key(k, true)
+			m.draft().Key(k, true)
 		} else {
 			m.scrollChat(key)
 		}

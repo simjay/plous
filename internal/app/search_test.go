@@ -1,13 +1,14 @@
 package app
 
 import (
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/simjay/plous/internal/ai/history"
+	"github.com/simjay/plous/internal/app/monitor"
+	"github.com/simjay/plous/internal/workspace"
 	"maps"
 	"strings"
 	"testing"
-
-	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
-	"github.com/simjay/plous/internal/workspace"
 )
 
 func TestTreeSearchRevealsCollapsedPathsWithoutChangingFolds(t *testing.T) {
@@ -18,7 +19,7 @@ func TestTreeSearchRevealsCollapsedPathsWithoutChangingFolds(t *testing.T) {
 	before := maps.Clone(m.expanded)
 	typeText(m, "/dEpLoY")
 	rows := m.treeRows()
-	if len(rows) != 6 || rows[4].resource != "deployments.apps" || m.treeCursor != 4 {
+	if len(rows) != 8 || rows[6].resource != "deployments.apps" || m.treeCursor != 6 {
 		t.Fatalf("unexpected filtered path: %#v", rows)
 	}
 	if !maps.Equal(before, m.expanded) {
@@ -30,7 +31,7 @@ func TestTreeSearchRevealsCollapsedPathsWithoutChangingFolds(t *testing.T) {
 	}
 	typeText(m, "/deploy")
 	press(t, m, "enter")
-	if m.focus != 1 || m.explore.preference.Resource != "deployments.apps" || m.explore.preference.Namespace != "shop" || m.searches[0] != nil {
+	if m.focus != 1 || m.explore.Preference.Resource != "deployments.apps" || m.explore.Preference.Namespace != "shop" || m.searches[0] != nil {
 		t.Fatal("search opened the wrong resource or scope")
 	}
 	if m.treeRows()[m.treeCursor].resource != "deployments.apps" {
@@ -77,11 +78,13 @@ func TestAutomaticExpansionRetiresOnlyAutomaticBranches(t *testing.T) {
 	if err := m.saveSession(); err != nil {
 		t.Fatal(err)
 	}
-	restored, err := newModel(m.store, "test")
+	restored, err := newModel(m.store, m.history, "test")
 	if err != nil {
 		t.Fatal(err)
 	}
+	restored.selectScope(m.active, m.tool, m.connection)
 	restored.explore = m.explore
+	restored.mode = 1
 	restored.syncExploreTree()
 	restored.chooseExploreResource("nodes")
 	restored.syncExploreTree()
@@ -95,30 +98,31 @@ func TestPanelSearchKeepsCommandsAndPasteLiteral(t *testing.T) {
 	m.focus = 0
 	typeText(m, "/cc:ss11")
 	m.Update(tea.PasteMsg{Content: ":q\n/model"})
-	if m.searches[0].input.text != "cc:ss11:q/model" || m.command != nil || m.chatEditing || m.mode != 1 || m.settingsOverlay != nil {
+	if m.searches[0].input.Text != "cc:ss11:q/model" || m.command != nil || m.chatEditing || m.mode != 1 || m.settingsOverlay != nil {
 		t.Fatal("search text ran a command")
 	}
-	press(t, m, "tab")
+	press(t, m, "alt+right")
 	typeText(m, ":h")
 	press(t, m, "enter")
-	press(t, m, "tab")
-	if m.focus != 1 || m.help == nil {
-		t.Fatal("Help lost focus trapping")
+	press(t, m, "alt+right")
+	if m.focus != 2 || m.helpVisible() || m.help == nil {
+		t.Fatal("Help did not pause for panel travel")
 	}
+	press(t, m, "alt+left")
 	press(t, m, "esc")
-	press(t, m, "shift+tab")
+	press(t, m, "alt+left")
 	if m.focus != 0 || m.searches[0] == nil {
-		t.Fatal("Tab lost suspended search")
+		t.Fatal("Alt+Right lost suspended search")
 	}
 	press(t, m, "esc")
 	typeText(m, ":c")
 	press(t, m, "enter")
 	typeText(m, "/model")
-	if m.searches[2] != nil || m.draft().text != "/model" {
+	if m.searches[2] != nil || m.draft().Text != "/model" {
 		t.Fatal("chat slash was captured by search")
 	}
 	press(t, m, "enter")
-	if !m.chat().models {
+	if !m.chat().Models {
 		t.Fatal("model command stopped working")
 	}
 }
@@ -126,30 +130,30 @@ func TestPanelSearchKeepsCommandsAndPasteLiteral(t *testing.T) {
 func TestDetailFindMatchesAcrossWrapAndKeepsEscLocal(t *testing.T) {
 	m := exploreModel(t)
 	m.openExploreSelection(1)
-	m.explore.detailValid = true
-	m.explore.detailRun = nil
-	m.explore.detail.Object["longValue"] = strings.Repeat("x", 46) + "FindMe" + strings.Repeat("x", 100) + "findme"
+	m.explore.DetailValid = true
+	m.explore.DetailRun = nil
+	m.explore.Detail.Object["longValue"] = strings.Repeat("x", 46) + "FindMe" + strings.Repeat("x", 100) + "findme"
 	typeText(m, "/findme")
 	view := m.exploreDetailBody(48, 13)
-	if !m.yamlDocumentSearching() || !strings.Contains(m.explore.yamlDocument.document.SearchStatus(), "1/2") || !strings.Contains(ansi.Strip(view), "1/2") {
+	if !m.yamlDocumentSearching() || !strings.Contains(m.explore.YamlDocument.Document.SearchStatus(), "1/2") || !strings.Contains(ansi.Strip(view), "1/2") {
 		t.Fatalf("did not search the full YAML: %s", view)
 	}
 	press(t, m, "enter")
 	typeText(m, "n")
 	view = m.exploreDetailBody(48, 13)
-	if !strings.Contains(ansi.Strip(view), "2/2") || m.explore.detail == nil {
+	if !strings.Contains(ansi.Strip(view), "2/2") || m.explore.Detail == nil {
 		t.Fatal("n did not move to the next match")
 	}
 	typeText(m, "N")
-	if !strings.Contains(m.explore.yamlDocument.document.SearchStatus(), "1/2") {
+	if !strings.Contains(m.explore.YamlDocument.Document.SearchStatus(), "1/2") {
 		t.Fatal("N did not find the previous match")
 	}
 	press(t, m, "esc")
-	if m.yamlDocumentSearching() || m.explore.yamlDocument.document.Query != "" || m.explore.detail == nil || m.explore.tab != 1 || m.focus != 1 {
+	if m.yamlDocumentSearching() || m.explore.YamlDocument.Document.Query != "" || m.explore.Detail == nil || m.explore.Tab != 1 || m.focus != 1 {
 		t.Fatal("Esc also exited the detail view")
 	}
 	press(t, m, "esc")
-	if m.explore.detail != nil {
+	if m.explore.Detail != nil {
 		t.Fatal("second Esc did not exit details")
 	}
 }
@@ -157,7 +161,7 @@ func TestDetailFindMatchesAcrossWrapAndKeepsEscLocal(t *testing.T) {
 func TestConversationSearchAndHistoryOpenMatchingIdentity(t *testing.T) {
 	m, _ := testModel(t)
 	c := m.chat()
-	c.turns = []workspace.Turn{{Request: workspace.Request{Prompt: "earlier needle"}, Response: workspace.Response{Text: strings.Repeat("later response\n", 40) + "second NEEDLE", Status: "completed"}}}
+	c.Turns = []history.Turn{{Request: history.Request{Prompt: "earlier needle"}, Response: history.Response{Text: strings.Repeat("later response\n", 40) + "second NEEDLE", Status: "completed"}}}
 	m.focus = 2
 	typeText(m, "/needle")
 	view := ansi.Strip(m.chatTranscript(38, 14))
@@ -170,21 +174,21 @@ func TestConversationSearchAndHistoryOpenMatchingIdentity(t *testing.T) {
 		t.Fatalf("next match hidden: %s", view)
 	}
 	press(t, m, "esc")
-	if m.chatEditing || m.chat().history {
+	if m.chatEditing || m.chat().History {
 		t.Fatal("closing find changed chat mode")
 	}
-	first, err := m.store.NewConversation("", "Keep first")
+	first, err := m.history.NewConversation("", "Keep first")
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := m.store.NewConversation("", "Needle investigation")
+	second, err := m.history.NewConversation("", "Needle investigation")
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.history, c.choices, c.cursor = true, []workspace.Conversation{first, second}, 0
+	c.History, c.Choices, c.Cursor = true, []history.Conversation{first, second}, 0
 	typeText(m, "/needle")
 	press(t, m, "enter")
-	if c.conversation.ID != second.ID || c.history || m.searches[2] != nil {
+	if c.Conversation.ID != second.ID || c.History || m.searches[2] != nil {
 		t.Fatal("filtered history opened the unfiltered index")
 	}
 }
@@ -192,9 +196,9 @@ func TestConversationSearchAndHistoryOpenMatchingIdentity(t *testing.T) {
 func TestActivitySearchOpensMatchingRevision(t *testing.T) {
 	m := exploreModel(t)
 	m.mode = 2
-	m.changes = []workspace.Change{{Revision: 8, Before: &workspace.Workspace{Name: "Before"}, After: workspace.Workspace{Name: "After"}}, {Revision: 3, After: workspace.Workspace{Name: "Shop"}}}
+	m.activityUI.Changes = []workspace.Change{{Revision: 8, Before: &workspace.Workspace{Name: "Before"}, After: workspace.Workspace{Name: "After"}}, {Revision: 3, After: workspace.Workspace{Name: "Shop"}}}
 	typeText(m, "/created")
-	if len(m.filteredChanges()) != 1 {
+	if len(m.activityEntries()) != 1 {
 		t.Fatal("Activity did not filter")
 	}
 	press(t, m, "enter")
@@ -202,8 +206,8 @@ func TestActivitySearchOpensMatchingRevision(t *testing.T) {
 		t.Fatal("wrong revision opened")
 	}
 	press(t, m, "esc")
-	if m.positions[m.viewKey()] != 1 {
-		t.Fatal("return lost selected revision")
+	if m.positions[m.viewKey()] != 0 || m.searches[1] == nil || m.searches[1].input.Text != "created" || len(m.activityEntries()) != 1 {
+		t.Fatal("return lost the filtered selection")
 	}
 }
 
@@ -244,9 +248,9 @@ func TestFindLongLogBufferAndWideCharacters(t *testing.T) {
 	m := exploreModel(t)
 	m.openExploreSelection(4)
 	m.syncExploreDetail()
-	run := m.explore.detailRun
-	run.cancel()
-	m.updateExploreMessage(exploreDetailResult{run: run, object: m.explore.detail.DeepCopy()})
+	run := m.explore.DetailRun
+	run.Cancel()
+	m.updateExploreMessage(monitor.ExploreDetailResult{Run: run, Object: m.explore.Detail.DeepCopy()})
 	m.syncExploreDetail()
 	m.podLogViewer().Append(strings.Repeat("xy", 64*1024))
 	m.podLogViewer().Reader.Wrap = false
@@ -260,7 +264,7 @@ func TestFindLongLogBufferAndWideCharacters(t *testing.T) {
 		t.Fatal("typing z in log search ran the expansion shortcut")
 	}
 	press(t, m, "esc")
-	if m.explore.detail == nil || m.explore.tab != 4 || m.podLogViewer().Following {
+	if m.explore.Detail == nil || m.explore.Tab != 4 || m.podLogViewer().Following {
 		t.Fatal("closing search left logs or resumed the stream")
 	}
 	rows := searchMatchRows("abc界界界", [][]int{{3, 6}, {6, 9}, {9, 12}}, 4)

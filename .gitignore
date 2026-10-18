@@ -31,10 +31,6 @@ __pycache__/
 /dist/
 /.cache/
 .DS_Store
-/docs-site/node_modules/
-/docs-site/dist/
-/docs-site/src/content/docs/
-/docs-site/public/
 
 # Dot-directories are local internals. GitHub Actions is the sole exception.
 .*/

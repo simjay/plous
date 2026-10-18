@@ -1,74 +1,106 @@
 package app
 
 import (
+	tea "charm.land/bubbletea/v2"
+	lipgloss "charm.land/lipgloss/v2"
 	"fmt"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/simjay/plous/internal/ai/history"
+	"github.com/simjay/plous/internal/app/activity"
+	"github.com/simjay/plous/internal/ui"
+	textview "github.com/simjay/plous/internal/ui/text"
 	"regexp"
 	"strings"
 	"unicode/utf8"
-
-	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
-	"github.com/simjay/plous/internal/textview"
-	"github.com/simjay/plous/internal/workspace"
 )
 
 type panelSearch struct {
+	archive                      *chatFind
 	finished, positioned         bool
 	width                        int
-	input                        editor
+	input                        textview.Field
 	scope, kind, treeKey         string
+	activityIdentity             string
+	activityFilter               activity.Filter
 	cursor, match, total, scroll int
 }
-
-const searchBarHeight = 3
 
 func (m *model) searchScope(panel int) string {
 	switch panel {
 	case 0:
 		return "tree"
 	case 1:
+		if m.overviewVisible() {
+			return ""
+		}
+		if m.codeOverviewVisible() {
+			return "code-overview/" + m.viewKey() + "/" + m.coder().Preference.BrowserItem
+		}
+		if m.codeVisible() || m.helmVisible() || m.gitOpsVisible() {
+			return ""
+		}
 		if m.form != nil || m.page != "" || m.settingsOverlay != nil || m.documentActive() || m.valueDocumentActive() || m.yamlDocumentActive() || m.activityReviewVisible() || m.logWorkspaceActive() || m.resourceTerminalVisible() {
 			return ""
 		}
 		if m.exploreVisible() {
 			e := m.explorer()
-			if e.input != nil || e.picker != "" || e.detail == nil {
+			if e.Input != nil || e.Picker != "" || e.Detail == nil {
 				return ""
 			}
-			return fmt.Sprintf("%s/%s/%s/%s/%d", m.viewKey(), e.preference.Resource, e.detail.GetNamespace(), e.detail.GetName(), e.tab)
+			return fmt.Sprintf("%s/%s/%s/%s/%d", m.viewKey(), e.Preference.Resource, e.Detail.GetNamespace(), e.Detail.GetName(), e.Tab)
 		}
 		return m.viewKey() + "/" + m.detail
 	case 2:
 		c := m.chat()
-		if c.models || m.chatEditing && !c.history {
+		if c.Models || m.chatEditing && !c.History {
 			return ""
 		}
-		return fmt.Sprintf("%s/%s/%t", m.active, c.conversation.ID, c.history)
+		return fmt.Sprintf("%s/%s/%t", m.conversationScope(), c.Conversation.ID, c.History)
 	}
 	return ""
 }
 
 func (m *model) clearStaleSearches() {
+	if search := m.activityListSearch; search != nil && search.scope != m.viewKey()+"/" && !m.helpVisible() && m.settingsOverlay == nil {
+		m.restoreActivityPosition(search)
+		m.activityListSearch = nil
+	}
 	for panel, s := range m.searches {
+		if panel == 1 && (m.settingsOverlay != nil || m.helpVisible() || m.chatSourcesVisible()) {
+			continue
+		}
 		if s != nil && s.scope != m.searchScope(panel) {
 			if s.kind == "activity" {
-				m.positions[strings.TrimSuffix(s.scope, "/")] = s.cursor
+				m.restoreActivityPosition(s)
 			}
+			s.cancelChatFind()
 			m.searches[panel] = nil
 		}
 	}
 }
 
 func (m *model) beginPanelSearch() bool {
-	if m.help != nil || m.focus == 1 && (m.form != nil || m.page != "" || m.settingsOverlay != nil) || m.focus == 2 && m.chat().models {
+	if m.helpVisible() || m.focus == 1 && (m.form != nil || m.page != "" || m.settingsOverlay != nil) || m.focus == 2 && m.chat().Models {
 		return false
+	}
+	if resume := m.activeInteraction().resumeSearch; resume != nil {
+		resume()
+		if search := m.searches[1]; search != nil && search.scope == m.searchScope(1) {
+			search.finished = false
+			m.shortcutPrefix, m.status = "", ""
+			return true
+		}
 	}
 	scope := m.searchScope(m.focus)
 	if scope == "" {
 		return false // Resource tables and pickers keep their existing filter controls.
 	}
-	s := &panelSearch{input: newEditor(""), scope: scope, kind: "find"}
+	if search := m.searches[m.focus]; search != nil && search.kind == "activity" && search.scope == scope && search.finished {
+		search.finished = false
+		m.shortcutPrefix, m.status = "", ""
+		return true
+	}
+	s := &panelSearch{input: textview.NewField(""), scope: scope, kind: "find"}
 	switch m.focus {
 	case 0:
 		s.kind = "tree"
@@ -78,46 +110,51 @@ func (m *model) beginPanelSearch() bool {
 		}
 	case 1:
 		s.scroll = m.positions[m.viewKey()]
+		if m.codeOverviewVisible() {
+			s.scroll = m.coder().DetailOffset
+		}
 		if m.detail != "" {
 			s.scroll = m.cursor
 		}
 		if m.exploreVisible() {
-			s.scroll = m.explore.scroll
+			s.scroll = m.explore.Scroll
 		}
 		if m.mode == 2 && m.detail == "" {
-			s.kind, s.cursor = "activity", m.positions[m.viewKey()]
+			s.kind, s.cursor, s.activityFilter = "activity", m.activityPosition(), m.activityUI.Filter
+			entries := m.activityEntries()
+			if len(entries) > 0 {
+				s.cursor = min(max(0, s.cursor), len(entries)-1)
+				s.activityIdentity = entries[s.cursor].Identity()
+			}
 		}
 	case 2:
-		s.scroll = m.chat().scroll
-		if m.chat().history {
-			s.kind, s.cursor = "history", m.chat().cursor
+		s.scroll = m.chat().Scroll
+		if m.chat().History {
+			s.kind, s.cursor = "history", m.chat().Cursor
 		} else {
-			m.chat().reading = true
+			m.chat().Reading = true
 		}
 	}
+	m.searches[m.focus].cancelChatFind()
 	m.searches[m.focus] = s
 	m.shortcutPrefix, m.status = "", ""
 	m.searchChanged()
 	return true
 }
 
-func searchContains(value, query string) bool {
-	return strings.Contains(strings.ToLower(value), strings.ToLower(strings.TrimSpace(query)))
-}
-
 func (m *model) searchQuery(panel int) string {
 	if s := m.searches[panel]; s != nil {
-		return s.input.text
+		return s.input.Text
 	}
 	return ""
 }
 
-func (m *model) filteredConversations() []workspace.Conversation {
-	choices := m.chat().choices
+func (m *model) filteredConversations() []history.Conversation {
+	choices := m.chat().Choices
 	if s := m.searches[2]; s != nil && s.kind == "history" {
-		filtered := make([]workspace.Conversation, 0, len(choices))
+		filtered := make([]history.Conversation, 0, len(choices))
 		for _, c := range choices {
-			if searchContains(c.Title+" "+c.Created.Local().Format("Jan 02 15:04"), s.input.text) {
+			if ui.SearchContains(c.Title+" "+c.Created.Local().Format("Jan 02 15:04"), s.input.Text) {
 				filtered = append(filtered, c)
 			}
 		}
@@ -126,37 +163,24 @@ func (m *model) filteredConversations() []workspace.Conversation {
 	return choices
 }
 
-func (m *model) filteredChanges() []workspace.Change {
-	if s := m.searches[1]; s != nil && s.kind == "activity" {
-		filtered := make([]workspace.Change, 0, len(m.changes))
-		for _, c := range m.changes {
-			text := fmt.Sprintf("%s r%d %s", changeSummary(c), c.Revision, c.Time.Local().Format("Jan 02 15:04"))
-			if searchContains(text, s.input.text) {
-				filtered = append(filtered, c)
-			}
-		}
-		return filtered
-	}
-	return m.changes
-}
-
 func (m *model) searchChanged() {
 	s := m.searches[m.focus]
+	s.cancelChatFind()
 	s.match = 0
 	s.positioned = false
 	switch s.kind {
 	case "tree":
 		m.treeCursor = 0
 		for i, row := range m.treeRows() {
-			if row.kind != "settings" && searchContains(row.label+" "+row.resource, s.input.text) {
+			if row.kind != "settings" && ui.SearchContains(row.label+" "+row.resource, s.input.Text) {
 				m.treeCursor = i
 				break
 			}
 		}
 	case "history":
-		m.chat().cursor = 0
+		m.chat().Cursor = 0
 	case "activity":
-		m.positions[m.viewKey()] = 0
+		m.setActivityPosition(0)
 	}
 }
 
@@ -164,19 +188,22 @@ func (m *model) updatePanelSearch(msg tea.KeyPressMsg) {
 	s := m.searches[m.focus]
 	key := msg.String()
 	if key == "esc" {
+		s.cancelChatFind()
 		m.searches[m.focus] = nil
 		switch s.kind {
 		case "tree":
 			m.restoreTreeCursor(s.treeKey)
 		case "history":
-			m.chat().cursor = s.cursor
+			m.chat().Cursor = s.cursor
 		case "activity":
-			m.positions[m.viewKey()] = s.cursor
+			m.restoreActivityPosition(s)
 		case "find":
 			if m.focus == 2 {
-				m.chat().scroll = s.scroll
+				m.chat().Scroll = s.scroll
+			} else if m.codeOverviewVisible() {
+				m.coder().DetailOffset = s.scroll
 			} else if m.exploreVisible() {
-				m.explore.scroll = s.scroll
+				m.explore.Scroll = s.scroll
 			} else if m.detail != "" {
 				m.cursor = s.scroll
 			} else {
@@ -196,6 +223,9 @@ func (m *model) updatePanelSearch(msg tea.KeyPressMsg) {
 		if key == "up" || key == "shift+enter" || key == "N" {
 			step = -1
 		}
+		if m.focus == 2 && m.stepChatFind(s, step) {
+			return
+		}
 		if s.total > 0 {
 			s.match = (s.match + s.total + step) % s.total
 		}
@@ -206,11 +236,11 @@ func (m *model) updatePanelSearch(msg tea.KeyPressMsg) {
 		case "tree":
 			rows := m.treeRows()
 			row := rows[max(0, min(m.treeCursor, len(rows)-1))]
-			if key == "enter" && len(rows) == 1 && strings.TrimSpace(s.input.text) != "" {
+			if key == "enter" && len(rows) == 1 && strings.TrimSpace(s.input.Text) != "" {
 				return
 			}
 			blocked := m.form != nil
-			if key == "enter" && !blocked && strings.TrimSpace(s.input.text) != "" {
+			if key == "enter" && !blocked && strings.TrimSpace(s.input.Text) != "" {
 				parents := map[string]string{}
 				for _, r := range rows {
 					parents[r.key] = r.parent
@@ -227,42 +257,23 @@ func (m *model) updatePanelSearch(msg tea.KeyPressMsg) {
 		case "history":
 			choices := m.filteredConversations()
 			m.updateChat(msg)
-			if key == "enter" && !m.chat().history {
+			if key == "enter" && !m.chat().History {
 				m.searches[2] = nil
 			} else if key == "pgup" || key == "pgdown" {
 				step := 10
 				if key == "pgup" {
 					step = -step
 				}
-				m.chat().cursor = max(0, min(len(choices)-1, m.chat().cursor+step))
+				m.chat().Cursor = max(0, min(len(choices)-1, m.chat().Cursor+step))
 			}
 		case "activity":
-			changes := m.filteredChanges()
-			selected := max(0, min(m.positions[m.viewKey()], len(changes)-1))
-			if key == "pgup" || key == "pgdown" {
-				step := 10
-				if key == "pgup" {
-					step = -step
-				}
-				m.positions[m.viewKey()] = max(0, min(len(m.filteredChanges())-1, m.positions[m.viewKey()]+step))
-			} else {
-				m.updateMain(key)
-			}
-			if m.detail != "" {
-				m.searches[1] = nil
-				for i, change := range m.changes {
-					if change.Revision == changes[selected].Revision {
-						m.positions[m.viewKey()] = i
-						break
-					}
-				}
-			}
+			m.updateMain(key)
 		}
 		return
 	}
-	before := s.input.text
-	s.input.key(msg, false)
-	if s.input.text != before {
+	before := s.input.Text
+	s.input.Key(msg, false)
+	if s.input.Text != before {
 		m.searchChanged()
 	}
 }
@@ -285,37 +296,11 @@ func (m *model) searchBar(panel, width int, label string) string {
 	hint := ""
 	if s.finished {
 		hint = "n/N matches · / new search · Esc clear"
-	}
-	return searchField(s.input, width, m.focus == panel && !s.finished, label, "Type to search…", hint)
-}
-
-func searchField(input editor, width int, active bool, label, placeholder, hint string) string {
-	innerWidth := max(1, width-4)
-	text := editorLine(input, innerWidth, active)
-	if input.text == "" {
-		cursor := ""
-		if active {
-			cursor = "▏"
+		if s.kind == "activity" {
+			hint = "/ Edit search · Esc clear"
 		}
-		text = cursor + muted.Render(clipped(placeholder, max(0, innerWidth-ansi.StringWidth(cursor))))
 	}
-	if width < 4 {
-		return clipped(text, width)
-	}
-	border := borderColor
-	if active {
-		border = focusedBorder
-	}
-	frame := lipgloss.NewStyle().Foreground(border)
-	title := clipped(" / "+label+" ", width-3)
-	top := frame.Render("╭─") + selected.Render(title) + frame.Render(strings.Repeat("─", max(0, width-3-ansi.StringWidth(title)))+"╮")
-	middle := frame.Render("│") + " " + text + strings.Repeat(" ", max(0, innerWidth-ansi.StringWidth(text))) + " " + frame.Render("│")
-	bottom := frame.Render("╰" + strings.Repeat("─", width-2) + "╯")
-	if hint != "" {
-		label := clipped(" "+hint+" ", width-3)
-		bottom = frame.Render("╰"+strings.Repeat("─", max(0, width-3-ansi.StringWidth(label)))) + muted.Render(label) + frame.Render("─╯")
-	}
-	return strings.Join([]string{top, middle, bottom}, "\n")
+	return ui.SearchField(s.input, width, m.focus == panel && !s.finished, label, "Type to search…", hint)
 }
 
 func searchMatchRows(text string, spans [][]int, width int) []int {
@@ -339,15 +324,15 @@ func searchMatchRows(text string, spans [][]int, width int) []int {
 // Search the full text before wrapping so a match may cross a visual line break.
 func (m *model) findText(panel int, text string, width, height, offset int) string {
 	s := m.searches[panel]
-	width, available := max(1, width), max(0, height-searchBarHeight)
-	query := s.input.text
+	width, available := max(1, width), max(0, height-ui.SearchBarHeight)
+	query := s.input.Text
 	var hits []int
 	var lines []string
 	var pattern *regexp.Regexp
 	if query != "" {
 		pattern = regexp.MustCompile("(?i)" + regexp.QuoteMeta(query))
 	}
-	for _, line := range strings.Split(text, "\n") {
+	for index, line := range strings.Split(text, "\n") {
 		clean := ansi.Strip(line)
 		var spans [][]int
 		if pattern != nil {
@@ -358,21 +343,21 @@ func (m *model) findText(panel int, text string, width, height, offset int) stri
 		for _, span := range spans {
 			runes += utf8.RuneCountInString(clean[position:span[0]])
 			end := runes + utf8.RuneCountInString(clean[span[0]:span[1]])
-			marks = append(marks, textview.Span{Start: runes, End: end, Style: lipgloss.NewStyle().Background(highlight).Underline(true)})
+			marks = append(marks, textview.Span{Start: runes, End: end, Style: lipgloss.NewStyle().Background(ui.Highlight).Underline(true)})
 			position, runes = span[1], end
 		}
 		painted := textview.Paint(clean, line, marks)
 		if panel == 2 {
-			rows := chatRows(painted, width)
+			rows := m.chat().ChatLineRows(painted, index, width)
 			row := 0
 			for _, span := range spans {
-				for row+1 < len(rows) && rows[row+1].start <= span[0] {
+				for row+1 < len(rows) && rows[row+1].Start <= span[0] {
 					row++
 				}
 				hits = append(hits, len(lines)+row)
 			}
 			for _, row := range rows {
-				lines = append(lines, row.text)
+				lines = append(lines, row.Text)
 			}
 			continue
 		}
@@ -380,6 +365,9 @@ func (m *model) findText(panel int, text string, width, height, offset int) stri
 			hits = append(hits, len(lines)+row)
 		}
 		lines = append(lines, strings.Split(ansi.Hardwrap(painted, width, true), "\n")...)
+	}
+	if s.archive != nil && !s.archive.found {
+		hits = nil
 	}
 	s.total = len(hits)
 	label := "Find"
@@ -391,7 +379,9 @@ func (m *model) findText(panel int, text string, width, height, offset int) stri
 				offset = max(0, hits[s.match]-available/2)
 				s.positioned, s.width = true, width
 				if panel == 2 {
-					m.chat().reading = true
+					m.chat().Reading = true
+					rows := m.chat().ChatRows(text, width)
+					m.chat().SelectReplyForLine(rows[min(hits[s.match], len(rows)-1)].Line)
 				}
 			}
 			label = fmt.Sprintf("Find · %d/%d", s.match+1, len(hits))
@@ -400,13 +390,29 @@ func (m *model) findText(panel int, text string, width, height, offset int) stri
 	offset = max(0, min(offset, max(0, len(lines)-available)))
 	s.scroll = offset
 	if panel == 2 {
-		m.chat().scroll = s.scroll
+		m.chat().Scroll = s.scroll
+	} else if m.codeOverviewVisible() {
+		m.coder().DetailOffset = s.scroll
 	} else if m.exploreVisible() {
-		m.explore.scroll = s.scroll
+		m.explore.Scroll = s.scroll
 	} else if m.detail != "" {
 		m.cursor = s.scroll
 	} else {
 		m.positions[m.viewKey()] = s.scroll
 	}
-	return styledView(m.searchBar(panel, width, label)+"\n"+strings.Join(lines[offset:min(len(lines), offset+available)], "\n"), width, height)
+	if panel == 2 {
+		label = s.chatFindLabel(label)
+	}
+	return ui.StyledView(m.searchBar(panel, width, label)+"\n"+strings.Join(lines[offset:min(len(lines), offset+available)], "\n"), width, height)
+}
+
+func (s *panelSearch) ownsKey(key string) bool {
+	return s != nil && (!s.finished || key == "esc" || s.kind == "find" && (key == "n" || key == "N"))
+}
+
+func (m *model) activePanelSearch(panel int) *panelSearch {
+	if !m.panelInteraction(panel).panelSearch {
+		return nil
+	}
+	return m.searches[panel]
 }

@@ -5,29 +5,30 @@
   </picture>
 </h1>
 
-A terminal workspace for infrastructure and deployment tools.
+**Your Kubernetes journey, in one terminal.**
 
-Plous brings tool connections, configuration history, and AI conversations into one terminal workspace. Its main views are **Overview**, **Explore**, and **Activity**. Each workspace can group several tools, contexts, and repositories.
+Plous is an open-source **Kubernetes lifecycle tool** for inspecting clusters, working with configuration, and investigating problems with AI. It brings Kubernetes, Helm, Kustomize, Argo CD, and Flux into a shared terminal workspace.
 
-**Status: `0.0.1` · early development · not ready to ship.**
+The name comes from Greek **πλοῦς (plous)**, meaning [voyage](https://apps.perseids.org/woodhouse/l/voyage). Kubernetes is named for the [helmsman](https://kubernetes.io/docs/concepts/overview/); Plous is named for the whole journey, from source configuration to running workloads.
 
-[Get started](docs/getting-started.md) · [Documentation](docs/README.md) · [Keymap](docs/keymap.md) · [Troubleshooting](docs/troubleshooting.md) · [Development](docs/development.md)
+[Getting started](#getting-started) · [Documentation](docs/README.md) · [MCP](docs/guides/plous-mcp.md) · [Contributing](docs/contributing/README.md)
 
-## What works today
+> **Early development: `0.0.1`.** Plous is not ready to ship.
 
-- Local workspaces with multiple tool connections and configuration history.
-- Kubernetes resource lists, Describe, YAML, Events, grouped relationships, and Pod or merged workload logs.
-- Plous Editor for YAML and read-only values, Diff Reviewer for validated changes and configuration history, and Log Viewer for logs and terminal review.
-- Supported Kubernetes actions from object details, including editing, scaling, rollout restart, deletion, and container Exec.
-- Saved configuration references for Helm, Kustomize, Terraform, Argo, and Kargo.
-- OpenAI and Anthropic assistant with read-only Kubernetes investigation, searchable conversation records, automatic context compaction, and saved drafts.
-- Panel search, keyboard commands, and adjustable panel visibility.
+## Features
 
-Deployment pipelines, remote workspaces, sharing, and assistant write operations are not available in this version. See the [documentation overview](docs/README.md#what-this-version-supports) for current scope.
+- **Cluster overview.** Health, CPU and memory usage, recent observed changes, and resources that need attention.
+- **Kubernetes operations.** Resource browsing, YAML, events, related objects, workload logs, container terminals, and explicit edit, scale, restart, and delete actions.
+- **Helm and GitOps.** Inspect release revisions, compare values and manifests, preview chart changes, and roll back explicitly. Read Argo CD and Flux controller status through the same cluster connection.
+- **Configuration workspace.** Browse and edit local files, explore Kustomize dependencies, render charts and overlays, inspect captured field history, and compare generated output.
+- **AI investigation.** Use Plous with OpenAI or Anthropic, or your installed Claude Code or Codex. Ask about the selected connection and inspect the saved evidence behind tool results. Assistant tools are read-only.
+- **Saved workspaces.** Group contexts and repositories, retain configuration revisions, and return to connection-specific conversations and preferences.
 
-## Build and start
+Cluster browsing works without an AI account, and Code works without a cluster. See [integration support](docs/integrations/README.md) for current capabilities and limits.
 
-Requires macOS or Linux, Go **1.26.4+**, Git, Make, and an interactive terminal at least **80 columns by 16 rows**.
+## Getting started
+
+Requires **macOS or Linux**, **Go 1.26.4+**, Git, Make, and an interactive terminal at least 80 columns by 16 rows.
 
 ```sh
 git clone https://github.com/simjay/plous.git
@@ -35,31 +36,33 @@ cd plous
 make run
 ```
 
-On the first launch, press **Enter** to create a workspace. Enter a name and choose **Save**, then select a tool or press **Esc** to start empty.
+Plous opens with your terminal's Kubernetes context and launch directory. Use **Alt+Left/Right** to change panels and **hh** for Help while navigating. Run `:quit` or press **Ctrl+C** to save the session and exit. In Claude Code or Codex input, Ctrl+C goes to the agent; press **Ctrl+]** first to return to Plous before exiting.
 
-The [getting started guide](docs/getting-started.md) walks through creating a workspace and choosing your tools. No cluster or AI account is required. See [Tool integrations](docs/integrations.md) for each tool's setup and current capabilities.
+The binary is built at `bin/plous`. See [Getting started](docs/getting-started/README.md) for installing on PATH, choosing a context, and taking a first look at Code. Kubernetes, Helm, Kustomize, and Git libraries are embedded; configured Kubernetes authentication helpers and external assistant CLIs must be installed separately.
 
-## Learn the interface
+## MCP
 
-Use **Tab / Shift+Tab** to change panels, arrows and **Enter** to select items, **/** to search, and **Esc** to go back. **hh** opens Help while navigating. Type **:q** and press Enter to save and exit, or use **Ctrl+C** from anywhere.
+Plous exposes its connection reads, saved evidence, and view controls to the Claude Code or Codex session inside the assistant panel through **Model Context Protocol (MCP)**. Select your installed agent in **Settings → Application → Agent**; Plous configures the tool connection automatically. The CLI keeps its own model and authentication settings. Built-in Plous provider connections are configured under **Settings → Agent → Plous**.
 
-- [Navigation](docs/navigation.md): panels, commands, search, and typing.
-- [Workspaces](docs/workspaces.md): connections and settings across tools.
-- [Activity](docs/activity.md): configuration history and revision comparisons.
-- [AI chat](docs/ai-chat.md): connect a vendor, choose a model, and manage conversations.
-- [Tool integrations](docs/integrations.md): capabilities, connection setup, and tool-specific workflows.
+Ask “Why is this Pod restarting?” or “What changed between these Helm revisions?” The agent can read scoped evidence and open the relevant YAML, logs, or comparison beside the conversation.
 
-Plous stores data under `~/.plous/` by default. Use `--data-dir PATH` for another profile. API keys are kept in a separate plaintext file with owner-only permissions. [Data and privacy](docs/data-and-privacy.md) explains storage, backups, and what is sent to AI vendors.
+The bridge lasts for the native session. There is no standalone `plous mcp` server or manual registration in another app. See the [MCP guide](docs/guides/plous-mcp.md) for setup and examples, and the [MCP reference](docs/reference/mcp.md) for tools, access limits, and transport details.
 
-## Development and contributing
+## Documentation
 
-Run `make check` for formatting, vet, Go tests, and executable/terminal tests. Terminal tests also need Python 3.9+. `make dist` builds local macOS and Linux archives without publishing them. See [Contributing](docs/contributing.md) and [Development](docs/development.md) for the contributor workflow and repository layout.
+- [User guides](docs/README.md): navigation, workspaces, cluster operations, Code, Activity, and AI.
+- [Keymap](docs/reference/keymap.md) and [Configuration](docs/reference/configuration.md).
+- [Data and privacy](docs/reference/data-and-privacy.md): local storage, credentials, and provider requests.
+- [Troubleshooting](docs/reference/troubleshooting.md).
+- [Kubernetes playground](docs/integrations/kubernetes/playground.md) and [GitOps playground](docs/integrations/gitops/playground.md).
 
-The documentation website builds from `docs/` with Astro Starlight. Use `make docs-install` and `make docs-dev` to preview it, or `make docs-check` to validate the production build. See [documentation maintenance](docs/documentation.md) for GitHub Pages setup.
+## Contributing
 
-The interface uses [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lip Gloss](https://github.com/charmbracelet/lipgloss). AI execution uses [Eino](https://github.com/cloudwego/eino), with embedded [Starlark](https://github.com/google/starlark-go) for recursive investigation.
+Bug reports, documentation improvements, and focused code contributions are welcome. [Open an issue](https://github.com/simjay/plous/issues) with reproduction steps, or read the [contributor guide](docs/contributing/README.md) before making a change. Discuss larger product or architecture changes first.
 
-[Report a bug](https://github.com/simjay/plous/issues) with the version, OS, terminal, and reproduction steps. The [troubleshooting guide](docs/troubleshooting.md#report-a-bug) describes what to include.
+Run `make check` for documentation, formatting, vet, Go tests, and terminal tests. Documentation and terminal checks require Python 3.9+. [PlousBench](benchmark/README.md) covers tool correctness and performance through direct calls and MCP.
+
+Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea), [Lip Gloss](https://github.com/charmbracelet/lipgloss), and [Eino](https://github.com/cloudwego/eino).
 
 ## License
 
