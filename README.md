@@ -20,8 +20,6 @@ Plous is an open-source Kubernetes lifecycle tool for inspecting clusters, worki
 
 The name comes from Greek **πλοῦς**, meaning voyage. Kubernetes is the helmsman; Plous is the journey.
 
-> **Early development: `0.0.1`.** Plous is not ready to ship.
-
 ![Plous showing workspace navigation, Kubernetes cluster health, and the Codex assistant side by side](docs/assets/plous-overview.png)
 
 ## Features
