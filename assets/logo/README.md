@@ -18,7 +18,7 @@ The long logo uses the mark as the `p` in custom Soft flow lettering, with the s
 
 Choose the icon and long logo by their background. The blue p is identical in both themes. For the monochrome SVG, set CSS `color` when embedding it inline, or set its root `color` attribute for a standalone file. An external `<img>` does not inherit the surrounding text color.
 
-The repository README uses GitHub's theme-aware `<picture>` format with explicit light and dark sources and a light-image fallback. Keep both sources so the logo follows GitHub's selected appearance.
+The repository README uses paired image links with GitHub's `#gh-light-mode-only` and `#gh-dark-mode-only` fragments. Keep the fragment on both the link and its image. GitHub's styles select the matching logo from its appearance setting, including when that setting differs from the system color preference.
 
 ## Palette
 

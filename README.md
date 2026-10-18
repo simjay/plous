@@ -1,9 +1,10 @@
 <h1 align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/logo/lockup-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="assets/logo/lockup.svg">
-    <img src="assets/logo/lockup.svg" alt="Plous" width="320">
-  </picture>
+  <a href="assets/logo/lockup.svg#gh-light-mode-only">
+    <img src="assets/logo/lockup.svg#gh-light-mode-only" alt="Plous" width="320">
+  </a>
+  <a href="assets/logo/lockup-dark.svg#gh-dark-mode-only">
+    <img src="assets/logo/lockup-dark.svg#gh-dark-mode-only" alt="Plous" width="320">
+  </a>
 </h1>
 
 <p align="center">
