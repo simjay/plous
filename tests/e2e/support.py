@@ -89,6 +89,10 @@ class Terminal:
         self.mouse_press(x, y)
         self.mouse_release(x, y)
 
+    def mouse_double_click(self, x, y):
+        # Send one gesture without read waits between its clicks.
+        self.send(f"\x1b[<0;{x + 1};{y + 1}M\x1b[<0;{x + 1};{y + 1}m" * 2)
+
     def mouse_wheel(self, x, y, up=False):
         self.send(f"\x1b[<{64 if up else 65};{x + 1};{y + 1}M")
 

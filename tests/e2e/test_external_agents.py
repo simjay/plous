@@ -279,16 +279,20 @@ class ExternalAgentTests(unittest.TestCase):
                 app.send('retained native draft')
                 app.expect_screen('> retained native draft')
                 up, down = '\x1b[<64;146;13M', '\x1b[<65;146;13M'
-                # Exceed the entire bounded history, then keep scrolling at the top.
-                app.send(up * 6000)
-                app.expect_screen('End / Esc Live')
-                top = app.screen()['rows']
-                app.send(up * 1000)
-                self.assertEqual(app.screen()['rows'], top)
                 app.send('\x1b[1;3D')
                 app.wait_json(state / 'session.json', lambda s: s['focus'] == 1)
+                app.wait(lambda: 'End / Esc Live' not in '\n'.join(app.screen()['rows']), 'main panel focus')
+                # The panel shortcut follows the burst in the input stream. Its
+                # footer confirms the entire burst was handled before comparison.
+                app.send(up * 6000 + '\x1b[1;3C')
+                app.expect_screen('End / Esc Live')
+                top = app.screen()['rows']
+                app.send(up * 1000 + '\x1b[1;3D')
+                app.wait_json(state / 'session.json', lambda s: s['focus'] == 1)
+                app.wait(lambda: 'End / Esc Live' not in '\n'.join(app.screen()['rows']), 'main panel focus after overscroll')
                 app.send('\x1b[1;3C')
                 app.expect_screen('End / Esc Live')
+                self.assertEqual(app.screen()['rows'], top)
                 app.send(down)
                 app.wait(lambda: app.screen()['rows'] != top, 'reverse scroll at top')
                 app.send(down * 6000)
