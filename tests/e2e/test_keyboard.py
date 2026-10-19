@@ -82,6 +82,8 @@ class KeyboardTests(unittest.TestCase):
         app.send('\x1b[200~ bb :q\n界\x1b[201~')
         app.wait_json(state / 'session.json', lambda s: s['drafts'].get('') == draft + ' more bb :q\n界')
         app.send(keys['escape'])
+        # tmux may hold Escape while deciding whether it prefixes an Alt key.
+        app.expect_screen('cc Write message')
         app.send('hh')
         app.expect_screen('Global · Navigation')
         app.send(keys['quit'])
@@ -121,7 +123,9 @@ class KeyboardTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='plous-tmux-') as directory:
             root = Path(directory)
             socket = str(root / 'tmux.sock')
-            tmux = [shutil.which('tmux'), '-S', socket, '-f', '/dev/null']
+            config = root / 'tmux.conf'
+            config.write_text('set-option -s escape-time 500\n')
+            tmux = [shutil.which('tmux'), '-S', socket, '-f', str(config)]
             try:
                 self.exercise(root, PROTOCOLS['xterm'], tmux + ['new-session', '-s', 'keyboard'])
             finally:

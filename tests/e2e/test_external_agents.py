@@ -284,7 +284,9 @@ class ExternalAgentTests(unittest.TestCase):
                 app.wait(lambda: 'End / Esc Live' not in '\n'.join(app.screen()['rows']), 'main panel focus')
                 # The panel shortcut follows the burst in the input stream. Its
                 # footer confirms the entire burst was handled before comparison.
-                app.send(up * 6000 + '\x1b[1;3C')
+                # This fixture has fewer than 1,000 history rows. Bound each
+                # burst to keep boundary checks within CI's interactive deadline.
+                app.send(up * 1000 + '\x1b[1;3C')
                 app.expect_screen('End / Esc Live')
                 top = app.screen()['rows']
                 app.send(up * 1000 + '\x1b[1;3D')
@@ -295,7 +297,7 @@ class ExternalAgentTests(unittest.TestCase):
                 self.assertEqual(app.screen()['rows'], top)
                 app.send(down)
                 app.wait(lambda: app.screen()['rows'] != top, 'reverse scroll at top')
-                app.send(down * 6000)
+                app.send(down * 1000)
                 app.wait(lambda: 'End / Esc Live' not in '\n'.join(app.screen()['rows']), 'return to live output')
                 app.expect_screen('> retained native draft')
                 # Overscroll and type in one input burst to catch event backlogs.

@@ -277,6 +277,7 @@ class ChatTests(unittest.TestCase):
         restarted.send(":c\r/model\r")
         restarted.expect("GPT-5.4 ✓")
         restarted.send("\x1b")
+        restarted.expect_screen("Hello from local AI")
         restarted.send("After restart\r")
         restarted.wait(lambda: len(responses()) == 3, "request after restart")
         self.wait_response(restarted, responses()[2], lambda r: r["status"] == "completed")
