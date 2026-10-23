@@ -6,7 +6,7 @@ Plous is an early development build. Keep changes focused and discuss product, n
 
 ## Build and layout
 
-Use the Go version in go.mod, Make and Python 3.9+ for documentation/terminal checks. Build with `make build`; the executable is `bin/plous`. The embedded `cmd/plous/VERSION` is the application version source. Do not bump it or create release tags as part of another change.
+Use the Go version in go.mod, Make and Python 3.11+ for documentation/terminal checks. Build with `make build`; the executable is `bin/plous`. The embedded `cmd/plous/VERSION` is the application version source. Do not bump it or create release tags as part of another change.
 
 | Package | Owns |
 | --- | --- |
@@ -59,12 +59,12 @@ Application aliases live in `internal/app/commands.go`; resource actions have a 
 | --- | --- |
 | `make check` | Documentation, formatting, vet, Go tests and terminal tests |
 | `make test` | All Go and executable tests |
-| `make test-unit` | Go package tests |
+| `make test-unit` | All Go tests, including integration, acceptance and PlousBench |
 | `make test-e2e` | Build and run CLI/terminal journeys |
 | `make test-ux` | Focused screen matrix, overlays, drafts and restart |
 | `make test-race` | Go data-race checks |
 | `make test-coverage` | Coverage under `.cache/tests/` |
-| `make eval` | Scripted single-agent acceptance cases |
+| `make eval` | Focused subset of Go acceptance tests |
 | `make test-plousbench` | Offline tool, evidence and report checks |
 | `make bench-plousbench` | Repeated tool workloads through direct calls and MCP |
 | `make build-plousbench` | Tool report CLI |
@@ -77,6 +77,14 @@ Focus a Go run with `make test-unit TEST_PACKAGES=./internal/ai/... TEST_FLAGS='
 The default suite uses temporary profiles, synthetic kubeconfig and loopback APIs. It does not alter the owner's profile or clusters and does not call paid providers. HTTP fixtures need loopback ports; terminal tests need pseudo-terminals. `make test-ai-live` and `make test-minikube` require explicit opt-in for their provider or cluster. See [test setup and coverage](../../tests/README.md) and [benchmark instructions](../../benchmark/README.md).
 
 Verify the changed behavior and meaningful failure cases. Run make check for application changes and make dist for packaging changes. Distinguish fixtures from live verification. Scripted models test mechanics, not answer quality.
+
+## Continuous integration
+
+CI runs on pushes to main and on pull requests. New commits cancel superseded runs for the same ref. Independent jobs check documentation/formatting/vet, Go behavior, terminal behavior, and distribution archives, so a terminal failure does not hide race or packaging results.
+
+The complete Go suite runs once per OS: with race detection on Linux and normally on macOS. Acceptance cases and PlousBench are already included. Both platforms run the complete executable suite with tmux installed. The optional playground chart checks additionally run when Helm is available. Go dependencies and build outputs are cached; `-count=1` still forces tests to execute. Runner OS versions are explicit in the workflow.
+
+Failed terminal jobs retain review frames and wait-failure diagnostics for seven days. Release waits for every CI job, then publishes the same verified archives from the distribution artifact after checking their checksums and the tag against `cmd/plous/VERSION`. It does not rebuild them.
 
 ## Screen and performance review
 
@@ -97,3 +105,5 @@ Maintain Markdown under docs/. Give each guide one title and an index link. Keep
 `make docs-check` needs no third-party Python packages and does not contact websites. Read the Markdown after structural changes. Command-registry tests also scan nested guides.
 
 `make dist` builds macOS/Linux archives for amd64/arm64 with executable, license, README, guides and assets, verifies checksums and runs the matching executable. It does not publish. Hosted CI/release success must be verified separately. Keep binaries, reports, private data and local dot-directories out of source control; root `.github/` is the workflow exception.
+
+See [Releasing Plous](releases.md) for version tags, automatic Homebrew updates, and recovery after publication failures. `make test-packaging` checks formula generation and release version handling without network access.

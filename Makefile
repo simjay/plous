@@ -21,7 +21,11 @@ run: build
 docs-check:
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) tests/docs/check.py
 
-test: test-unit test-e2e
+test: test-unit test-e2e test-packaging
+
+.PHONY: test-packaging
+test-packaging:
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m unittest discover -s tests/packaging -v
 
 eval:
 	$(GO) test $(TEST_FLAGS) ./tests/acceptance/ai/...

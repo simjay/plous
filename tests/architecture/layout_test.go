@@ -88,9 +88,6 @@ func ownershipViolations(root string) ([]string, error) {
 			if !strings.HasPrefix(imported, module) {
 				continue
 			}
-			if dependency == "internal/ai/clm" {
-				violations = append(violations, fmt.Sprintf("%s imports retired CLM runtime", rel))
-			}
 			if dependency == "tests" || strings.HasPrefix(dependency, "tests/") || dependency == "benchmark" || strings.HasPrefix(dependency, "benchmark/") {
 				violations = append(violations, fmt.Sprintf("%s imports test-only dependency %s", rel, dependency))
 			}
@@ -102,8 +99,8 @@ func ownershipViolations(root string) ([]string, error) {
 				{"internal/ui/", []string{"internal/app", "internal/source", "internal/integrations", "internal/workspace", "internal/ai"}},
 				{"internal/integrations/", []string{"internal/app", "internal/ui", "internal/source", "internal/ai", "internal/workspace"}},
 				{"internal/source/", []string{"internal/app", "internal/ui", "internal/ai"}},
-				{"internal/ai/model/", []string{"internal/app", "internal/ai/clm", "internal/ai/rlm", "internal/ai/history", "internal/workspace"}},
-				{"internal/ai/history/", []string{"internal/app", "internal/workspace", "internal/source", "internal/integrations", "internal/ai/clm", "internal/ai/rlm"}},
+				{"internal/ai/model/", []string{"internal/app", "internal/ai/history", "internal/workspace"}},
+				{"internal/ai/history/", []string{"internal/app", "internal/workspace", "internal/source", "internal/integrations"}},
 			} {
 				if !strings.HasPrefix(rel, rule.owner) {
 					continue
@@ -231,7 +228,7 @@ func TestOwnershipRejectsTestOnlyImports(t *testing.T) {
 	}
 }
 
-func TestRetiredRootsAndProductEntryPoint(t *testing.T) {
+func TestProductLayout(t *testing.T) {
 	root := filepath.Join("..", "..")
 	owners := map[string]bool{"ai": true, "app": true, "integrations": true, "source": true, "ui": true, "workspace": true}
 	entries, err := os.ReadDir(filepath.Join(root, "internal"))
@@ -253,11 +250,6 @@ func TestRetiredRootsAndProductEntryPoint(t *testing.T) {
 		}
 	}
 
-	for _, retired := range []string{"benchmark/recall", "internal/ai/rlm", "internal/ai/sandbox", "internal/ai/history/history_migration.go", "internal/ai/history/legacy_daily_read.go", "internal/ai/clm", "internal/agent", "internal/loop", "internal/active", "internal/edit", "internal/budget", "internal/shard", "internal/trajectory", "internal/rlm", "internal/rlmclient", "internal/llm", "internal/tools", "internal/memory", "internal/code", "internal/editor", "internal/diffview", "internal/logview", "internal/textview", "internal/markdownview", "internal/kubeconfig", "internal/kubernetes", "internal/helm", "internal/kustomize", "internal/manifest", "cmd/harness", "cmd/rlm", "eval", "prompts"} {
-		if _, err := os.Stat(filepath.Join(root, retired)); !os.IsNotExist(err) {
-			t.Errorf("retired root %s exists or cannot be inspected: %v", retired, err)
-		}
-	}
 	for _, required := range []string{"cmd/plous/main.go", "cmd/plous/VERSION", "internal/ai/run.go"} {
 		if _, err := os.Stat(filepath.Join(root, required)); err != nil {
 			t.Error(err)

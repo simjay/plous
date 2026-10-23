@@ -231,7 +231,13 @@ class Terminal:
         self.closed = True
         try:
             if self.process.poll() is None:
-                self.process.kill()
+                # Let Plous close its native child and fixture servers on failure.
+                self.process.terminate()
+                deadline = time.monotonic() + 5
+                while self.process.poll() is None and time.monotonic() < deadline:
+                    self.read()
+                if self.process.poll() is None:
+                    self.process.kill()
             self.process.wait(timeout=5)
         finally:
             os.close(self.master)

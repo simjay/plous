@@ -46,6 +46,15 @@ class ExternalAgentTests(unittest.TestCase):
         app.send(':X\r')
         app.expect_screen('Session ended')
 
+    def test_fixture_cleanup_stops_captured_native_process(self):
+        for kind, label, moves in [('claude', 'Claude Code', 1), ('codex', 'Codex', 2)]:
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory(prefix='plous-native-cleanup-') as directory:
+                app, state, _ = self.open_agent(Path(directory), kind, label, moves)
+                pid = int((state.parent / 'launch/fixture-pid').read_text())
+                app.close()
+                with self.assertRaises(ProcessLookupError):
+                    os.kill(pid, 0)
+
     def test_native_ctrl_c_forwards_then_panel_return_allows_exit(self):
         for kind, label, moves in [('claude', 'Claude Code', 1), ('codex', 'Codex', 2)]:
             with self.subTest(kind=kind), tempfile.TemporaryDirectory(prefix='plous-native-interrupt-') as directory:

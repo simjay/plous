@@ -35,5 +35,6 @@ See [integration support](integrations/README.md) for capabilities and connectio
 ## Development
 
 - [Contributing](contributing/README.md) and [AI implementation](contributing/ai-assistant.md)
+- [Releasing Plous](contributing/releases.md)
 - [Tests](../tests/README.md) and [PlousBench](../benchmark/README.md)
 - [Kubernetes playground](integrations/kubernetes/playground.md) and [GitOps playground](integrations/gitops/playground.md)

@@ -1,0 +1,94 @@
+name: Update Homebrew
+
+on:
+  release:
+    types: [published]
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+    secrets:
+      HOMEBREW_TAP_TOKEN:
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published Plous tag to send to Homebrew (vMAJOR.MINOR.PATCH)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: homebrew-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.event.release.tag_name }}
+    steps:
+      - name: Check release and credential
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test -n "$TAP_TOKEN" || { echo 'Set HOMEBREW_TAP_TOKEN in this repository.' >&2; exit 1; }
+          gh release view "$RELEASE_TAG" --repo simjay/plous --json isDraft,isPrerelease \
+            --jq '(.isDraft == false) and (.isPrerelease == false)' | grep -qx true
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - uses: actions/checkout@v6
+        with:
+          repository: simjay/homebrew-tap
+          ref: main
+          path: homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      - name: Render formula from the published source
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 \
+            "https://github.com/simjay/plous/archive/refs/tags/${RELEASE_TAG}.tar.gz" \
+            --output "$RUNNER_TEMP/plous-source.tar.gz"
+          python3 scripts/homebrew.py "$RELEASE_TAG" "$RUNNER_TEMP/plous-source.tar.gz" \
+            "$RUNNER_TEMP/plous.rb" --current homebrew-tap/Formula/plous.rb
+      - name: Open or update the tap pull request
+        working-directory: homebrew-tap
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -f "$RUNNER_TEMP/plous.rb" || exit 0
+          branch="plous-$RELEASE_TAG"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+            git fetch origin "$branch"
+            git checkout -B "$branch" FETCH_HEAD
+          else
+            git checkout -b "$branch"
+          fi
+          mkdir -p Formula
+          cp "$RUNNER_TEMP/plous.rb" Formula/plous.rb
+          git add Formula/plous.rb
+          if ! git diff --cached --quiet; then
+            git -c user.name='github-actions[bot]' \
+              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit -m "plous ${RELEASE_TAG#v}"
+            git push origin "$branch"
+          fi
+          pr=$(gh pr list --repo simjay/homebrew-tap --head "$branch" --base main --json number --jq '.[0].number // empty')
+          if [ -z "$pr" ]; then
+            printf 'Package Plous %s from https://github.com/simjay/plous/releases/tag/%s.\n\nPublish after all Homebrew package checks pass.\n' \
+              "$RELEASE_TAG" "$RELEASE_TAG" > "$RUNNER_TEMP/tap-pr.md"
+            gh pr create --repo simjay/homebrew-tap --head "$branch" --base main \
+              --title "plous ${RELEASE_TAG#v}" --body-file "$RUNNER_TEMP/tap-pr.md"
+          fi

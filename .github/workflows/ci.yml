@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: ['**']
+    branches: [main]
   pull_request:
   workflow_call:
   workflow_dispatch:
@@ -10,13 +10,38 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  check:
-    name: Check (${{ matrix.os }})
+  static:
+    name: Docs, formatting, and vet
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: '**/go.sum'
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - run: make docs-check fmt-check vet test-packaging
+
+  go:
+    name: Go (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        include:
+          - os: ubuntu-24.04
+            target: test-race
+          - os: macos-15
+            target: test-unit
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -26,16 +51,68 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-          cache: false
+          cache-dependency-path: '**/go.sum'
       - uses: actions/setup-python@v7
         with:
           python-version: '3.13'
-      - name: Check docs, formatting, code, unit tests, and terminal journeys
-        run: make check
-      - name: Check the Go agent acceptance cases
-        run: make eval
-      - name: Check for Go data races
-        run: make test-race
-      - name: Build all distribution archives and verify checksums
+      - name: Run all Go tests, including acceptance and PlousBench
+        run: make ${{ matrix.target }}
+
+  terminal:
+    name: Terminal (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: '**/go.sum'
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - name: Install tmux on Linux
         if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y tmux
+      - name: Install tmux on macOS
+        if: runner.os == 'macOS'
+        run: brew install tmux
+      - name: Run CLI and terminal tests
+        env:
+          PLOUS_REVIEW_DIR: ${{ runner.temp }}/terminal-review
+        run: make test-e2e
+      - name: Retain terminal failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminal-${{ matrix.os }}
+          path: ${{ runner.temp }}/terminal-review
+          retention-days: 7
+          if-no-files-found: ignore
+
+  package:
+    name: Distribution archives
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: '**/go.sum'
+      - name: Build all distribution archives and verify checksums
         run: make dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: distribution
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7

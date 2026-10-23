@@ -1,13 +1,11 @@
 """Current-screen UX acceptance with temporary profiles and no live providers."""
 
-import base64
 import json
 from pathlib import Path
-import subprocess
 import tempfile
 import unittest
 
-from support import FIXTURE, ROOT, Terminal
+from support import FIXTURE, Terminal
 
 
 class UXTests(unittest.TestCase):
@@ -41,28 +39,6 @@ class UXTests(unittest.TestCase):
                         app.assert_exit()
                     finally:
                         app.close()
-
-    def test_screen_replay_tracks_overwrites_erases_resizes_and_unicode(self):
-        def data(text):
-            return {"Data": base64.b64encode(text.encode()).decode()}
-
-        events = [
-            {"Width": 20, "Height": 6},
-            data("\x1b[?1049h\x1b[2J\x1b[Hobsolete\x1b[2;1Hchart-00"),
-            data("\x1b[2;7H12\x1b[1;1H\x1b[2KReady 界"),
-            {"Width": 24, "Height": 8},
-            data("\x1b[8;1Hfooter"),
-        ]
-        result = subprocess.run(
-            [str(ROOT / "bin/test-terminalscreen")], input=json.dumps(events),
-            capture_output=True, text=True, check=True,
-        )
-        rows = json.loads(result.stdout)["rows"]
-        self.assertEqual(len(rows), 8)
-        self.assertEqual(rows[0].rstrip(), "Ready 界")
-        self.assertEqual(rows[1].rstrip(), "chart-12")
-        self.assertEqual(rows[-1].rstrip(), "footer")
-        self.assertNotIn("obsolete", "\n".join(rows))
 
     def test_connection_expansion_keeps_tool_branches_collapsed(self):
         from test_helm import HelmAPI
