@@ -40,10 +40,12 @@ def render(tag, archive):
 def already_published(tag, formula):
     if not formula.exists():
         return False
-    match = re.search(r'^  version "([^"]+)"$', formula.read_text(), re.MULTILINE)
-    if not match:
-        raise ValueError("Existing formula has no explicit version")
-    return version_numbers(match[1]) >= version_numbers(tag[1:])
+    versions = re.findall(
+        r'^  url "https://github\.com/simjay/plous/archive/refs/tags/v([0-9]+\.[0-9]+\.[0-9]+)\.tar\.gz"$',
+        formula.read_text(), re.MULTILINE)
+    if len(versions) != 1:
+        raise ValueError("Existing formula must have one Plous release source URL")
+    return version_numbers(versions[0]) >= version_numbers(tag[1:])
 
 
 def main():

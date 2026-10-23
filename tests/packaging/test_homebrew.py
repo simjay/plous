@@ -34,7 +34,7 @@ class HomebrewTests(unittest.TestCase):
     def test_formula_uses_source_checksum_and_embedded_version(self):
         self.source("0.0.1")
         formula = homebrew.render("v0.0.1", self.archive)
-        self.assertIn('version "0.0.1"', formula)
+        self.assertNotIn('\n  version ', formula)
         self.assertIn('/archive/refs/tags/v0.0.1.tar.gz"', formula)
         self.assertIn(hashlib.sha256(self.archive.read_bytes()).hexdigest(), formula)
         self.assertNotIn("@VERSION@", formula)
@@ -60,10 +60,21 @@ class HomebrewTests(unittest.TestCase):
     def test_reruns_and_older_releases_preserve_published_bottles(self):
         formula = Path(self.temp.name) / "plous.rb"
         self.assertFalse(homebrew.already_published("v0.0.1", formula))
-        formula.write_text('  version "0.0.10"\n  bottle do\n  end\n')
+        self.source("0.0.10")
+        formula.write_text(homebrew.render("v0.0.10", self.archive) + '\n  bottle do\n  end\n')
         self.assertTrue(homebrew.already_published("v0.0.10", formula))
         self.assertTrue(homebrew.already_published("v0.0.9", formula))
         self.assertFalse(homebrew.already_published("v0.0.11", formula))
+
+    def test_unknown_or_ambiguous_published_source_fails(self):
+        formula = Path(self.temp.name) / "plous.rb"
+        source_url = '  url "https://github.com/simjay/plous/archive/refs/tags/v0.0.1.tar.gz"\n'
+        for text in ['  version "0.0.1"\n', source_url.replace("simjay/plous", "other/plous"),
+                     source_url.replace("v0.0.1", "v0.0.1-rc.1"), source_url * 2]:
+            with self.subTest(formula=text):
+                formula.write_text(text)
+                with self.assertRaisesRegex(ValueError, "release source URL"):
+                    homebrew.already_published("v0.0.2", formula)
 
 
 if __name__ == "__main__":
