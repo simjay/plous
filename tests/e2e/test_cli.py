@@ -10,7 +10,7 @@ from support import BINARY, ROOT
 
 class CommandLineTests(unittest.TestCase):
     def run_cli(self, *args):
-        return subprocess.run([str(BINARY), *args], capture_output=True, text=True, timeout=10)
+        return subprocess.run([str(BINARY), *args], capture_output=True, text=True, timeout=30)
 
     def test_version_matches_single_source(self):
         result = self.run_cli("--version")

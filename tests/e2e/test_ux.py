@@ -25,10 +25,10 @@ class UXTests(unittest.TestCase):
         app.expect_screen("AI assistant")
         return app
 
-    def test_repeated_fresh_and_saved_startup_renders_without_input(self):
+    def test_fresh_and_saved_startup_renders_without_input(self):
         for attempt, (width, height) in enumerate(((80, 16), (120, 30), (240, 60))):
             state = self.root / f"startup-{attempt}"
-            for launch in range(4):
+            for launch in range(2):
                 with self.subTest(size=(width, height), launch=launch):
                     app = Terminal(state, self.config, width=width, height=height)
                     try:

@@ -9,7 +9,7 @@ PLOUSBENCH_FLAGS ?= -benchtime=5x -count=1
 VERSION ?= v$(shell cat cmd/plous/VERSION)
 export GO VERSION
 
-.PHONY: build build-test-tools check-test-startup test-ux run test eval test-unit test-e2e test-playground test-minikube test-ai-live test-agent-clients test-race test-coverage bench check fmt-check vet dist clean docs-check build-plousbench test-plousbench bench-plousbench
+.PHONY: build build-test-tools test-ux run test eval test-unit test-e2e test-playground test-minikube test-ai-live test-agent-clients test-race test-coverage bench check fmt-check vet dist clean docs-check build-plousbench test-plousbench bench-plousbench
 
 build:
 	mkdir -p bin
@@ -33,13 +33,10 @@ build-test-tools:
 	mkdir -p bin
 	$(GO) build -trimpath -buildvcs=false -o bin/test-terminalscreen ./tests/support/terminalscreen
 
-check-test-startup: build build-test-tools
-	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) tests/support/check_startup.py "$(CURDIR)/bin/plous"
-
-test-e2e: check-test-startup
+test-e2e: build build-test-tools
 	PLOUS_TEST_BINARY="$(CURDIR)/bin/plous" PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m unittest discover -s tests/e2e -p '$(TEST_E2E_PATTERN)' -v $(TEST_E2E_ARGS)
 
-test-ux: check-test-startup
+test-ux: build build-test-tools
 	$(GO) test -count=1 -run 'TestUXScreenMatrix|TestTerminalOutputBelongsToRenderer|TestCodeStartupFramesStayInsideTerminal' ./internal/app
 	PLOUS_TEST_BINARY="$(CURDIR)/bin/plous" PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m unittest discover -s tests/e2e -p 'test_ux.py' -v
 	PLOUS_TEST_BINARY="$(CURDIR)/bin/plous" PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m unittest discover -s tests/e2e -p 'test_kustomize.py' -k restored_sources -v

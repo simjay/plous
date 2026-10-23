@@ -27,6 +27,9 @@ class Terminal:
         self.master, self.slave = pty.openpty()
         self.output = bytearray()
         self.screen_events = [{"Width": width, "Height": height}]
+        self.screen_process = None
+        self.screen_event_count = 0
+        self.last_screen = None
         self.closed = False
         self.started_at = time.monotonic()
         self.first_output_after = None
@@ -54,24 +57,29 @@ class Terminal:
             os.close(self.master)
             os.close(self.slave)
             raise
+        os.set_blocking(self.master, False)
+
+    def read_ready(self):
+        try:
+            data = os.read(self.master, 65536)
+        except BlockingIOError:
+            return
+        except OSError as error:
+            if error.errno == errno.EIO:
+                return
+            raise
+        if data:
+            if self.first_output_after is None:
+                self.first_output_after = time.monotonic() - self.started_at
+            self.output.extend(data)
+            self.screen_events.append({"Data": base64.b64encode(data).decode("ascii")})
 
     def read(self, duration=0.05):
         deadline = time.monotonic() + duration
         while time.monotonic() < deadline:
             if not select.select([self.master], [], [], max(0, deadline - time.monotonic()))[0]:
                 break
-            try:
-                data = os.read(self.master, 65536)
-            except OSError as error:
-                if error.errno == errno.EIO:
-                    break
-                raise
-            if not data:
-                break
-            if self.first_output_after is None:
-                self.first_output_after = time.monotonic() - self.started_at
-            self.output.extend(data)
-            self.screen_events.append({"Data": base64.b64encode(data).decode("ascii")})
+            self.read_ready()
 
     def send(self, text):
         self.send_bytes(text.encode("utf-8"))
@@ -97,24 +105,43 @@ class Terminal:
         self.send(f"\x1b[<{64 if up else 65};{x + 1};{y + 1}M")
 
     def send_bytes(self, data):
-        # Drain output so a large paste cannot fill both PTY directions.
+        # Drain output under backpressure without inserting pauses inside keys.
+        data = memoryview(data)
+        deadline = time.monotonic() + 8
         while data:
-            written = os.write(self.master, data[:512])
-            data = data[written:]
-            self.read(0.01)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise AssertionError("Timed out writing terminal input")
+            readable, writable, _ = select.select([self.master], [self.master], [], remaining)
+            if readable:
+                self.read_ready()
+            if writable:
+                try:
+                    data = data[os.write(self.master, data):]
+                except BlockingIOError:
+                    pass
         self.read(0.08)
 
     def text(self, start=0):
         return ANSI.sub(b"", bytes(self.output[start:])).decode("utf-8", "replace")
 
     def screen(self):
-        result = subprocess.run(
-            [str(ROOT / "bin/test-terminalscreen")],
-            input=json.dumps(self.screen_events), capture_output=True, text=True, timeout=5,
-        )
-        if result.returncode:
-            raise AssertionError("Cannot reconstruct terminal screen: " + result.stderr)
-        return json.loads(result.stdout)
+        if self.screen_process is None:
+            self.screen_process = subprocess.Popen(
+                [str(ROOT / "bin/test-terminalscreen")],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
+            )
+        if self.screen_event_count != len(self.screen_events):
+            self.screen_process.stdin.write(json.dumps(self.screen_events[self.screen_event_count:]) + "\n")
+            self.screen_process.stdin.flush()
+            if not select.select([self.screen_process.stdout], [], [], 5)[0]:
+                raise AssertionError("Timed out reconstructing terminal screen")
+            line = self.screen_process.stdout.readline()
+            if not line:
+                raise AssertionError("Terminal screen helper exited before returning a frame")
+            self.last_screen = json.loads(line)
+            self.screen_event_count = len(self.screen_events)
+        return self.last_screen
 
     def expect_screen(self, text):
         self.wait(lambda: text in "\n".join(self.screen()["rows"]), "visible " + repr(text))
@@ -209,3 +236,11 @@ class Terminal:
         finally:
             os.close(self.master)
             os.close(self.slave)
+            if self.screen_process is not None:
+                self.screen_process.stdin.close()
+                try:
+                    self.screen_process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    self.screen_process.kill()
+                    self.screen_process.wait()
+                self.screen_process.stdout.close()
