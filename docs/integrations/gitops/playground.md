@@ -1,12 +1,16 @@
 # Argo and Flux playground
 
-[Argo CD](../argo/README.md) and [Flux](../flux/README.md) · [Kubernetes playground](../kubernetes/playground.md)
+[Argo CD](../argo/README.md) · [Flux](../flux/README.md) · [Kubernetes playground](../kubernetes/playground.md)
 
-These examples install real controllers and disposable workloads on Minikube for testing Plous Monitor. They are separate from `scripts/playground.py` and its existing workloads. Run the commands from the repository root with Helm and kubectl installed.
+Install real controllers and sample workloads in a disposable Minikube cluster. These examples are separate from `scripts/playground.py`.
+
+Run from the Plous checkout with Helm, kubectl, and network access.
 
 ## Install
 
-Use a running disposable cluster with internet access. Reserve `plous-argo`, `plous-argo-demo`, `plous-flux`, and `plous-flux-demo` for these examples. Check that no other Argo or Flux installation owns their APIs before installing. Repeating the commands updates the same examples. Every cluster command below explicitly selects `minikube`; none changes the active context.
+Reserve `plous-argo`, `plous-argo-demo`, `plous-flux`, and `plous-flux-demo`. Check that another installation does not own the controller APIs.
+
+Commands explicitly select `minikube` and do not change the active context. Repeating them updates the same examples.
 
 ```sh
 kubectl --context minikube get namespaces
@@ -27,30 +31,26 @@ helm --kube-context minikube upgrade --install plous-flux flux2 \
 kubectl --context minikube apply -k tests/fixtures/playground/gitops
 ```
 
-The Argo chart runs its application controller, repository server, and Redis. Its API server and ApplicationSet controller have zero replicas; Dex and notifications are disabled. Flux uses its source, Kustomize, and Helm controllers through the community Helm chart. The fixtures pin controller charts, Git revisions, and Podinfo 6.11.2. No GitHub token, fork, Git write, or controller login is needed.
+The fixtures pin charts, source revisions, and Podinfo 6.11.2. They need no GitHub token, fork, controller login, or repository write.
 
-Flux reads the staging app directory from [flux2-kustomize-helm-example](https://github.com/fluxcd/flux2-kustomize-helm-example/tree/4f1a5b1051b469108d1bdf0ebec6c814427e3834). Local patches place it in `plous-flux-demo`, pin the chart, and disable Redis and HTTPRoute. The upstream infrastructure and bootstrap configurations are not applied. Argo uses Podinfo's public Helm chart and a pinned [Kustomize example](https://github.com/stefanprodan/podinfo/tree/d77ade33c0ac45b83a674fab93ee304652dfc53e/kustomize).
+Argo runs its application controller, repository server, and Redis. Its API server and ApplicationSet controller have zero replicas. Flux runs source, Kustomize, and Helm controllers.
+
+Sources use pinned [Flux examples](https://github.com/fluxcd/flux2-kustomize-helm-example/tree/4f1a5b1051b469108d1bdf0ebec6c814427e3834) and [Podinfo examples](https://github.com/stefanprodan/podinfo/tree/d77ade33c0ac45b83a674fab93ee304652dfc53e/kustomize). The upstream bootstrap and infrastructure are not applied.
 
 ## Explore in Plous
 
-Select the Minikube connection under **Monitor** and press **g** to discover the new APIs. Expand **Argo** or **Flux**, select its category, and keep **All namespaces** selected. Choose a row and press **Enter** for details; managed resources open in the Kubernetes view, and **Esc** returns.
+Select the cluster and press `g` to discover its APIs. Open Argo or Flux, choose a category, and keep All namespaces selected. Enter opens details and resource links. Esc returns.
 
 | View | Example | Expected observation |
 | --- | --- | --- |
-| Argo / Applications | `podinfo-healthy` | Synced and Healthy; open its Deployment or Service. |
-| Argo / Applications | `podinfo-degraded` | Synced and Degraded after the rollout deadline; its Deployment requests a deliberately nonexistent image. |
-| Argo / Applications | `podinfo-outofsync` | OutOfSync and Missing; automatic deployment is disabled and no workloads are created. |
-| Flux / Kustomizations | `podinfo` Kustomization | Ready; open its source object, HelmRelease, and resource inventory. |
+| Argo / Applications | `podinfo-healthy` | Synced and Healthy. Open its Deployment or Service. |
+| Argo / Applications | `podinfo-degraded` | Synced and Degraded after the rollout deadline. Its Deployment requests a deliberately nonexistent image. |
+| Argo / Applications | `podinfo-outofsync` | OutOfSync and Missing. Automatic deployment is disabled and no workloads are created. |
+| Flux / Kustomizations | `podinfo` Kustomization | Ready. Open its source object, HelmRelease, and resource inventory. |
 | Flux / HelmReleases | `podinfo` HelmRelease in `plous-flux-demo` | Ready with the installed chart version and release result. |
 | Flux / Kustomizations | `broken-path` | Not ready because its source path does not exist. |
-| Flux / Kustomizations | `waiting-on-dependency` | Not ready; follow its dependency link to `broken-path`. |
-| Flux / Kustomizations | `paused-example` | Suspended; it has never applied resources. |
-
-**Argo / Projects** includes `plous-playground` with its namespace-scoped Application links. **Argo / ApplicationSets** is empty in this fixture. **Flux / Sources** includes `flux-example` and `podinfo`, plus HelmChart objects created by the controllers.
-
-Controller startup, repository downloads, and image pulls can take several minutes. The degraded Argo workload has a 60-second rollout deadline and may show Progressing first. A Synced Application can be Degraded because sync and workload health measure different things. The broken and suspended cases are intentional; do not wait for every object to become Ready.
-
-Check the live controller reports directly:
+| Flux / Kustomizations | `waiting-on-dependency` | Not ready. Follow its dependency link to `broken-path`. |
+| Flux / Kustomizations | `paused-example` | Suspended. It has never applied resources. |
 
 ```sh
 kubectl --context minikube get applications.argoproj.io -n plous-argo
@@ -59,11 +59,17 @@ kubectl --context minikube get helmreleases.helm.toolkit.fluxcd.io -n plous-flux
 kubectl --context minikube get gitrepositories.source.toolkit.fluxcd.io -n plous-flux
 ```
 
-To validate local changes without saving them, use `kubectl --context minikube apply --dry-run=server -k tests/fixtures/playground/gitops`. This requires the controllers' APIs to be installed. These manifests contain desired configuration only; controller status is never fabricated.
+Argo Projects contains `plous-playground`. ApplicationSets is empty. Flux Sources includes `flux-example`, `podinfo`, and controller-created HelmCharts.
+
+Downloads can take several minutes. The degraded Argo workload has a 60-second rollout deadline and can show Progressing first. Broken and suspended cases are intentional. Do not wait for every object to become Ready.
+
+The kubectl commands above show live controller status. Use `kubectl --context minikube apply --dry-run=server -k tests/fixtures/playground/gitops` to validate without saving. This requires installed controller APIs. Fixture files do not fabricate status.
 
 ## Remove these examples
 
-Remove the applications while their controllers can process finalizers, then remove the controllers. Stop if application deletion fails; inspect the error before continuing. These commands remove the four reserved namespaces and their contents. They do not remove the separate Kubernetes playground.
+Remove applications while their controllers can process finalizers, then remove the controllers. Stop and inspect any deletion failure before continuing.
+
+These commands delete the four reserved namespaces and their contents. They leave the separate Kubernetes playground intact.
 
 ```sh
 kubectl --context minikube delete applications.argoproj.io -n plous-argo \
@@ -76,4 +82,6 @@ helm --kube-context minikube uninstall plous-flux -n plous-flux --wait
 kubectl --context minikube delete -f tests/fixtures/playground/gitops/namespaces.yaml --ignore-not-found
 ```
 
-The charts retain their CRDs on uninstall. Plous can therefore still discover empty Argo and Flux APIs after cleanup. Remove those definitions only when no other installation or custom resources need them. Setup and removal are manual, explicit cluster operations; the default test suite does not run them.
+Charts retain their CRDs on uninstall, so Plous can still discover empty APIs. Remove definitions only when no other installation or objects need them.
+
+The default tests do not perform this installation or cleanup.

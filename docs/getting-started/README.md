@@ -1,74 +1,58 @@
 # Quickstart
 
-[Documentation](../README.md) · [Choose your workflow](workflows.md) · [Installation](installation.md)
+[Documentation](../README.md) · [Installation](installation.md)
 
-Launch the terminal workspace, select your cluster, and inspect a Pod's status and logs. No AI provider is required. For tools in an independent coding-agent session, choose [MCP server](../mcp/README.md) or [plous-debug](../agent-skills/plous-debug.md).
+Open Plous and read a Pod's logs. You do not need to configure an AI provider.
 
 ## Before you begin
 
-Use macOS or Linux and an interactive terminal at least **80 columns by 16 rows**. Plous is an early development build; native Windows is not supported.
-
-Plous embeds the Go libraries for Kubernetes access and Helm. These features do not require `kubectl` or `helm` executables. A kubeconfig that uses an external authentication helper still requires that helper.
+You need macOS or Linux, Homebrew, and a working kubeconfig. Use a terminal at least 80 columns wide and 16 rows tall.
 
 ## Install and launch
-
-Run these commands in your shell:
 
 ```sh
 brew install simjay/tap/plous
 plous
 ```
 
-If Plous is already installed, run `plous`. See [Installation and updates](installation.md) for source builds, platform coverage, and differences between published releases and development docs.
-
-Plous saves data under `~/.plous/`. For an independent profile:
-
-```sh
-plous --data-dir /tmp/plous-demo
-```
-
-A separate profile isolates saved settings and conversations. Its connections still point to the infrastructure you choose. See [Data and privacy](../reference/data-and-privacy.md) for profiles and backups.
+Already installed? Run `plous`. For other installation methods, see [Installation and updates](installation.md).
 
 ## Start with Current Workspace
 
-Plous opens **Overview** for the merged kubeconfig `current-context`. Switch to **Explore** with `22` or `:2` to see Pods in its namespace, or `default` when unset. It reads the inherited `KUBECONFIG` path list, otherwise `~/.kube/config`. It contacts only the selected target. Use `:K` / `:connections` to search local context names and select another target within Plous. Selection never changes kubeconfig.
+Plous opens your current Kubernetes context. Check the context name in the header before continuing.
 
-If configuration is missing or invalid, choose a context with Enter or `:K`, or open **Settings → Choose Kubeconfig**. Use `:g` to retry after correcting the file. General chat and AI setup remain available.
+To choose another context, type `:K` and press Enter. This changes the selection in Plous without editing your kubeconfig.
 
-An external kubeconfig change shows a notice; it does not switch an open view. Relaunching reads the default again.
-
-## Learn the basic controls
-
-| Key | Use it to |
-| --- | --- |
-| Alt+Left / Alt+Right | Move between the workspace, main, and assistant panels. |
-| Up / Down, then Enter | Select and open an item. |
-| `/` | Search the focused panel. |
-| Esc | Close the current search, editor, or detail view. |
-| `hh` | Open Help while navigating. |
-| `ff` or `:f` | Fullscreen or restore the previous layout. |
-
-Settings uses arrows and Enter. Alt+Left/Right leave and resume the window without applying edits. Unmodified letter shortcuts stay ordinary text while typing in a field.
-
-Press **11** for Overview, **22** for Explore, or **33** for Activity. See [Interface and navigation](../guides/navigation.md) for the full tour.
+If Plous cannot connect, open **Settings → Choose Kubeconfig** or follow [connection troubleshooting](../reference/troubleshooting.md).
 
 ## Inspect your first workload
 
-1. In Overview, check **Needs Attention** for a resource to investigate. Or press **22** for Explore and type `:pods` in navigation.
-2. Check the context and namespace in the header. Use **n** to select a namespace and **/** to filter the list.
-3. Select a Pod and press Enter. Describe summarizes its reported state. Open Events or Related for supporting evidence.
-4. Press **l** for logs. Use **o** if you need another container, **/** to find text in the retained buffer, and Esc to return to details.
-5. If metrics are available, press **I** in Describe to inspect CPU and memory samples. Missing metrics remain unavailable rather than zero.
+1. Press `22` to open Explore.
+2. Type `:pods` and press Enter.
+3. Press `n` to choose a namespace.
+4. Select a Pod and press Enter.
+5. Press `l` to open its logs. Press `o` to choose another container.
+6. Press Esc to return to the Pod.
 
-You have now moved from cluster health to an individual workload and its evidence. [Kubernetes Explore](../integrations/kubernetes/README.md) covers resource actions, YAML editing, container terminals, and charts. [Overview](../guides/overview.md) explains the dashboard's counts and coverage.
+## Learn the basic controls
+
+| Key | Action |
+| --- | --- |
+| Up / Down, Enter | Select and open an item |
+| Alt+Left / Alt+Right | Move between panels |
+| `/` | Search the current panel |
+| Esc | Close the current search, input, or detail view |
+| `hh` | Open Help while navigating |
+| `ff` | Expand or restore the main panel |
+
+Use `11` for Overview, `22` for Explore, and `33` for Activity. See the [keymap](../reference/keymap.md) for all controls.
 
 ## Leave and return
 
-Run `:quit` while navigating, or press **Ctrl+C** outside native agent input. Plous keeps your saved settings, conversations, and drafts in the same data directory. Each launch starts with the current kubeconfig default.
+Type `:quit` and press Enter. Plous saves your settings and conversations.
 
 ## Next steps
 
-- [Investigate a restarting Pod](../guides/investigate-restarting-pod.md) in a disposable playground.
-- [Save workspaces and connections](../guides/workspaces.md) for your existing clusters.
-- [Configure the AI assistant](../guides/ai-chat.md) when you want help interpreting evidence.
-- [Update or uninstall](installation.md#update) Plous.
+- [Investigate a restarting Pod](../guides/investigate-restarting-pod.md) in a disposable cluster.
+- [Save a workspace](../guides/workspaces.md) for clusters you use often.
+- [Set up an AI assistant](../guides/ai-chat.md), [connect an MCP client](../mcp/setup.md), or install [plous-debug](../agent-skills/plous-debug.md).

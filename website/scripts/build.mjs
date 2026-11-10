@@ -37,7 +37,7 @@ await cp(path.join(upstream,'LICENSE'),path.join(assets,'Rune-LICENSE.txt'));
 await cp(path.join(website,'scripts/client.mjs'),path.join(assets,'client.mjs'));
 await run('cargo',['build','--locked','--target','wasm32-unknown-unknown','--release','--lib']);
 await run('wasm-bindgen',['--target','web','--out-dir',assets,'--out-name','app','--remove-name-section',path.join(metadata.target_directory,'wasm32-unknown-unknown/release/plous_docs_rune.wasm')]);
-const colors={'#ffffff':'bg','#f6f8fc':'surface','#172033':'ink','#56657a':'muted','#e2e8f0':'line','#326ce5':'blue','#edf3ff':'wash','#206a43':'green','#7045ba':'violet','#905500':'amber','#b63e50':'red'};
+const colors={'#ffffff':'bg','#f6f8fc':'surface','#172033':'ink','#56657a':'muted','#e2e8f0':'line','#326ce5':'blue','#2458b8':'code-blue','#edf3ff':'wash','#206a43':'green','#7045ba':'violet','#905500':'amber','#b63e50':'red'};
 function controls(html) {
   // Rune's exported press targets retain their keys; use native buttons before the live handoff.
   const stack=[];
@@ -111,4 +111,4 @@ await writeFile(path.join(dist,'sitemap.xml'),`<?xml version="1.0" encoding="UTF
 await writeFile(path.join(rune,'.generated/build.json'),JSON.stringify({base:content.base,guides:content.pages.filter(p=>p.route.startsWith('docs/')).length,rune:dependency.source.split('#').at(-1)},null,2)+'\n');
 console.log(`Built ${pages.length} Rune pages and compatibility redirects in ${dist}`);
 
-await writeFile(path.join(dist,'site.json'),JSON.stringify({version:content.version,base:content.base,routes:pages.filter(p=>p.route!=='404/').map(p=>p.route)},null,2)+'\n');
+await writeFile(path.join(dist,'site.json'),JSON.stringify({version:content.version,revision:process.env.PLOUS_DOCS_REVISION??null,source:process.env.PLOUS_DOCS_SOURCE_REF??process.env.PLOUS_DOCS_VERSION??'main',base:content.base,routes:pages.filter(p=>p.route!=='404/').map(p=>p.route)},null,2)+'\n');

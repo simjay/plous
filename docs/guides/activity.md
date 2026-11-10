@@ -1,48 +1,50 @@
 # Activity and history
 
-[Documentation](../README.md) · [Workspaces](workspaces.md) · [Helm](../integrations/helm/README.md)
+[Documentation](../README.md) · [Workspaces](workspaces.md)
 
-Use Activity to answer “What changed in this workspace?” and “What happened to this Helm operation?” It combines saved workspace configuration revisions, recorded Helm operation outcomes, and retained Helm revisions observed by Plous.
+Activity shows saved workspace changes, recorded Helm operations, and Helm revisions that Plous has observed.
 
 ## Open and filter the timeline
 
-Press **33** or `:3` while navigating. Entries are grouped by date. Left/Right selects **All activity**, **Plous actions**, **Workspace changes**, or **Observed Helm history**. Use **/** to filter and **g** to refresh.
+Press `33` or `:3`. Use Left / Right to choose **All activity**, **Plous actions**, **Workspace changes**, or **Observed Helm history**.
 
-Wide layouts show the selected entry's preview beside the timeline. Enter opens details in narrow layouts. Esc returns with selection and filters preserved. If loading fails, **d** opens the full error. Exact controls are in the [keymap](../reference/keymap.md).
+Press `/` to filter and `g` to refresh. Wide layouts show a preview beside the timeline. In narrow layouts, press Enter for details. If loading fails, press `d` for the full error.
 
 ## Review a workspace change
 
-Workspace entries record changes to saved configuration, such as a connection's name or settings. Select an entry to see its Before/After fields. **d View changes** or `:v` opens the exact saved revision comparison. The first revision compares against an empty snapshot.
+Select a workspace entry to see its Before / After fields. Press **d View changes** or `:v` for the saved revision comparison.
 
-The comparison is read-only. It has no Apply or rollback action and does not restore infrastructure. Workspace changes cover the workspace; Helm entries follow the selected connection.
+The first revision compares against an empty workspace. Comparisons are read-only and do not restore cluster resources.
 
 ## Inspect a Helm operation
 
-A recorded outcome describes the submitted operation and its captured target. An unconfirmed submission stays **unknown**. A successful Helm operation does not establish that its workloads are ready, and a failed or interrupted operation can have partial effects.
+An operation entry shows what Plous submitted and the cluster it targeted. An unconfirmed result stays **unknown**.
 
-Select a release link to inspect it. Plous checks that the saved connection still matches the recorded target before following the link. If it has changed, the link stops rather than opening another cluster. Inspect current release and workload state before deciding whether to retry an operation. See [Helm rollback](../integrations/helm/README.md#rollback).
+A successful Helm operation does not prove that its Pods are ready. Failed or interrupted operations can have partial effects. Check the current release before retrying.
+
+Release links open only when the saved connection still matches the recorded target. See [Helm rollback](../integrations/helm/README.md#rollback).
 
 ## Revisit observed release history
 
-Opening Helm release details can retain observations of its stored revisions. Activity separates the source's timestamp from the time Plous read it and labels fallback times. It does not invent an actor or claim that Plous initiated an observed change.
+Plous can save the Helm revisions it reads while you inspect a release. Activity shows when Helm recorded the revision and when Plous read it.
 
-Records group only when the connection, configuration, namespace, release, and revision match exactly. **O** opens the original observations. A recorded `deployed` status describes Helm's release record; it does not prove current Pod health.
+Press `O` for the original observations. A recorded `deployed` status describes that Helm revision, not current workload health.
 
 ## Choose the right history
 
-| If you need… | Use | Coverage |
-| --- | --- | --- |
-| Saved connection or workspace changes | Activity → Workspace changes | Exact Plous configuration revisions |
-| A Helm operation's recorded outcome | Activity → Plous actions | Operations recorded by Plous, including unknown outcomes |
-| Previously observed Helm release records | Activity → Observed Helm history | Retained observations, not every cluster event |
-| An answer and the evidence it received | [Chat history and Sources](ai-chat.md#inspect-a-replys-sources) | Saved conversations and tool observations in their captured scope |
-| Recent cluster change signals | [Overview → Recent Deployments](overview.md#recent-deployments) | Timestamped observations retained during the current cluster session |
-| CPU and memory samples | [Usage charts](../integrations/kubernetes/README.md#usage-and-charts) | A bounded in-memory window while the view collects samples |
+| Question | Where to look |
+| --- | --- |
+| What workspace settings changed? | Activity → Workspace changes |
+| What happened to a Helm operation? | Activity → Plous actions |
+| Which Helm revisions did Plous observe? | Activity → Observed Helm history |
+| What supported an assistant's answer? | [Chat history and Sources](ai-chat.md#inspect-a-replys-sources) |
+| What changed recently in this cluster session? | [Overview → Recent Deployments](overview.md#recent-deployments) |
+| What were CPU and memory measurements? | [Usage charts](../integrations/kubernetes/README.md#usage-and-charts) |
 
-Activity is not a complete Kubernetes audit log, a Git commit browser, or a continuous archive of resource contents. Browsing a resource does not save all of its values and logs for future comparison. History tools can compare observations that were explicitly saved as evidence.
+Activity is not a complete Kubernetes audit log. Browsing a resource does not save all its values and logs.
 
 ## Keep history across restarts
 
-Activity records remain in the selected local profile. Relaunch with the same data directory to retain them; `--data-dir` selects an independent profile. A renamed connection keeps its identity and history. Chart samples and Overview's recent-observation feed remain temporary.
+Use the same Plous data directory to retain Activity. `--data-dir` selects a separate profile. Renaming a connection keeps its history.
 
-See [Data and privacy](../reference/data-and-privacy.md#back-up-or-recover-a-profile) for profile backups and [troubleshooting](../reference/troubleshooting.md#plous-reports-corrupt-data) for storage recovery.
+Chart samples and Overview's recent-change feed are temporary. See [backups](../reference/data-and-privacy.md#back-up-or-recover-a-profile) for saved data.

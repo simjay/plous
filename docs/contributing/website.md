@@ -2,80 +2,114 @@
 
 [Contributing](README.md) · [Documentation](../README.md)
 
-The Plous website is a Rune application under `website/rune/`. Rune owns the homepage, documentation layout, navigation, typography, icons, tables, and code presentation. Markdown in `docs/` remains the content source for the site, GitHub readers, and distribution archives.
-
-The same Rune view exports responsive semantic HTML and runs in the browser through WebAssembly and WebGPU. Static HTML is the first paint and remains usable without the live renderer. GitHub Pages serves the generated files; no server-side application is required.
+Rune renders the website from Markdown in `docs/`. It exports static HTML, then starts the same view through WebAssembly and WebGPU where available. GitHub Pages serves the files without an application server.
 
 ## Preview and verify
 
-Website development requires Node.js **22.23.4 or newer**, npm, Rust **1.99.1**, the `wasm32-unknown-unknown` target, and wasm-bindgen CLI **0.2.129**. These tools are separate from building or running Plous.
+You need Node.js 22.23.4+, npm, Rust 1.99.1, its Wasm target, and wasm-bindgen CLI 0.2.129. These are website tools, not Plous runtime requirements.
 
 ```sh
 npm ci --prefix website
-rustup toolchain install 1.99.1 --profile minimal --target wasm32-unknown-unknown
+rustup toolchain install 1.99.1 \
+  --profile minimal --target wasm32-unknown-unknown
 cargo +1.99.1 install wasm-bindgen-cli --version 0.2.129 --locked
 make website-check
 make website-build
 npm --prefix website run preview
 ```
 
-Open `http://127.0.0.1:8046/plous/`. The preview serves the last static build. Rebuild and reload after editing source files. `make website-dev` builds and then serves the result. Stop the preview with Ctrl+C.
+Open `http://127.0.0.1:8046/plous/`. Rebuild after source edits. Stop the preview with Ctrl+C.
 
-The build pins Rune to one upstream revision and uses its licensed Geist and Geist Mono font files for both static and live rendering. Pagefind supplies local search. Rune renders every published page.
+| Check | What it verifies |
+| --- | --- |
+| `make docs-check` | Source titles, links, anchors, navigation, prose punctuation |
+| `make website-check` | Content mapping, examples, headings, redirects, publication rules, Rune compilation |
+| `make website-build` | Full export, generated links, assets, search, syntax colors |
 
-`make docs-check` validates source links, headings, and index reachability. `make website-check` tests content coverage, literal examples, heading offsets, entry paths, and compatibility redirects, then checks the Rust view. `make website-build` compiles Rune, exports every page, builds search, and checks generated links, anchors, image alternatives, source coverage, and runtime assets.
+Review Quickstart, MCP setup, and a long reference at desktop and mobile widths. Check search, copy, theme, and code colors. Use `?static=1` for static HTML. The document's `data-runtime` reports the live Rune handoff.
 
-Check the homepage, a long guide, and a table-heavy reference at desktop and mobile widths. Verify navigation, search, code copying, themes, and heading links. Append `?static=1` to inspect the static export. The browser document's `data-runtime` attribute reports the live handoff. Local verification does not establish hosted publication or full screen-reader compatibility.
+Passing structural checks does not establish readability. Read each changed guide as a user following its steps.
 
 ## Layout and browser integration
 
-`website/rune/src/lib.rs` owns the Rune view, responsive columns, type scale, vector icons, and theme colors. `website/scripts/navigation.mjs` owns the flat navigation groups. `prepare.mjs` reads every guide, preserves code examples, and prepares headings and compiler input.
+| Source | Owns |
+| --- | --- |
+| `website/rune/src/lib.rs` | Layout, typography, colors, icons, Markdown rendering |
+| `scripts/navigation.mjs` | Flat sidebar groups |
+| `scripts/prepare.mjs` | Markdown, links, headings, compiler input |
+| `scripts/build.mjs` | Native HTML export, Wasm, fonts, assets, search |
+| `scripts/template.html` | Metadata and browser dialogs |
+| `scripts/client.mjs` | Static controls, dialogs, themes, live startup |
+| `scripts/publish.py` | Release archives, corrections, version assembly |
 
-`build.mjs` invokes Rune's native HTML exporter and Wasm build, then packages assets and search in `website/dist/`. `template.html` supplies metadata and native search/navigation dialogs. `client.mjs` connects those dialogs, static controls, theme persistence, aliases, and the live renderer. Mobile navigation reuses the exported Rune sidebar. The static button adapter and inline-text CSS accommodate the pinned Rune export format.
+Paths in this table are under `website/`. Generated input, outputs, and dependencies are ignored by Git. The build includes Rune and Geist license files from the pinned dependency checkout.
 
-Generated compiler input, build outputs, fonts copied from the dependency checkout, and Wasm files remain ignored by Git. Dependency sources, license files, and font files are packaged from the pinned Cargo checkout during builds.
+Do not use `MarkdownStyle::shell_code` for syntax-colored examples. Rune treats that option as plain shell text. Use the normal code-block theme and syntax palette.
 
 ## Content and links
 
-`website/scripts/content.mjs` maps Markdown into website routes. For example, `docs/getting-started/README.md` becomes `/plous/docs/getting-started/`. Existing GitHub file paths stay intact. Relative documentation links become website links, assets are copied, and references to implementation files lead to GitHub. Development pages link to editable Markdown on main. Release pages link to the exact tagged source.
+Keep one source under `docs/`. Relative guide links become website routes. For example, `docs/getting-started/README.md` becomes `/plous/docs/getting-started/` at the default alias.
 
-Keep one page per workflow. Put installation and examples in guides, controls and settings in reference pages, and contributor material here. The landing page introduces implemented features and clearly identifies the development build. Do not add release claims or installation channels before verifying them.
+Write one task per guide. Put exact commands and limits in references. Keep implementation details in contributor pages.
 
-The homepage and documentation index offer three workflows: Terminal UI, MCP server, and Agent skills. The user sidebar has Get started, Terminal UI, MCP server, Agent skills, Tutorials, Integrations, and Reference. Each skill has one flat document under docs/agent-skills; plous-debug has no child directory. Argo CD and Flux have separate integration guides. Developers has its own navigation, with links to architecture, AI implementation, testing and benchmarks, releases, and this guide. Both areas use the same site, search, and Markdown source.
+Use short sentences and concrete names. Avoid semicolons and em dashes in prose. Put warnings beside the action they affect. Code and quoted output keep their literal punctuation.
 
-Keep Get started and the current section expanded by default. Keep other sections collapsed and avoid nested directory trees. Automatic sidebar-order pagination is disabled; finish guides with relevant next steps or reference links in the Markdown so GitHub readers receive the same guidance. Preserve existing URLs when changing navigation labels. Moved guides use static redirect pages with a canonical destination; the former combined GitOps URL routes controller-specific heading links to the corresponding guide.
+Label code fences by language. Format long argument arrays across lines. Keep plain-text output separate from commands. Verify colors in light and dark themes, static HTML, and live Rune.
+
+Keep the approved flat navigation groups and separate Argo CD and Flux guides. Preserve public routes and heading links when moving content. Development source links use main. Release corrections link to their exact source commit.
 
 ## GitHub Pages setup
 
-The repository owner must enable **Settings → Pages → Build and deployment → Source → GitHub Actions**. Allow the `github-pages` environment to deploy from `main` and permit the workflow's declared Pages permissions. No personal access token is required.
+Enable **Settings → Pages → Source → GitHub Actions**. Allow the `github-pages` environment to deploy from main. Only the deployment job receives Pages write permissions.
 
-The website is published at [simjay.github.io/plous](https://simjay.github.io/plous/). The default build uses that origin and base path. The Markdown index remains available for source readers and offline archives.
+The published site is [simjay.github.io/plous](https://simjay.github.io/plous/).
 
-For a custom domain, configure the domain and its DNS in GitHub Pages, then set these repository Actions variables:
+| Actions variable | Default |
+| --- | --- |
+| `PLOUS_SITE_URL` | `https://simjay.github.io` |
+| `PLOUS_SITE_BASE` | `/plous` |
 
-| Variable | Default | Custom domain example |
-| --- | --- | --- |
-| `PLOUS_SITE_URL` | `https://simjay.github.io` | `https://docs.example.com` |
-| `PLOUS_SITE_BASE` | `/plous` | `/` |
-
-Use the same variables locally to verify either deployment layout. For example:
+For a custom domain, configure Pages and DNS, then set the origin and base. Check domain-root builds locally:
 
 ```sh
-PLOUS_SITE_URL=https://docs.example.com PLOUS_SITE_BASE=/ make website-build
+PLOUS_SITE_URL=https://docs.example.com \
+  PLOUS_SITE_BASE=/ make website-build
 ```
 
-The version assembler packages `website/published/` for Pages. Build outputs, dependency directories, private data, and local dot-directories stay out of source control and deployment artifacts.
+Pages receives `website/published/`. Build outputs, private data, and local internals stay out of source control.
 
 ## Publication and recovery
 
-The **Documentation website** workflow validates and builds pull requests, pushes to `main`, and manual runs. Main publishes Development at `/plous/dev/`. Pull requests retain a downloadable site artifact for seven days and cannot deploy.
+| Event | Result |
+| --- | --- |
+| Pull request | Validate and build a downloadable preview. No deployment. |
+| Main push | Update Development and preserve published versions |
+| Application release | Save the tagged docs archive and queue Pages |
+| Documentation correction | Add a commit-identified correction and republish that version |
 
-The Release workflow builds an additional snapshot from its exact tag. Before publishing the release it verifies and attaches `documentation-vMAJOR.MINOR.PATCH.tar.gz` and its SHA-256 file alongside application archives. Those release assets preserve the website independently of expiring Actions artifacts. Versioned website publication starts with v0.0.3; earlier releases retain their Markdown on GitHub.
+Default routes open the latest released version. `/plous/dev/` follows main. `/plous/v0.0.3/` serves docs for that application version. Search stays within the selected version.
 
-After a successful release, the workflow queues Documentation website on main. That workflow builds current Development docs, downloads and checks every published documentation snapshot, and assembles one complete Pages artifact. Published snapshots live at `/plous/vMAJOR.MINOR.PATCH/`. Existing unversioned routes redirect to the latest release while preserving query strings and heading fragments. Before the first snapshot exists, they lead to Development. The version selector keeps the current guide when it exists in the selected version; search stays within that version.
+Release archives and SHA-256 files live as GitHub release assets. They do not depend on expiring Actions artifacts. Each Pages build verifies and assembles all published versions.
 
-Documentation-only pushes do not change `cmd/plous/VERSION` or publish an application release. They update Development while preserving released snapshots. Deployment runs are serialized, and only the deployment job receives Pages write permissions. Release-triggered deployment runs on main so the Pages environment can remain restricted to main.
+### Correct released docs
 
-A failed build or snapshot integrity check leaves the existing site available. Rerun failed jobs or dispatch Documentation website on main to rebuild. A failed documentation snapshot build blocks its application release. A failed Pages deployment after release can be retried without republishing the release or Homebrew package. Correct development content on main; published version snapshots stay tied to their release source.
+Run **Correct released documentation** on main and enter the released version. For example:
 
-Verify the deployment result and URL before reporting hosted publication. Keep the Markdown index and existing GitHub paths for source readers and offline archives.
+```sh
+gh workflow run docs-correction.yml --ref main \
+  -f release_version=v0.0.3
+```
+
+The workflow rejects a draft release, a version mismatch, or application-source changes relative to the tag. It builds the current documentation and records its exact commit.
+
+Corrections add new archives without replacing the original snapshot or application assets. Pages uses the newest complete correction. The application version and release tag do not change, and Homebrew is not triggered.
+
+If the application has advanced beyond the target release, prepare the correction from matching application source. Do not relabel newer behavior as older-version docs.
+
+### Recover a failed publication
+
+Rerun failed jobs or dispatch Documentation website on main. An invalid archive or failed build leaves the current site available.
+
+A correction retry reuses existing assets for that commit and finishes a partial upload. It does not overwrite published archives. The next successful Pages build includes it.
+
+Confirm the workflow result and public URL before reporting deployment success.

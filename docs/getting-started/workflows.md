@@ -2,24 +2,24 @@
 
 [Documentation](../README.md) · [Installation](installation.md)
 
-Build Plous once, then choose where you want to work. All workflows use your Kubernetes permissions. The terminal workspace works without AI setup.
-
-| I want to… | Start here | What runs |
-| --- | --- | --- |
-| Inspect clusters in an interactive terminal | [Terminal UI quickstart](README.md) | Plous with Overview, Explore, Activity, and an optional assistant panel |
-| Give an agent direct access to Plous tools | [MCP server setup](../mcp/setup.md) | A local `plous mcp serve` subprocess launched by the client |
-| Guide my coding agent through debugging | [plous-debug](../agent-skills/plous-debug.md) | A skill plus Plous MCP tools inside an existing Codex or Claude Code session |
+Install Plous once, then choose where to work.
 
 ## Terminal UI
 
-Use the [quickstart](README.md) to inspect your first workload. The right assistant panel can run the built-in Plous agent or your installed Claude Code or Codex. Plous configures MCP automatically for those native panels.
+Inspect clusters in a terminal with Overview, Explore, and Activity. AI is optional. The assistant panel can run Plous, Claude Code, or Codex.
+
+[Open the quickstart](README.md).
 
 ## MCP server
 
-Use [MCP setup](../mcp/setup.md) to connect tools directly without installing a skill or opening the TUI. The server exposes cluster reads and saved evidence, with optional active diagnostics. Your client supplies the model and authentication.
+Give an agent access to Plous's cluster tools without opening the terminal UI. Your MCP client starts Plous as a subprocess and supplies the model and authentication.
+
+[Connect an MCP client](../mcp/setup.md).
 
 ## Agent skills
 
-Use [plous-debug](../agent-skills/plous-debug.md) for a guided investigation, reproduction, and verification workflow in an independent coding-agent session. Managed setup installs the skill and registers MCP together. Your coding agent keeps its normal repository tools.
+Add **plous-debug** to an existing Codex or Claude Code session. The skill guides debugging, and MCP supplies the cluster tools. Your agent keeps its repository tools.
 
-A skill supplies workflow instructions; MCP supplies executable tools. Choose [Agent skills](../agent-skills/README.md) for guided debugging or [MCP server](../mcp/README.md) for direct integration.
+[Install plous-debug](../agent-skills/plous-debug.md).
+
+All three workflows use your Kubernetes permissions. Agent reads are enabled by default. Commands and temporary tests require [explicit setup](../mcp/active-diagnostics.md).

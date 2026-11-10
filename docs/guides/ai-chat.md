@@ -1,148 +1,146 @@
 # Set up AI chat
 
-[Documentation](../README.md) · [Plous MCP](plous-mcp.md) · [Data and privacy](../reference/data-and-privacy.md)
+[Documentation](../README.md) · [Claude Code and Codex](plous-mcp.md)
 
-The right assistant panel runs the agent selected in Settings. Plous is the default and uses OpenAI or Anthropic. Claude Code and Codex use your installed CLI and its authentication. All three use the same scoped Plous tools for connection reads and saved evidence. Tool views work without AI setup. The assistant defaults to reads. [Active debugging](../agent-skills/plous-debug.md#enable-active-debugging) can explicitly enable container exec and temporary diagnostic Jobs. General resource edits, deployments, scaling, and deletion remain human-operated.
+The right panel can run Plous, Claude Code, or Codex. Choose an agent in Settings. You can use the rest of Plous without AI.
 
-| Agent | Setup | Conversation and model controls |
-| --- | --- | --- |
-| **Plous** | Save an OpenAI or Anthropic provider connection in Settings | Plous composer, `/model`, history, and Sources |
-| **Claude Code** | Install and authenticate `claude` | The CLI's native prompt, menus, model selection, and conversation history |
-| **Codex** | Install and authenticate `codex` | The CLI's native prompt, menus, model selection, and conversation history |
-
-For built-in Plous chat, start with [Connect a vendor](#connect-a-vendor). For an installed agent inside the panel, use [Choose an agent](#choose-an-agent) below and the [panel walkthrough](plous-mcp.md#use-the-assistant-panel). To work in your own coding-agent session outside Plous, use [plous-debug](../agent-skills/plous-debug.md).
+| Agent | What you need |
+| --- | --- |
+| Plous | An OpenAI or Anthropic API key |
+| Claude Code | An installed and authenticated `claude` CLI |
+| Codex | An installed and authenticated `codex` CLI |
 
 ## Choose an agent
 
-Select the cluster you want to investigate first. Open Settings with **ss** or `:s`, choose **Agent** under Application, use Left/Right to choose Plous, Claude Code or Codex, then select Save. Selecting an option previews its setup; Save applies the agent choice, which persists across workspaces and restarts. Plous shows its provider connections. Claude Code and Codex show executable availability and use their own sign-in and model controls. Saving another agent closes the current native session and saves its tool evidence before switching. Finish or stop a Plous response before changing it.
+1. Select the cluster you want to investigate.
+2. Press `ss` or type `:s` to open Settings.
+3. Open **Application → Agent**.
+4. Use Left / Right to choose an agent, then **Save**.
+
+Browsing choices does not switch agents. Save applies your choice across workspaces and restarts. Switching away from a native agent closes its session after saving its tool evidence.
 
 ### Executables and authentication
 
-Claude Code defaults to `claude`; Codex defaults to `codex`. In **Settings → Application → Agent**, choose the agent and edit its **Entry command** to use an enterprise wrapper such as `celai codex` or `celai claude`, or an executable path. Commands are saved separately for each agent. Browsing choices preserves edits without changing the active agent; **Save** applies the choice and commands. Clearing a command restores its default. Changing a command closes an active native session and saves its tool evidence before applying the settings.
+Claude Code and Codex use your installed CLIs and their own sign-in. Plous does not install them or copy their credentials.
 
-The first word must be an installed executable on PATH or a path to one. Quote paths or arguments containing spaces, for example `"/opt/Company Tools/celai" codex`. Plous appends its launch options after your command's arguments, including during Codex setup. Commands run directly without a shell: aliases, shell functions, environment expansion, pipes and redirects are unavailable. Enterprise wrappers must forward the CLI arguments and support its native terminal and setup protocol.
+To use a wrapper, edit the agent's **Entry command** in Settings. For example, `celai codex` or `"/opt/Company Tools/celai" claude`.
 
-Install the CLI or wrapper first. Sign in through its native interface, either inside the panel or outside Plous. Plous does not install either binary or copy its credentials into Plous settings. An external agent needs no Plous API-key connection. Installing a CLI does not change the selected agent. If an entry command becomes unavailable, Plous reports it and keeps your selection. Your Plous drafts remain separate.
+The first word must name an installed executable. Plous runs it directly without a shell. Aliases, environment expansion, pipes, and redirects do not work. Wrappers must forward the CLI's launch arguments.
 
-Claude Code and Codex run their own interactive terminal UI inside the right panel. Their prompt, menus, model selection and conversation controls come directly from the installed application. The current native integration was checked with **Claude Code 2.1.284** and **codex-cli 0.160.0**, using local mock providers. There is no exact Codex version allowlist; installed releases must support the launch options and tool controls.
+If the command is unavailable, Plous reports an error and keeps your agent selection. See [native panel setup](plous-mcp.md#use-the-assistant-panel).
 
 ### Use the native terminal
 
-Press **cc** to enter the selected CLI. **Alt+Left/Right** moves between panels; **Ctrl+]** toggles agent focus. Ctrl+C goes to the focused native terminal. Use **Ctrl+]**, then **Ctrl+C** to exit Plous. The [native panel guide](plous-mcp.md#use-the-native-terminal) owns terminal input, scrollback, and conversation controls; the rest of this page focuses on built-in Plous chat.
+Press `cc` to enter the CLI. Use Alt+Left / Alt+Right to move between panels, or Ctrl+] to leave and return to the agent.
+
+Ctrl+C goes to the focused native CLI. To exit Plous, press Ctrl+] first, then Ctrl+C. See the [native terminal controls](plous-mcp.md#use-the-native-terminal).
 
 ### Session scope and saved evidence
 
-Native sessions retain the cluster captured when they opened. To change it, [close and reopen the session](plous-mcp.md#switch-connections-or-close-a-session). Native conversations stay with the CLI; Plous stores observations in labeled tool-evidence entries. Follow [Inspect saved evidence](plous-mcp.md#inspect-saved-evidence) to read those observations through Plous history and Sources.
+A native session keeps the cluster it opened with. To change clusters, [close and reopen the session](plous-mcp.md#switch-connections-or-close-a-session).
+
+The CLI stores its conversation. Plous separately saves the tool results used during that session. See [saved evidence](plous-mcp.md#inspect-saved-evidence).
 
 ## Connect a vendor
 
 For the built-in Plous agent:
 
-1. Open Settings with **ss** or `:s` while navigating.
-2. Under **Application**, open **Agent**, select **Plous**, then choose **Add provider connection**.
-3. Choose OpenAI or Anthropic, enter its API Key and select **Save**.
-4. Provider Save returns to the Agent view. Save the Plous agent choice if needed, close Settings, then press **cc** to write a message.
+1. Open **Settings → Application → Agent** and choose **Plous**.
+2. Select **Add provider connection**.
+3. Choose OpenAI or Anthropic, enter the API key, and save.
+4. Save the Plous agent choice, close Settings, and press `cc`.
 
-Provider forms return to the pending Agent choice on Save or Cancel. Canceling removal restores the provider draft. Configuring a provider does not switch agents, and saved Plous providers remain available while another agent is selected.
-
-You can save several connections. The first chooses an initial model; adding another preserves the selection. Esc cancels a form without saving. AI needs no separate interpreter or sandbox installation. Optional limits are in [agent configuration](../reference/configuration.md#agent-runtime-configuration).
+You can save several provider connections. Adding a provider does not switch the active agent or replace an existing model selection.
 
 ## Choose a model
 
-With Plous selected, freshly type `/model` or `/m` as the entire draft and submit it. Select a model under a saved vendor connection, then Enter; Esc keeps the current choice. The picker is local and makes no provider request. A checkmark marks the saved selection.
+With Plous selected, type `/model` or `/m` as the whole message and press Enter. Select a model and press Enter again. Esc keeps the current choice.
 
-| Vendor | Available choices in Plous | Initial default |
+| Provider | Models in Plous | Initial choice |
 | --- | --- | --- |
 | OpenAI | GPT-5.4 mini, GPT-5.4 | GPT-5.4 mini |
 | Anthropic | Claude Haiku 4.5, Claude Sonnet 5.5, Claude Opus 5.5 | Claude Sonnet 5.5 |
 
-The catalog is maintained by Plous, not discovered from your account. Your provider must allow the selected model. The selection applies across workspaces and is captured when each response starts. An unsupported saved choice requires explicit replacement; requests never silently fall back.
+The catalog comes from Plous, not your account. Your provider must permit the model. An unavailable saved model requires a new selection. Plous does not silently substitute another.
 
-With an external agent selected, slash commands are handled by that CLI. With Plous selected, pasted or restored `/model` is literal message text. Clear and type it again to open the picker. `//model` and `//m` send the literal command. Switching vendors sends subsequent request context and retrieved evidence to the newly selected vendor.
+The selection applies across workspaces. Changing providers sends subsequent request context to that provider.
+
+Paste does not run model commands. Type the command afresh to open the picker, or send `//model` to include `/model` literally. Native agents handle their own model commands.
 
 ## Workspace context
 
-The assistant header shows the active cluster context. It may read only that connection. Kubernetes, Helm, Argo and Flux share the captured cluster; Namespace is a page hint: the assistant may read other namespaces allowed by the same cluster credentials. Naming another connection does not grant access; select it in Plous first.
+Check the assistant header before sending. Each response uses the selected cluster as it was when the response started. Changing views does not redirect a running response.
 
-Sending captures the connection and safe current-page hint. Switching views afterward does not retarget the running response. Switching connections restores their separate conversations and drafts. General chat and read-only retained histories have no live tools.
+Reads can use other namespaces permitted by the same Kubernetes credentials. They cannot use another cluster. General chat and archived histories have no live cluster tools.
 
-Cluster tools return dated projected facts, including current Pod, Node and workload usage with source times and coverage. These reads work without opening a chart, but cannot retrieve unsaved chart history. History tools search/read saved messages and observations directly. Recent exchanges are already in context, so a follow-up need not trigger retrieval.
+Try:
 
-For an investigation, name the subject and ask for evidence, for example: `Why is this Pod restarting? Check status, recent events and the last 100 log lines. Separate observations from likely causes.` Use explicit [resource actions](../integrations/kubernetes/README.md#resource-actions) when you choose to change something.
+> Why is this Pod restarting? Check its status, events, and the last 100 log lines. Tell me what you found and what is still uncertain.
 
-Search, pagination and missing permissions can limit an answer. A search match is not a complete inventory. A saved observation is not proof of current cluster state. Review the answer's stated scope and Sources before relying on it.
+Agents read by default. Container commands and temporary tests require [active diagnostics](../mcp/active-diagnostics.md). Resource edits, scaling, deletion, and deployments remain user actions.
 
 ## Ask the assistant to show a view
 
-All three agents can open Plous views in the main panel. For example:
+Inside Plous, all three agents can open views. For example:
 
 - “Show this Deployment's YAML.”
-- “Show the Pods table in production, filtered by api.”
-- “Open the app container's logs and highlight connection refused.”
-- “Compare the web release's values at revisions 2 and 3.”
-- “Show the saved evidence behind that answer.”
+- “Open the app container's logs.”
+- “Compare Helm release revisions 2 and 3.”
 
-Keyboard focus and your chat draft stay where they are. Alt+Left/Right moves into the opened view. An open form, editor or overlay can block navigation; finish it and ask again. If you navigate while a view is loading, the late result does not replace your screen.
+Use Alt+Left / Alt+Right to enter the opened view. If a form or editor blocks the request, finish it and ask again.
 
-Logs initially show the latest 200 lines; **g** reconnects using the normal log controls. Evidence documents support find, selection, copy, Help and fullscreen; Esc or `:q` closes them. Comparisons use exact retained Helm revisions and mask sensitive values. Saved evidence retains its original timestamps, coverage and continuation fields. Opening a view does not change the agent's captured connection or authorize resource writes.
+Live views may read the cluster again. Sources shows the saved result that supported the original answer.
 
 ## Compose and navigate
 
-With **Plous** selected, **cc** or `:c` enters typing. Enter sends; Shift+Enter or Ctrl+J adds a newline. Paste adds to the draft without sending. Esc leaves typing and preserves draft/response. The composer grows to five rows. Plous shows the selected model and a local context estimate.
+With Plous selected, press `cc` or `:c` to type. Enter sends. Shift+Enter or Ctrl+J adds a newline. Esc leaves typing and keeps the draft and running response.
 
-While navigating, arrows or j/k scroll, Page Up/Down moves by page, Home reaches the oldest message, and End follows the latest output. Incoming text preserves your position while reading older output. `/` finds text; Enter finishes the query and n/N moves between matches. Page keys also scroll while typing; Home/End then move the draft caret.
+In conversation navigation, use arrows to scroll, Page Up / Down for a page, and Home / End for the oldest / latest output. Press `/` to find text.
 
-`:A` / `:readreply` opens the selected finished or stopped answer in the wider Markdown Viewer. It supports rendered/source mode, find, selection and copying. Links show destinations without opening a browser. Esc restores the conversation and draft. See the [keymap](../reference/keymap.md) for exact controls.
+Use `:A` or `:readreply` for the wider reply reader. It supports search, text selection, copying, and source mode. Esc returns to the conversation.
 
 ## Inspect a reply's sources
 
-These controls apply to Plous conversations, including saved external tool-evidence entries.
+1. Press Esc to leave typing.
+2. Select a reply with `[` / `]`.
+3. Press Enter for **Sources** or **Reply details**.
+4. Select a source and press Enter to read its saved result.
 
-Leave typing with Esc. Use [ or ] to select a reply, then Enter to open **Sources** or **Reply details**. One source opens directly; several show a list. Details include operation, original observation identity/time and available usage. Enter opens captured content in the read-only viewer.
+Sources retains the original observation time and any missing or incomplete data. It does not make a new cluster or provider request. Sources survives restart.
 
-A history receipt records the retrieval time; its original record has the earlier observation time. Sources uses only saved turn-bound reads and makes no new API or provider request. It survives restart. A citation by itself is not proof that the answer is supported. Denied or unavailable results are labeled.
-
-Esc closes each local layer and restores the reply, scroll and draft. Help remains available; Alt+Left/Right leave and resume Sources with its reading position intact. Routine model/usage details are here; meaningful scope or coverage limits belong in the answer.
+Check the observation time before treating a saved result as current. Esc returns through the source details to your reply and draft.
 
 ## Manage conversations
 
-The following controls manage built-in Plous conversations. Native CLI sessions use the controls described under [Choose an agent](#choose-an-agent).
-
-| Command | Result |
+| Command | Action |
 | --- | --- |
-| `:c` / `:chat` | Open the composer, keeping its draft |
-| `:C` / `:newchat` | Start a conversation in the active scope |
-| `:H` / `:openchat` | Browse conversation history |
-| `:X` / `:stopchat` | Stop the running response, retaining accepted text |
+| `:c` / `:chat` | Open the composer |
+| `:C` / `:newchat` | Start a new conversation |
+| `:H` / `:openchat` | Browse history |
+| `:X` / `:stopchat` | Stop a response |
 
-Only one response runs at a time. Hiding chat, moving panels or opening Help does not stop it. New conversations do not delete earlier history.
+One response runs at a time. Moving panels or hiding the assistant does not stop it. New conversations keep earlier history.
 
-History's **Choose history scope** opens cluster, saved-connection, General, and retained archived histories. Other scopes are read-only and do not grant tools or inject their messages into the selected connection. Use New to return to the active scope. Titles/dates can be filtered with `/`. See [retained data](../reference/data-and-privacy.md#retained-data-from-earlier-builds) for archived scopes.
-
-Drafts and selected conversations survive restart. Interrupted, cancelled and failed attempts keep their status; partial text is not treated as a completed answer. Only the current development storage format is supported.
+Each cluster connection has its own conversation and draft. **Choose history scope** opens other saved histories for reading without granting cluster tools. Use `/` to filter titles and dates.
 
 ## Limits and recovery
 
-For the Plous agent, the context meter estimates the full provider request locally, without a counting API call. When needed, Plous compacts older complete exchanges while preserving originals. Main and compaction share call, token and time allowances. The default turn timeout is 15 minutes. See [configuration](../reference/configuration.md#agent-runtime-configuration).
+Plous shows a local context estimate. It can shorten older exchanges in the active context while keeping the originals in history. The default response timeout is 15 minutes. See [runtime configuration](../reference/configuration.md#agent-runtime-configuration).
 
-Native Claude Code and Codex sessions have no Plous-imposed deadline or session-wide tool-call cap. They keep running while you navigate, resize or hide the panel. The three turn budgets apply only to the Plous agent. Native model selection, context, retries, compaction and spending remain CLI-managed. A fatal Plous tool failure stops tool access without closing the terminal; close and reopen the session to reconnect.
+Claude Code and Codex manage their own context, model calls, and spending. Plous does not impose a session-wide deadline on them.
 
-Press **Ctrl+]** to leave the native agent panel, then use **ii** or `:i` to cycle normal width, double width, hidden, and back to normal. Press **Ctrl+]** again to resume input in the same running CLI.
+For a failed Plous response, read the error, fix its cause, and send again. `:p` restores the last prompt into an empty draft. Accepted text stays visible.
 
-If saving native tool evidence fails, `:X` retries the save; changing agents and normal exit wait for a successful save.
-
-Errors and stopped Plous replies retain accepted text. Plous does not automatically restart a failed turn. `:p` / `:restoreprompt` restores the last prompt into an empty draft. Fix the reported issue or narrow the question before sending again. A new conversation is optional and does not erase history.
-
-A failed response save leaves text visible and does not mark it complete. Use the reply reader to copy it. A save failure during exit keeps Plous open so you can address storage and retry exit. See [AI troubleshooting](../reference/troubleshooting.md#ai-chat-will-not-send).
+If saving fails, copy the answer with the reply reader and resolve the storage problem. A save failure during exit keeps Plous open. Native evidence saves can be retried with `:X`.
 
 ## Credentials and advanced settings
 
-Settings can edit/remove provider connections without deleting conversations. A blank key retains its saved value; Save replaces it. Removing the selected connection chooses a default on a remaining supported connection, or requires setup if none remains.
+Edit or remove providers in Settings. A blank key keeps the stored value. A replacement key changes it. Removing a provider does not delete conversations.
 
-Advanced fields are display name, API proxy, environment-variable key reference and custom instructions. A saved key takes precedence over its environment reference. Proxies require HTTPS except on loopback; redirects are disabled. A proxy does not expand the model catalog. Changing vendor clears pending key/endpoint fields.
+Advanced fields include a display name, API proxy, environment-variable key reference, and custom instructions. A saved key takes precedence over its environment reference. Proxies require HTTPS except on loopback and do not expand the model catalog.
 
-Keys are plaintext in private `credentials.json`, not encrypted or stored in a keychain. Prompts, selected tool evidence and retrieved history go to the selected provider. See [privacy](../reference/data-and-privacy.md).
+Keys are stored as plaintext in private `credentials.json`. Prompts, tool results, and retrieved history go to the selected provider. Read [Data and privacy](../reference/data-and-privacy.md) before sending sensitive cluster data.
 
 ## Next steps
 
-Try a question about the [restarting-Pod example](investigate-restarting-pod.md), then [inspect the reply's Sources](#inspect-a-replys-sources). If you use an installed native agent, continue with [Claude Code or Codex inside Plous](plous-mcp.md).
+Try [Investigate a restarting Pod](investigate-restarting-pod.md), then inspect the answer's Sources. For an agent outside Plous, install [plous-debug](../agent-skills/plous-debug.md).

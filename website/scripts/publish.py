@@ -80,13 +80,74 @@ def gh(*args):
     return subprocess.check_output(["gh", *args], text=True)
 
 
+def select_snapshot(release):
+    tag = release["tag_name"]
+    assets = {asset["name"]: asset for asset in release["assets"]}
+    original = f"documentation-{tag}"
+    if not {original + ".tar.gz", original + ".sha256"}.issubset(assets):
+        raise ValueError(f"Incomplete documentation assets for {tag}")
+    choices = [("", original, None)]
+    pattern = re.compile(r"documentation-" + re.escape(tag) + r"-docs-([a-f0-9]{40})\.tar\.gz")
+    for name, asset in assets.items():
+        match = pattern.fullmatch(name)
+        if match and name.removesuffix(".tar.gz") + ".sha256" in assets:
+            choices.append((asset["created_at"], name.removesuffix(".tar.gz"), match[1]))
+    _, stem, revision = max(choices)
+    return stem, revision
+
+
+def upload_correction(tag, directory):
+    if release_version(tag) is None:
+        raise ValueError("Expected vMAJOR.MINOR.PATCH")
+    archives = list(directory.glob(f"documentation-{tag}-docs-*.tar.gz"))
+    if len(archives) != 1:
+        raise ValueError("Expected one correction archive")
+    archive = archives[0]
+    match = re.fullmatch(r"documentation-" + re.escape(tag) + r"-docs-([a-f0-9]{40})\.tar\.gz", archive.name)
+    if not match:
+        raise ValueError("Correction must identify its source commit")
+    revision = match[1]
+    checksum = directory / (archive.name.removesuffix(".tar.gz") + ".sha256")
+    release = json.loads(gh("release", "view", tag, "--json", "isDraft,isPrerelease,assets"))
+    if release["isDraft"] or release["isPrerelease"]:
+        raise ValueError("Corrections require a published application release")
+    names = {asset["name"] for asset in release["assets"]}
+    if checksum.name in names and archive.name not in names:
+        raise ValueError("Correction checksum exists without its archive")
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        if archive.name in names:
+            gh("release", "download", tag, "--dir", str(root), "--pattern", archive.name)
+            archive = root / archive.name
+            if checksum.name in names:
+                gh("release", "download", tag, "--dir", str(root), "--pattern", checksum.name)
+                checksum = root / checksum.name
+            else:
+                checksum = root / checksum.name
+                checksum.write_text(f"{hashlib.sha256(archive.read_bytes()).hexdigest()}  {archive.name}\n")
+        destination = root / "site"
+        destination.mkdir()
+        unpack(archive, checksum, destination)
+        manifest = json.loads((destination / "site.json").read_text())
+        if manifest["version"] != tag or manifest.get("revision") != revision or manifest.get("source") != revision:
+            raise ValueError("Correction source identity mismatch")
+        for asset in (archive, checksum):
+            if asset.name not in names:
+                gh("release", "upload", tag, str(asset))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--upload-correction")
+    parser.add_argument("--correction-directory", type=Path, default=Path("documentation-release"))
     parser.add_argument("--development", type=Path, default=Path("website/dist"))
     parser.add_argument("--output", type=Path, default=Path("website/published"))
     parser.add_argument("--base", default="/plous/")
     parser.add_argument("--repository", default="simjay/plous")
     args = parser.parse_args()
+    if args.upload_correction:
+        upload_correction(args.upload_correction, args.correction_directory)
+        return
     base = "/" + args.base.strip("/") + "/" if args.base.strip("/") else "/"
     releases = json.loads(gh("api", "--paginate", "--slurp", f"repos/{args.repository}/releases?per_page=100"))
     with tempfile.TemporaryDirectory() as temporary:
@@ -100,8 +161,8 @@ def main():
             assets = {asset["name"] for asset in release["assets"]}
             if archive_name not in assets and checksum_name not in assets:
                 continue  # Releases before versioned website publication have only Markdown.
-            if not {archive_name, checksum_name}.issubset(assets):
-                raise ValueError(f"Incomplete documentation assets for {tag}")
+            stem, revision = select_snapshot(release)
+            archive_name, checksum_name = stem + ".tar.gz", stem + ".sha256"
             folder = Path(temporary) / tag
             folder.mkdir()
             gh("release", "download", tag, "--repo", args.repository, "--dir", str(folder),
@@ -109,6 +170,9 @@ def main():
             destination = folder / "site"
             destination.mkdir()
             unpack(folder / archive_name, folder / checksum_name, destination)
+            manifest = json.loads((destination / "site.json").read_text())
+            if revision and (manifest.get("revision") != revision or manifest.get("source") != revision):
+                raise ValueError(f"Correction source identity mismatch for {tag}")
             snapshots.append((tag, destination))
         latest = assemble(args.development, snapshots, args.output, base)
         print(f"Assembled {len(snapshots)} release snapshots and Development; latest is {latest}.")

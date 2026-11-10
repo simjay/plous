@@ -2,117 +2,123 @@
 
 [Documentation](../README.md)
 
-Plous stores workspaces, settings, conversations, and session state locally. Kubernetes, Helm, Argo, and Flux browsing and AI chat make network requests when you use them. This page explains the boundary between saved configuration, cluster data, and messages sent to an AI vendor.
+Plous saves settings and conversations locally. Browsing contacts your clusters. AI investigations can send cluster data to your chosen model provider.
 
 ## Data directory and profiles
 
-The default data directory is `~/.plous/`. Launch with `--data-dir` to use another independent profile:
+The default directory is `~/.plous/`. To use a separate profile:
 
 ```sh
 plous --data-dir "$HOME/plous-profiles/learning"
 ```
 
-Use the same path on later launches to reopen that profile. Each profile has its own workspaces, AI connections and keys, chat history, drafts, and session. Only one Plous process can open a given directory at a time.
+Use that path again to reopen the same profile. Only one Plous process can open it at a time.
 
-A separate profile isolates Plous's saved state. It does not isolate the clusters referenced by its connections. Kubeconfig paths still refer to files on your computer, and native CLI storage remains separate.
-
-External agents use their installed CLI's authentication, conversation storage, and diagnostic state. Plous saves their projected tool evidence and session metadata in the selected profile, without copying native prompts or replies into Plous conversations. Scoped connector reads stay in the Plous host. See [native assistant sessions](#native-assistant-sessions) for the storage boundary.
+Profiles separate saved data. They do not isolate the clusters they connect to. Native agents also keep their own storage outside the Plous profile.
 
 ## What is saved
 
-| Data | Saved behavior |
+| Data | Contents |
 | --- | --- |
-| Workspaces and tool connections | Exact configuration revisions, including names and references. |
-| AI settings | Selected main agent, vendor connections and selected Plous model, with settings revisions. |
-| API Keys entered in Settings | Separate `credentials.json` file. |
-| Conversations and execution records | Original Plous messages, projected observations, lifecycle status, native resume metadata, and available usage. Native CLI prompts and replies stay with the CLI. |
-| Session | Current selection, panel visibility, tree expansion, selected conversations, and chat drafts. |
-| Kubernetes browsing preferences | Resource type, namespace, applied text filter, label selector, and sorting per connection. |
-| Helm browsing preferences | Section, namespace, applied filter, and selected release per connection. |
-| Helm Activity | Operation identities and outcomes, and metadata of observed retained revisions. No values or manifests. |
+| Workspaces | Connection settings and their revision history |
+| AI settings | Agent choice, provider connections, selected Plous model |
+| Credentials | API keys in a separate `credentials.json` file |
+| Conversations | Original Plous messages, saved tool results, request status, available usage |
+| Native sessions | Resume metadata and tool evidence. Native prompts and replies stay with the CLI. |
+| Session preferences | Panel visibility, tree folds, selected conversations, drafts |
+| Browsing preferences | Resource type, namespace, applied filters, sorting, selected Helm release |
+| Helm Activity | Operation outcomes and observed revision metadata, without values or manifests |
 
-The editable panel-search queries are temporary. Applying a Kubernetes table filter turns it into a saved browsing preference. Unsubmitted form edits are not saved when you exit.
+Open searches, unfinished forms, and unsaved resource edits are temporary.
 
-General conversations live at the profile root. Saved-connection and current-cluster conversations use `connections/` and `contexts/` scope folders. Each conversation retains original messages, projected evidence and separate execution records. Indexes are derived data. Runtime settings use `agent/config.yaml`; configuration revisions are application-managed and must not be edited by hand.
+General chat lives at the profile root. Connection and current-cluster histories use `connections/` and `contexts/`. Indexes are derived from the saved records. Optional runtime configuration is in `agent/config.yaml`.
 
-Current Workspace cluster history identity uses a versioned fingerprint of context, cluster and authentication entry names, API endpoint, and transport/trust settings. Paths, namespaces, and rotating credentials do not define it. Replacing an endpoint or trust identity separates history; renewing a token preserves it. Identical names, endpoint, and trust after cluster recreation cannot prove a new cluster incarnation. Kubeconfig and credentials remain in memory and their original files, outside the scope registry.
+Cluster history uses context, cluster and authentication entry names, endpoint, and trust settings to identify the connection. Token rotation preserves it. Endpoint or trust changes separate it. Recreating a cluster with identical identifiers cannot be detected reliably.
 
 ## Retained data from earlier builds
 
-Archived Code connections, directory histories in `directories/`, and their evidence remain in the profile for historical access. They grant no live filesystem tools and cannot be added as new connections. Native CLI working directories remain independent of cluster selection.
+Archived Code connections and directory histories remain readable where their stored format is supported. They grant no filesystem tools and cannot be added as new connections.
+
+Older development chat formats and migration readers are retired. Back up a profile before trying a new build.
 
 ## Native assistant sessions
 
-Claude Code and Codex render their own terminal UI and save conversations using their own storage and authentication. Plous does not copy terminal replies into its conversation format. It saves projected tool observations in labeled tool-evidence entries, with lifecycle metadata and no captured native prompt. The CLI's privacy and retention settings govern its conversation files.
+Claude Code and Codex store their own conversations and credentials. Plous separately saves the tool results returned during their sessions.
 
-`native-agents/` under the Plous data directory holds session metadata for each agent, launch directory and captured scope: resume markers, Claude session IDs and Codex runtime state. The CLI working directory remains the directory where you launched Plous. The MCP configuration is temporary, uses a fresh bearer token and is removed when the process ends. Connector credentials remain with Plous. Native CLI settings and authentication are read through the installed executable; Plous does not copy them into its profile.
+`native-agents/` holds resume metadata for each agent, launch directory, and cluster. The CLI runs in the directory where you launched Plous.
+
+The panel's MCP configuration is temporary and removed when the session ends. Cluster credentials remain with Plous. The CLI's own privacy and retention settings govern its conversation files.
 
 ## Independent coding-agent sessions
 
-`plous setup codex` or `plous setup claude` installs the plous-debug skill and updates that client's MCP configuration. Those files live in the client's own home, separately from TUI preferences. Your coding agent retains its normal repository tools and its own conversation storage.
+`plous setup codex` or `plous setup claude` installs the skill and updates the client's MCP configuration in its own home directory.
 
-Each `plous mcp serve` process creates a separate durable evidence profile under `~/.plous/mcp/session-*`, or under the evidence root selected with `--data-dir`. Its history tools read only that process's saved session evidence. These profiles remain after the process exits and are not imported into TUI history. See [standalone scope and lifecycle](../agent-skills/plous-debug.md#scope-evidence-and-lifecycle).
+Each `plous mcp serve` process saves evidence under `~/.plous/mcp/session-*`, or the chosen `--data-dir` root. These profiles remain after exit and are not imported into TUI history automatically.
 
-Enabled container commands and temporary diagnostic tests can expose application output to the coding agent's provider. Their intents and results are saved before delivery. Closing the client cancels local work and attempts diagnostic Job cleanup; it cannot guarantee termination of a command already running inside an application container.
+Closing the client stops local work and attempts temporary Job cleanup. It cannot guarantee that an exec process stopped inside an application container. See [MCP scope and saved evidence](../mcp/scope.md).
 
 ## Credentials
 
-API Keys entered in Settings are plaintext in `credentials.json`, with owner-only read/write permissions (`0600`). The data directory uses owner-only access (`0700`). Plous does not encrypt the files or use the operating system's keychain.
+API keys are plaintext in `credentials.json`. The file has owner-only permissions (`0600`), and the data directory uses `0700`. Plous does not encrypt them or use a keychain.
 
-Settings, session, and chat request records hold a credential reference rather than the API Key value. The key is used for authentication and is not inserted into chat messages or error details.
-
-- A blank key field while editing keeps the existing key.
-- A replacement key is saved only when you select Save.
-- Removing a connection removes its key when no current connection uses it.
+- A blank key field keeps the existing key.
+- Save applies a replacement key.
+- Removing a provider removes a key when no current connection uses it.
 - An interrupted save can leave an unused key until the next successful connection save or removal.
-- Existing environment-variable credentials remain usable. Saving a key replaces that connection's credential source without rewriting old history.
+- Environment-variable credential references remain supported.
 
-Backups containing `credentials.json` contain usable credentials. Keep the data directory and its backups private and out of source control. Text you deliberately paste into a chat is ordinary message content, even if it contains a secret.
+Backups of `credentials.json` contain usable keys. Keep profiles and backups private and out of source control.
+
+Keys are not inserted into conversation messages or errors. A secret you paste into chat is still message content and can be stored and sent.
 
 ## Kubernetes data
 
-Context setup reads local metadata and saves references to kubeconfig. It does not copy kubeconfig credentials into Plous. Live browsing uses those external credentials and can run configured authentication plugins.
+Plous reads kubeconfig and uses its authentication plugins. It saves references to that file, not copies of its credentials.
 
-Resource objects, live usage samples and graphs, events, logs, revealed Secret values, and Exec terminal output are not written into workspace revisions, session files, or chat records by browsing alone. The session saves browsing preferences, not a copy of the objects. An assistant's explicit current-usage read is different: its projected measurements, times and coverage are saved as turn evidence. It can read those saved observations later, but cannot recover the TUI's unsaved chart history.
+Browsing alone does not save resource bodies, live metrics, events, logs, revealed Secret values, or Exec output to conversations or workspace revisions. An assistant's tool read does save the result delivered to the agent.
 
 Explicit actions can copy or export data:
 
-- Copy sends the chosen text, identity, or value to the system clipboard using local clipboard tools or a terminal request. Clipboard reads require an explicit Paste action; Plous does not save clipboard contents separately.
-- Export YAML creates a new local file and redacts Secret values.
-- Export PEM writes the selected CertificateSigningRequest request or certificate to a new private file.
-- Secret value inspection and manifest editing reveal values for the current operation.
-- Pasting resource data into AI chat includes that text in the message you send.
+| Action | Destination |
+| --- | --- |
+| Copy | System clipboard through a local tool or terminal request |
+| Export YAML | New local file, with Secret values redacted |
+| Export PEM | New private file for the selected CSR request or certificate |
+| Reveal or edit a Secret | Visible values for the current operation |
+| Paste into chat | Stored message sent to the model provider |
 
-Assistant requests include a small current-page description. When an investigation reads Kubernetes resources or logs, its bounded results are sent to the selected AI vendor and saved in the conversation. Secret resource reads are blocked and known credential fields/patterns are redacted; arbitrary sensitive text in logs or user-provided records may still be included.
+Clipboard reads require an explicit Paste action. Plous does not separately archive clipboard contents.
+
+Agent resource reads block Secret objects and redact known credential fields and patterns. Logs, command output, and other application text can still contain secrets.
 
 ## Helm data
 
-Helm uses the selected kubeconfig and explicit optional repository/registry inputs. Each process uses private temporary configuration, cache, and plugin directories. Temporary chart archives are removed after commands. Downloaded chart contents, draft values, release bodies, and comparisons remain in memory and are not restored after exit. Browsing metadata and operation outcomes are saved separately from workspace configuration revisions.
+Helm uses the selected kubeconfig. Temporary configuration, cache, plugins, and chart downloads are private to the process and removed afterward.
 
-The assistant receives bounded, masked release reads when requested. Release notes and arbitrary chart-source access are not exposed to it. User-operated rollback can change the cluster and execute chart hooks only after explicit confirmation. Chart changes are previews; installation and upgrade execution are not offered.
+Chart contents, draft values, release bodies, and comparisons stay in memory. Browsing preferences and operation outcomes are saved separately.
+
+Agent reads receive filtered release data. User-confirmed rollback can change the cluster and run chart hooks. Chart previews do not install or upgrade releases.
 
 ## AI requests
 
-When you send a message, the selected agent receives host instructions, the captured connection and page hint, and the current question. The built-in Plous agent also receives recent completed exchanges from its Plous conversation and may replace older active context with a labeled summary. External agents receive the captured scope instructions and manage their own native conversation context. Plous does not inject its chat transcript. Original conversation messages remain unchanged on disk.
+A request can include your message, recent conversation context, the selected cluster and page, and tool results or history retrieved during the investigation.
 
-Live tools compute typed projections in Go. Only those projected facts, coverage, selected excerpts and source identities enter new reasoning records or model context. Raw API responses remain transient. Models do not receive Kubernetes managed fields, complete Helm manifests or arbitrary raw response blobs through history. A discarded historical field cannot be reconstructed by fetching current state.
+Plous filters API data before recording or sending it. Raw API bodies are not saved as reasoning evidence. Filtering does not guarantee that arbitrary application text is free of secrets.
 
-The main agent retrieves original history excerpts and calculations through bounded Go tools. Selected historical evidence goes to the provider used by that agent. Installed Claude Code or Codex runs as the main agent process; there are no delegated worker agents.
+The built-in agent may summarize older exchanges in its active context. Original messages stay unchanged on disk. Native agents manage their own context and conversations.
 
-Monitor history supports lexical and explicitly configured semantic retrieval. Semantic setup currently requires a turn with captured Kubernetes or Helm capabilities; history-only views use lexical search. Once started, background indexing continues until the history store closes. Embedding requests send fragments of original conversation text and projected observations to the selected embedding connection, independently of the chat connection. General history uses lexical indexing only. Derived indexes repeat retained text and optional vectors locally and need the same protection as the profile. See the [indexing lifecycle](../contributing/ai-assistant.md#search-and-indexing).
+Optional embeddings send fragments of saved conversation text and tool results to the configured embedding provider. This can be a different connection from the chat provider. Derived indexes also contain retained text and need the same protection as the profile.
 
-Saving evidence and delivering live tool observations do not wait for background embeddings. A semantic history search does wait for its query embedding, so an answer using that search can be delayed. Search reports unavailable or delayed indexing. Native provider continuation and usage are saved separately from searchable evidence. New reasoning records contain no model thinking, context-edit programs or raw API bodies.
+Saving evidence does not wait for background embedding work. Search reports missing or delayed indexing. See [search and indexing](../contributing/ai-assistant.md#search-and-indexing).
 
-Known credentials are removed from recorded provider and tool output. Arbitrary secrets in user-pasted messages, command output, or logs may remain. User and assistant conversation text stays original. Protect the profile and review what you send.
-
-Chat storage supports only the current format. Earlier development histories and their migration readers have been retired. New saved conversations have no automatic retention deletion. Drafts are not sent for token counting. The Plous context meter is a local estimate; external agents display CLI-managed context.
+There is no automatic retention deletion for new conversations. The context meter is a local estimate and does not send drafts for token counting.
 
 ## Back up or recover a profile
 
-1. Exit Plous so the profile is no longer being written.
-2. Copy the entire data directory to a private backup location, preserving permissions.
-3. Keep referenced kubeconfig files available separately; they are not bundled into the profile. Back up native CLI conversation storage separately if you need it.
+1. Exit Plous.
+2. Copy the whole data directory to a private location, preserving permissions.
+3. Keep kubeconfig and native CLI conversation backups separately.
 
-To inspect a restored backup, copy it to a separate directory and launch Plous with `--data-dir` pointing there. Avoid overwriting your current profile while checking a backup.
+To inspect a backup, copy it to another directory and launch Plous with that `--data-dir`. Keep your current profile intact while checking it.
 
-Plous reports corrupt data and preserves it rather than replacing it with empty state. If a profile will not open, preserve a copy and follow [storage troubleshooting](troubleshooting.md#plous-reports-corrupt-data). Removing a lock file is not the way to release an active process's lock.
+If data is corrupt, preserve a copy and follow [storage recovery](troubleshooting.md#plous-reports-corrupt-data). Deleting a lock file does not release an active process's lock.

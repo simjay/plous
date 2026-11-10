@@ -1,52 +1,48 @@
 # Argo CD
 
-[Documentation](../../README.md) · [All integrations](../README.md) · [Connect Kubernetes](../kubernetes/README.md#connect-a-cluster)
+[Documentation](../../README.md) · [All integrations](../README.md)
 
-Plous reads Argo CD controller objects through the selected Kubernetes connection. Expand its tool under Monitor after API discovery. No separate controller account, CLI, or Git connection is needed.
-
-Argo CD views cover Applications, ApplicationSets, and Projects.
+Read Argo CD Applications, ApplicationSets, and Projects through the selected Kubernetes connection. You do not need a separate Argo account, CLI, or Git connection.
 
 ## Open the view
 
-1. Expand a cluster connection under **Monitor**.
-2. Expand **Argo**, select a category, and press **Enter**. Opening the tool itself restores its last category.
-3. Select a row to read its compact preview, then press **Enter** for the full controller message and details.
-4. Select a managed resource or related Application and press **Enter** to investigate it. **Esc** returns to the previous view.
+1. Expand a cluster under **Monitor**.
+2. Expand **Argo**, choose a category, and press Enter.
+3. Select an object and press Enter for details.
+4. Follow a resource link with Enter. Esc returns.
 
-Tables show one row per object with namespace and status columns. A short preview follows the selection. Small panels prioritize the list and keep details available through Enter. Category switching preserves the current filter and selection; each category saves its namespace and selected object across restarts.
+Use `n` for namespaces, `/` to filter, Backspace to clear the filter, and `g` to refresh. Lists start with all namespaces and refresh every 15 seconds while visible.
 
-The first list covers **All namespaces**. **n** opens the namespace picker; the scope applies to the controller objects, which can deploy workloads into other namespaces. Use **/** to filter the list, **Enter** to open a match, and **Backspace** to clear an applied filter. In details, **/** finds text and **Page Up / Page Down** scrolls. Select **Configuration & revisions** and press **Enter** to expand its metadata. Visible lists and details refresh every 15 seconds. **g** refreshes immediately. The [keymap](../../reference/keymap.md#argo-and-flux) lists the controls.
-
-Opening or expanding a connection discovers these APIs. Saving a connection does not contact its cluster. Saved inactive connections stay disconnected at startup; Current Workspace connects to its selected context. A missing API, a successful empty list, a denied read, and a connection failure are different states. If a refresh fails, previously loaded rows remain labeled **Previous observations** with the error. When a cluster-wide list is denied, choose a namespace your account can read. After installing a controller, select the cluster connection in the sidebar and press **g** to discover its APIs again.
+If Argo is missing after controller installation, select the cluster and press `g` to rediscover its APIs. If a read fails, old rows are labeled **Previous observations**.
 
 ## Argo Applications
 
-The **Applications** category monitors Argo CD Applications.
+The list shows Sync, Health, and target namespace. Sync and Health answer different questions:
 
-The list shows the Application name, namespace, **Sync**, **Health**, and target namespace. Destination cluster details remain in Configuration & revisions. These statuses answer different questions:
-
-| Example | Meaning |
+| Status | Meaning |
 | --- | --- |
-| Synced and Degraded | Argo reports that the desired configuration matches, but the application's reported health has a problem. |
-| OutOfSync and Healthy | Argo reports a configuration difference while the current resources are healthy. |
-| Not reported | The object does not supply that observation. |
+| Synced and Degraded | Configuration matches, but Argo reports a health problem |
+| OutOfSync and Healthy | Configuration differs, while Argo reports healthy resources |
+| Not reported | The object did not supply that status |
 
-Details show the controller's reason, reconciliation time, and reported managed resources. Configuration and revisions retain their own labels: a compared revision is not necessarily the last successfully deployed revision. Per-resource health can be missing even when application health is present.
+Details show controller messages, reconciliation times, and reported managed resources. Expand **Configuration & revisions** for destination and revision metadata.
 
-Opening a managed resource uses the existing Kubernetes details view. Local destinations use the selected context. An external destination needs a saved context whose API endpoint matches; an Argo destination name alone is insufficient. Plous does not read Argo's stored destination credentials. Without matching access, the resource reference remains visible with an explanation.
+Managed-resource links use Kubernetes details. External destinations need a saved context with a matching API endpoint. An Argo destination name alone is insufficient, and Plous does not read Argo's stored destination credentials.
 
 ## Argo ApplicationSets and Projects
 
-**ApplicationSets** shows generator types, controller conditions, and related Application counts. **Projects** shows AppProject objects with repository and destination rule counts. Projects are configuration objects and do not receive an invented health status.
+ApplicationSets shows generators, controller conditions, and related Application counts. Projects shows repository and destination rule counts, without inventing a health status.
 
-Details link to related Applications in the same namespace. Counts cover that namespace only, including when the table itself uses All namespaces. Applications in other namespaces are not included. ApplicationSets match owner identities; Projects match the declared project name. If Applications cannot be read, their count stays **Not reported** and details explain why.
+Related-Application counts cover the object's namespace. If Applications cannot be read, the count stays **Not reported**.
 
 ## Limits
 
-These views read Kubernetes only. API permissions and installed controller versions determine which information is available. The controller timestamp and the time Plous read the object are separate; a recent read does not prove that a controller is running.
+These are read-only controller views. They do not fetch repositories, sync applications, suspend controllers, roll back, or provide their own Activity history.
 
-Use the existing Kubernetes views for descendant Pods, events, and logs. These Monitor views do not fetch repository contents or provide sync/reconcile controls, suspension controls, rollback, desired/live comparisons, deployment history, or their own Activity history.
+A recent API read does not prove the controller is running. Inspect descendant Pods, events, and logs through Kubernetes when checking workload health.
+
+See the [keymap](../../reference/keymap.md#argo-and-flux) for controls.
 
 ## Practice
 
-Use the [GitOps playground](../gitops/playground.md) for disposable controller examples.
+Try the [GitOps playground](../gitops/playground.md) in a disposable cluster.

@@ -2,46 +2,46 @@
 
 [Documentation](../README.md) · [Workspaces](../guides/workspaces.md)
 
-Plous brings Kubernetes, Helm, Argo CD, and Flux into the same cluster workspace, with Overview, Explore, and Activity tabs. Start with your terminal's context or save several cluster connections in a workspace.
+Add a cluster once. Plous uses that connection for Kubernetes and any detected Helm, Argo CD, or Flux tools.
 
 ## Current capabilities
 
-| Technology | Capabilities | Guide |
+| Tool | Operations | Guide |
 | --- | --- | --- |
-| Kubernetes | Resources, events, relationships, usage, logs, and explicit resource actions | [Kubernetes](kubernetes/README.md) |
-| Helm | Release revisions, values, manifests, chart previews, and explicit rollback | [Helm](helm/README.md) |
-| Argo CD | Applications, ApplicationSets, Projects, and reported controller state | [Argo CD](argo/README.md) |
-| Flux | Kustomizations, HelmReleases, Sources, and reported reconciliation state | [Flux](flux/README.md) |
+| Kubernetes | Browse resources, events, logs, metrics, and YAML. Edit, scale, restart, delete, or open a container terminal. | [Kubernetes](kubernetes/README.md) |
+| Helm | Read releases and revisions, compare configuration, preview charts, and roll back | [Helm](helm/README.md) |
+| Argo CD | Read Applications, ApplicationSets, Projects, and their reported status | [Argo CD](argo/README.md) |
+| Flux | Read Kustomizations, HelmReleases, Sources, and reconciliation status | [Flux](flux/README.md) |
 
 ### What can change the cluster?
 
-Kubernetes detail actions can edit YAML, scale, restart, or delete supported resources after explicit user intent. Container Exec runs the command you choose. Helm rollback requires an explicit preview and confirmation. Chart changes are previews; Helm install and upgrade execution are unavailable.
+Kubernetes actions and container terminals can make changes. Helm rollback requires a preview and confirmation. Chart previews do not install or upgrade anything.
 
-GitOps views report controller state. Plous does not fetch their repositories or reconcile source changes. Assistant tools use reads by default; explicitly enabled [active diagnostics](../reference/mcp.md#active-diagnostics) can run container commands or temporary tests. See [Kubernetes actions](kubernetes/README.md#resource-actions) and [Helm rollback](helm/README.md#rollback).
+Argo CD and Flux views are read-only. Agent tools also read by default. [Active diagnostics](../mcp/active-diagnostics.md) can explicitly enable container commands or temporary tests.
 
 ## Add a connection
 
-1. Select a workspace in the left panel.
-2. Open **Monitor → + Add Context**, or **+ Add Connection → Kubernetes Cluster**.
-3. Choose a kubeconfig file, select contexts, and save.
-4. Select the connection in the tree, then press **22** for Explore.
+1. Select a workspace.
+2. Choose **Monitor → + Add Context** or **+ Add Connection → Kubernetes Cluster**.
+3. Choose the kubeconfig file and contexts, then save.
+4. Select the connection and press `22` for Explore.
 
-Use **Settings → Current Workspace** to edit or remove connections. Removing a connection removes its Plous entry without deleting cluster resources or changing kubeconfig.
+Use **Settings → Current Workspace** to edit or remove connections. Removal does not delete cluster resources or edit kubeconfig.
 
 ## Saved tool connections
 
-Use a connection name that identifies the target, such as `Production cluster`.
+| Required | Optional |
+| --- | --- |
+| Name and Kubernetes context | Kubeconfig path, namespace, Helm release storage, repository/cache/registry configuration paths |
 
-| Tool | Required fields besides name | Optional fields |
-| --- | --- | --- |
-| Kubernetes Cluster, including Helm | Kube Context | Kubeconfig Path, namespace, release storage, explicit repository/cache/registry configuration paths |
+Kubernetes is always available. Helm appears when release metadata is found. Argo CD and Flux appear when their APIs are discovered.
 
-The shared [context picker](kubernetes/README.md#connect-a-cluster) adds each cluster once. Kubernetes is always available. Helm appears after detecting release metadata; Argo and Flux appear after discovering their APIs. Existing separate Kubernetes and Helm records retain their identities and histories.
+Adding a context reads local metadata without contacting the cluster. Opening its views connects. Existing separate Kubernetes and Helm records keep their identities and histories.
 
-Cluster setup saves access references without contacting the cluster or changing its active context. Saved configuration changes appear in [Activity](../guides/activity.md).
-
-For controller-specific views, read [Argo CD](argo/README.md) or [Flux](flux/README.md).
+See [connection setup](kubernetes/README.md#connect-a-cluster) and [Activity](../guides/activity.md).
 
 ## AI and integrations
 
-The selected agent uses guarded Kubernetes, Helm, Argo, Flux, Workspace, and History tools. Availability follows the captured cluster; General chat has no connection tools. Current usage reads are saved as evidence without exposing unsaved chart history. See the [MCP tool reference](../reference/mcp.md#available-tools) and [AI chat](../guides/ai-chat.md).
+Agents use the selected cluster and its Kubernetes permissions. General chat has no live cluster tools.
+
+See the [tool reference](../reference/mcp.md#available-tools) and [AI setup](../guides/ai-chat.md).

@@ -1,47 +1,50 @@
 # Releasing Plous
 
-[Contributing](README.md) · [Getting started](../getting-started/README.md)
+[Contributing](README.md) · [Installation](../getting-started/installation.md)
 
-`cmd/plous/VERSION` is the application version source. Releases use matching `vMAJOR.MINOR.PATCH` tags. The workflow publishes macOS and Linux archives for amd64 and arm64, then opens a Homebrew update in [simjay/homebrew-tap](https://github.com/simjay/homebrew-tap).
+`cmd/plous/VERSION` is the application version source. A matching `vMAJOR.MINOR.PATCH` tag starts the release workflow.
 
 ## One-time setup
 
-Push the tap's test and publication workflows before releasing Plous. The Plous repository needs an Actions secret named `HOMEBREW_TAP_TOKEN`: a fine-grained token restricted to `simjay/homebrew-tap`, with Contents and Pull requests read/write permissions. Renew it before expiration. The tap uses its own `GITHUB_TOKEN` for bottle publication.
+The Plous repository needs `HOMEBREW_TAP_TOKEN`, restricted to `simjay/homebrew-tap` with Contents and Pull requests read/write permissions.
 
-Both repositories must allow their declared GitHub Actions permissions. Tap publication pushes the tested formula and bottle metadata to `main`; repository rules must permit that workflow. No manual PR approval or GitHub auto-merge setting is required by this pipeline.
+Push the tap's test and publication workflows first. Repository rules must allow the workflow to publish its tested formula and bottle metadata to main. The tap uses its own `GITHUB_TOKEN` for bottles.
 
-The formula is published in the tap. User installation and update instructions are in [Installation](../getting-started/installation.md#install-with-homebrew). A successful local check does not verify a new hosted publication.
+Configure [GitHub Pages](website.md#github-pages-setup) for documentation publication.
 
 ## Release a version
 
-1. Choose the version and update `cmd/plous/VERSION`, without a leading `v`.
+1. Set `cmd/plous/VERSION` to the authorized version, without `v`.
 2. Run `make check` and `make dist`.
-3. Commit the intended release files on `main`. Inspect the outgoing commits and tree for local internals; root `.github/` is the only permitted dot-directory.
-4. Push `main` and confirm CI succeeds.
-5. Create and push the matching tag. For example, if the version file contains `0.0.3`:
+3. Commit the release on main. Inspect outgoing commits and the tree for local internals. Only root `.github/` is a permitted dot-directory.
+4. Push main and check CI.
+5. Create and push the matching tag.
 
-   ```sh
-   git tag -a v0.0.3 -m "Release v0.0.3"
-   git push origin v0.0.3
-   ```
+For a version file containing `0.0.3`:
 
-The Release workflow runs CI, verifies the tag and archive checksums, uploads the verified distribution artifact and tagged documentation snapshot, and publishes the GitHub release with generated notes. Publication is automatic. Tags with prerelease suffixes are not supported.
+```sh
+git tag -a v0.0.3 -m "Release v0.0.3"
+git push origin v0.0.3
+```
 
-Manually published GitHub releases also trigger the Homebrew update. Use the tag workflow above to run the full application checks and publish verified download archives as part of the release.
+The workflow runs all CI jobs and builds tagged documentation. It checks the version and checksums, then publishes the verified archives and docs snapshot. It does not rebuild the distribution artifact during upload.
 
-The Homebrew job downloads the tagged source archive, checks its embedded version, computes its SHA-256, and opens a formula PR. The build dependency follows the Go major/minor version declared in the archive's `go.mod`. It does not use `go install module@version` or override the embedded application version.
+Only `vMAJOR.MINOR.PATCH` tags are supported. Prerelease suffixes are not supported.
 
-The tap builds and tests bottles on macOS 15 for Apple Silicon, and Linux for ARM64 and x86-64. Intel Mac release archives are published separately. Tests check the version, CLI behavior, and startup and exit in an isolated terminal. After every job succeeds, publication verifies the current PR commit, uploads the bottles, and pushes the formula with bottle metadata. Only owner-created release branches that change `Formula/plous.rb` qualify for automatic publication. The previous formula stays available if a build fails.
+After publication, the workflow opens a Homebrew formula PR and queues Pages. The tap tests bottles on Apple Silicon macOS, Linux ARM64, and Linux x86-64. Intel Mac binaries are available as release archives.
 
-After the tap publishes, verify the formula and bottle metadata. Use the [Homebrew installation and update instructions](../getting-started/installation.md#install-with-homebrew) to check the published package. The tap README documents platform coverage; GitHub release archives remain available for direct download.
+The formula uses the tagged source archive and its SHA-256. Its Go dependency follows the source `go.mod`. It does not override the embedded version.
+
+The tap publishes only after all checks pass for the current PR commit. Do not merge the formula PR manually before bottle publication. Verify the formula and bottle assets afterward.
 
 ## Retry a failed update
 
-- **Before GitHub publication:** fix the failure and rerun the failed Release jobs. Existing draft assets can be replaced. Published releases are never overwritten.
-- **After GitHub publication:** run **Update Homebrew** from the Plous Actions tab and enter the published tag. This retries the tap update without publishing the release again. It preserves existing bottles and skips versions already published or superseded in the tap.
-- **Tap tests:** fix the formula or test problem, then rerun the tap checks. Publication waits for success on the current PR commit.
-- **Bottle publication:** run **brew pr-pull** from the tap Actions tab with the PR number and its expected head SHA. The workflow repeats its release and test checks before publishing.
+| Failure | Recovery |
+| --- | --- |
+| Before GitHub release publication | Fix the cause and rerun failed jobs. Draft assets can be replaced. |
+| Homebrew update after publication | Dispatch Update Homebrew with the published tag |
+| Tap tests | Fix the formula or test problem and rerun checks |
+| Bottle publication | Dispatch brew pr-pull with the PR number and expected head SHA |
+| Pages | Rerun Documentation website on main |
 
-Do not merge a release formula PR manually before bottle publication; the publishing workflow handles both together.
-
-The release documentation build must pass before publication. A successful release also queues the main Pages workflow to publish the new snapshot alongside Development and older versions. See [Website publication](website.md#publication-and-recovery) for URLs, retained snapshots, and retries.
+Published application releases are not overwritten. See [website publication](website.md#publication-and-recovery) for docs archives and [documentation corrections](website.md#correct-released-docs) for writing or rendering fixes that need no binary release.

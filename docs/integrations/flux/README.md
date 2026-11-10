@@ -1,46 +1,53 @@
 # Flux
 
-[Documentation](../../README.md) · [All integrations](../README.md) · [Connect Kubernetes](../kubernetes/README.md#connect-a-cluster)
+[Documentation](../../README.md) · [All integrations](../README.md)
 
-Plous reads Flux controller objects through the selected Kubernetes connection. Expand its tool under Monitor after API discovery. No separate controller account, CLI, or Git connection is needed.
-
-Flux views cover Kustomizations, HelmReleases, and Sources.
+Read Flux Kustomizations, HelmReleases, and Sources through the selected Kubernetes connection. You do not need the Flux CLI or a Git connection.
 
 ## Open the view
 
-1. Expand a cluster connection under **Monitor**.
-2. Expand **Flux**, select a category, and press **Enter**. Opening the tool itself restores its last category.
-3. Select a row to read its compact preview, then press **Enter** for the full controller message and details.
-4. Select a managed resource, source object, or dependency and press **Enter** to investigate it. **Esc** returns to the previous view.
+1. Expand a cluster under **Monitor**.
+2. Expand **Flux**, choose a category, and press Enter.
+3. Select an object and press Enter for details.
+4. Follow a dependency, source, or resource link with Enter. Esc returns.
 
-Tables show one row per object with namespace and status columns. A short preview follows the selection. Small panels prioritize the list and keep details available through Enter. Category switching preserves the current filter and selection; each category saves its namespace and selected object across restarts.
+Use `n` for namespaces, `/` to filter, Backspace to clear the filter, and `g` to refresh. Lists start with all namespaces and refresh every 15 seconds while visible.
 
-The first list covers **All namespaces**. **n** opens the namespace picker; the scope applies to the controller objects, which can deploy workloads into other namespaces. Use **/** to filter the list, **Enter** to open a match, and **Backspace** to clear an applied filter. In details, **/** finds text and **Page Up / Page Down** scrolls. Select **Configuration & revisions** and press **Enter** to expand its metadata. Visible lists and details refresh every 15 seconds. **g** refreshes immediately. The [keymap](../../reference/keymap.md#argo-and-flux) lists the controls.
+The namespace picker filters controller objects. Their workloads can live in other namespaces.
 
-Opening or expanding a connection discovers these APIs. Saving a connection does not contact its cluster. Saved inactive connections stay disconnected at startup; Current Workspace connects to its selected context. A missing API, a successful empty list, a denied read, and a connection failure are different states. If a refresh fails, previously loaded rows remain labeled **Previous observations** with the error. When a cluster-wide list is denied, choose a namespace your account can read. After installing a controller, select the cluster connection in the sidebar and press **g** to discover its APIs again.
+If Flux is missing after installation, select the cluster and press `g` to rediscover APIs. Failed refreshes retain old rows labeled **Previous observations**.
 
 ## Flux Kustomizations and HelmReleases
 
-**Kustomizations** and **HelmReleases** have separate tables. Kustomizations show their last applied revision. HelmReleases show the declared chart name and latest reported release chart version; an attempted version does not stand in for an installed version. These are live controller objects read from Kubernetes.
+| Status | Meaning |
+| --- | --- |
+| Ready | The controller reports successful reconciliation |
+| Not ready | The controller reports a failure |
+| Suspended | Reconciliation is paused. An earlier Ready condition can remain. |
+| Awaiting status | Available status does not describe the current object generation |
 
-**Ready** reports successful reconciliation, not continuous workload health. **Not ready** shows the controller's failure. **Suspended** indicates that reconciliation is paused and may retain an earlier Ready condition. **Awaiting status** means the available condition does not describe the current object generation.
+Kustomizations show their last applied revision. HelmReleases show the declared chart and reported release version. Attempted and installed versions remain separate.
 
-Details show the controller message, condition-change time, source reference, dependencies, and managed-resource inventory when reported. A failed dependency can be opened directly. Source links open the Kubernetes source object's status and declared metadata; they never fetch a repository or download its artifact.
+Details include messages, condition times, sources, dependencies, and managed resources when reported. Missing inventory does not mean there are no resources.
 
-Last-applied and last-attempted revisions remain separate. A HelmRelease chart version is labeled separately from Git revisions. A source fetch failure can coexist with an earlier successful deployment. Missing inventory means the controller did not report it, not that the deployment has no resources.
+Ready does not guarantee continuing workload health. A source fetch can fail after an earlier successful deployment.
 
 ## Flux Sources
 
-**Sources** lists discovered GitRepository, OCIRepository, HelmRepository, HelmChart, and Bucket objects. Its table shows the kind, reconciliation status, and fetched artifact revision where reported. A source kind that is not installed is omitted; a denied read or incomplete discovery remains visible as a coverage limitation.
+Sources lists discovered GitRepository, OCIRepository, HelmRepository, HelmChart, and Bucket objects. The table shows kind, status, and reported artifact revision.
 
-Source details retain full revision values and declared metadata. These reads use the selected Kubernetes connection, with no repository checkout or artifact download.
+Absent API kinds are omitted. Denied or incomplete reads are reported.
+
+Source links open Kubernetes object status and metadata. They do not check out repositories or download artifacts.
 
 ## Limits
 
-These views read Kubernetes only. API permissions and installed controller versions determine which information is available. The controller timestamp and the time Plous read the object are separate; a recent read does not prove that a controller is running.
+These views are read-only. They do not reconcile, suspend, roll back, fetch repositories, compare desired/live state, or provide their own Activity history.
 
-Use the existing Kubernetes views for descendant Pods, events, and logs. These Monitor views do not fetch repository contents or provide sync/reconcile controls, suspension controls, rollback, desired/live comparisons, deployment history, or their own Activity history.
+A recent read does not prove that a controller is running. Use Kubernetes details, events, and logs to inspect the workloads themselves.
+
+See the [keymap](../../reference/keymap.md#argo-and-flux) for controls.
 
 ## Practice
 
-Use the [GitOps playground](../gitops/playground.md) for disposable controller examples.
+Try the [GitOps playground](../gitops/playground.md) in a disposable cluster.

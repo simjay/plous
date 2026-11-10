@@ -46,6 +46,7 @@ export async function prepareContent() {
     const sections = headings(body);
     const aliases = Object.fromEntries(sections.filter((h) => h.anchor !== h.id).map((h) => [h.anchor,h.id]));
     aliases._top = 'top';
+    if (relative === 'mcp/setup.md') aliases['register-a-standalone-server'] = 'configure-your-client';
     if (relative === 'getting-started/README.md') aliases['build-and-launch'] = 'install-and-launch';
     if (relative === 'guides/plous-mcp.md') aliases['use-plous-mcp'] = 'use-the-assistant-panel';
     const route = routeFor(relative);

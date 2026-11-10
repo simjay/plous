@@ -1,24 +1,26 @@
 # MCP server
 
-[Documentation](../README.md) · [Choose your workflow](../getting-started/workflows.md)
+[Documentation](../README.md)
 
-Plous exposes cluster tools through Model Context Protocol (MCP). An agent can inspect Kubernetes, Helm, Argo CD, and Flux, revisit saved evidence, and run explicitly enabled diagnostics. The standalone server runs as a local subprocess; the TUI and an installed skill are optional.
+Give Codex or Claude Code access to Plous's cluster tools through Model Context Protocol (MCP). Agents can read Kubernetes, Helm, Argo CD, and Flux data and revisit saved tool results.
+
+Reads work by default. Container commands and temporary tests require [explicit setup](active-diagnostics.md).
 
 ## Connect your client
 
-- [Setup and client configuration](setup.md): register a standalone stdio server, or use the automatic connection inside Plous.
-- [Tools and permissions](../reference/mcp.md): exact tool names, evidence limits, transports, and supported protocol behavior.
-- [Active diagnostics](active-diagnostics.md): enable container commands or temporary in-cluster tests.
-- [Scope, evidence, and lifecycle](scope.md): understand the captured target, saved observations, and process lifetime.
-- [Troubleshooting](troubleshooting.md): resolve startup, tool access, target, and storage problems.
+- [Setup](setup.md): connect an MCP client.
+- [Tools and permissions](../reference/mcp.md): tool names and supported operations.
+- [Active diagnostics](active-diagnostics.md): enable commands and temporary tests.
+- [Scope and saved evidence](scope.md): cluster access, storage, and reconnection.
+- [Troubleshooting](troubleshooting.md): fix connection and tool errors.
 
 ## Choose the connection mode
 
-| Mode | Starts the server | Tool surface |
+| Mode | Connection | Tools |
 | --- | --- | --- |
-| Standalone MCP | Your client launches `plous mcp serve` over stdio | Cluster and session-evidence tools |
-| Claude Code or Codex inside Plous | Plous creates a private loopback HTTP bridge for the native session | Cluster, saved evidence, and Plous view tools |
+| Standalone | Your client starts `plous mcp serve` over stdin/stdout | Cluster reads, saved evidence, and enabled diagnostics |
+| Inside Plous | Plous configures a private connection for its assistant panel | The same tools, plus actions that open Plous views |
 
-The built-in Plous agent calls the same guarded tool implementations directly. It does not need a separate MCP connection.
+The built-in Plous agent uses these tools directly and needs no MCP setup.
 
-For a guided workflow in an independent coding-agent session, install [plous-debug](../agent-skills/plous-debug.md). MCP remains usable without the skill. Plous's setup and installed-client verification cover Codex and Claude Code; other clients must support the [implemented protocol subset](../reference/mcp.md#protocol-behavior) and need their own compatibility checks.
+For debugging instructions as well as tools, install [plous-debug](../agent-skills/plous-debug.md). Other MCP clients must support the [implemented protocol](../reference/mcp.md#protocol-behavior) and need separate compatibility checks.

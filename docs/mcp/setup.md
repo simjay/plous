@@ -1,30 +1,35 @@
-# MCP setup and client configuration
+# Connect an MCP client
 
 [MCP server](README.md) · [Tools and permissions](../reference/mcp.md)
 
-Install [Plous on your PATH](../getting-started/installation.md#install-on-your-path), then use `plous` as the MCP command. The standalone server requires an explicit Kubernetes context. It speaks MCP over stdin/stdout and opens no listening port.
+Use Plous's cluster tools from Codex or Claude Code.
 
-## Register a standalone server
+Install [Plous](../getting-started/installation.md) first. The client must be able to find `plous` on PATH.
 
-Configure your MCP client to start the installed executable with an argument array:
+## Configure your client
 
-```text
-command: plous
-args: ["mcp", "serve", "--agent", "codex", "--kubeconfig", "/path/to/kubeconfig", "--context", "staging", "--namespace", "shop"]
-```
+Choose the example for your client. Replace `/path/to/kubeconfig`, `staging`, and `shop` with your kubeconfig path, context, and namespace.
 
-Use `--agent claude` for Claude Code. The accepted client identities are `codex` and `claude`. Use real paths, a context present in that kubeconfig, and a concrete default namespace. The MCP client must inherit a PATH that includes Plous. Shell aliases and `~` expansion are not applied to the executable field. Use an absolute path only if the client cannot find `plous` on PATH; managed [plous-debug setup](../agent-skills/plous-debug.md#install) discovers and records the executable automatically.
+### Codex
 
-For Codex, the corresponding entry in its MCP configuration is:
+Add this entry to `~/.codex/config.toml`, or `$CODEX_HOME/config.toml` if you use a custom home:
 
 ```toml
 [mcp_servers.plous_debug]
 command = "plous"
-args = ["mcp", "serve", "--agent", "codex", "--kubeconfig", "/path/to/kubeconfig", "--context", "staging", "--namespace", "shop"]
+args = [
+  "mcp", "serve",
+  "--agent", "codex",
+  "--kubeconfig", "/path/to/kubeconfig",
+  "--context", "staging",
+  "--namespace", "shop",
+]
 tool_timeout_sec = 150
 ```
 
-For Claude Code, merge this entry into the existing `mcpServers` object:
+### Claude Code
+
+Add `plous_debug` to `mcpServers` in `~/.claude.json`. Keep your other entries.
 
 ```json
 {
@@ -32,35 +37,46 @@ For Claude Code, merge this entry into the existing `mcpServers` object:
     "plous_debug": {
       "type": "stdio",
       "command": "plous",
-      "args": ["mcp", "serve", "--agent", "claude", "--kubeconfig", "/path/to/kubeconfig", "--context", "staging", "--namespace", "shop"]
+      "args": [
+        "mcp", "serve",
+        "--agent", "claude",
+        "--kubeconfig", "/path/to/kubeconfig",
+        "--context", "staging",
+        "--namespace", "shop"
+      ]
     }
   }
 }
 ```
 
-Retain other client settings and MCP entries. These examples configure tools only. For managed installation of both the MCP entry and skill, follow [plous-debug installation](../agent-skills/plous-debug.md#install).
+Use an absolute executable path only if the client cannot find `plous`. The command field does not expand shell aliases or `~`.
 
 ## Check the connection
 
-1. Restart or reconnect your client after changing its configuration.
-2. Confirm that its tool list includes `kubernetes_resources_read` and `kubernetes_logs_read`. Standalone mode omits Plous view tools.
-3. Ask for the status and events of a known workload, naming the intended context and namespace. Check the returned target, timestamps, and coverage.
+1. Restart or reconnect the client.
+2. Check that it lists `kubernetes_resources_read` and `kubernetes_logs_read`.
+3. Ask: “Check the Pods and warning events in staging/shop.”
+4. Confirm that the answer names the correct cluster and namespace.
 
-A successful MCP connection does not establish that Kubernetes access is permitted. Missing permissions and failed API requests remain tool errors. Configure the client's tool timeout to allow the selected diagnostic deadline and temporary cleanup if using [active diagnostics](active-diagnostics.md).
+A connected MCP client can still encounter Kubernetes permission errors. See [MCP troubleshooting](troubleshooting.md) if reads fail.
 
 ## Target and evidence options
 
-| Option | Behavior |
+| Option | Purpose |
 | --- | --- |
-| `--kubeconfig PATHS` | File or platform-separated path list; omitted uses the terminal kubeconfig |
-| `--context NAME` | Required explicit context captured for the process |
-| `--namespace NAME` | Concrete default namespace; active tests stay within it |
-| `--data-dir PATH` | Root for separate per-process evidence profiles |
-| `--allow-exec` | Enable bounded commands in existing containers |
-| `--diagnostic-image IMAGE` | Enable temporary HTTP, DNS, and TCP tests with the chosen image |
+| `--kubeconfig PATHS` | Choose a file or platform-separated path list. Defaults to the terminal kubeconfig. |
+| `--context NAME` | Choose the Kubernetes context. Required. |
+| `--namespace NAME` | Set the default namespace. Diagnostic operations stay in this namespace. |
+| `--data-dir PATH` | Choose where Plous stores evidence profiles. |
+| `--allow-exec` | Allow agent commands in existing containers. |
+| `--diagnostic-image IMAGE` | Allow temporary HTTP, DNS, and TCP tests. |
 
-Reconnect to capture changed options. Registration does not change kubeconfig or an external tool's active context. See [scope and lifecycle](scope.md).
+Reconnect after changing these options. Plous does not change your kubeconfig or another tool's active context.
+
+Reads work by default. To enable commands or temporary tests, follow [Active diagnostics](active-diagnostics.md). The client timeout must allow time for the test and cleanup.
 
 ## Use MCP inside the TUI
 
-Select the intended cluster, choose Claude Code or Codex in **Settings → Application → Agent**, and Save. Plous creates and configures the private session bridge automatically. Follow the [native assistant panel guide](../guides/plous-mcp.md) for terminal controls, authentication, and saved evidence.
+Choose Claude Code or Codex in **Settings → Application → Agent** and save. Plous configures MCP for that session automatically. See [Claude Code and Codex inside Plous](../guides/plous-mcp.md).
+
+For automatic MCP configuration with the debugging skill, use [plous-debug setup](../agent-skills/plous-debug.md#install).

@@ -2,7 +2,7 @@
 
 [Documentation](../README.md)
 
-Plous is an early development build. Keep changes focused and discuss product, navigation or storage changes before building large features. Report bugs with version, OS, terminal, reproduction steps and the full sanitized error. Never attach credentials, kubeconfig or a private profile.
+Keep changes focused. Discuss product, navigation, or storage changes before building a large feature. Plous is still in early development.
 
 ## Choose your task
 
@@ -17,7 +17,9 @@ Plous is an early development build. Keep changes focused and discuss product, n
 
 ## Build and layout
 
-Use the Go version in go.mod, Make and Python 3.11+ for documentation/terminal checks. Build with `make build`; the executable is `bin/plous`. The embedded `cmd/plous/VERSION` is the application version source. Do not bump it or create release tags as part of another change.
+Use the Go version in `go.mod`, Make, and Python 3.11 or newer. `make build` produces `bin/plous`.
+
+`cmd/plous/VERSION` is the application version source. Change it or create release tags only for an authorized release.
 
 | Package | Owns |
 | --- | --- |
@@ -36,37 +38,47 @@ Use the Go version in go.mod, Make and Python 3.11+ for documentation/terminal c
 | `internal/ai/history` | Conversation storage, projected evidence, Sources and indexes |
 | `internal/integrations/<tool>/{monitor,common}` | Integration reads, projections and schema rules |
 | `internal/workspace` | Profile, revisions, credentials and scope identities |
-| `benchmark` | Tool benchmark toolkit; production-session checks in `benchmark/integration` |
+| `benchmark` | Tool benchmark toolkit. Production-session checks in `benchmark/integration` |
 | `tests` | Executable, terminal and cross-package tests and fixtures |
 
-Shared integration packages do not depend on Monitor controllers. Integrations do not import AI, history, or UI. Keep unit tests beside implementation and test helpers in `_test.go` files or `tests/support`, outside production packages. Keep feature Help beside its controller, including separate Helm and GitOps Help. The interactive host in `app/tui` coordinates navigation, lifecycle, and persistence with feature controllers. Related orchestration lives together in files such as `helm_navigation.go`, `chat_history.go`, and `resource_editor.go`. Feature controllers do not import the interactive host. Command-line entry does not initialize the renderer or profile storage directly. Chat state and readers belong in `app/chat`; the agent selector belongs in `app/settings`. The CLI package may import the standard library, `ai/agent`, the PTY library and the TOML encoder; it cannot import UI, provider, history, profile or integration implementations. The agent contract itself remains standard-library-only. Architecture tests enforce these dependencies. A normal projection extension changes its integration, registration and tests, not the agent architecture. See [AI implementation](ai-assistant.md).
+Keep these dependencies one-way:
+
+- Integrations do not import AI, history, or UI packages.
+- Shared integration packages do not depend on Monitor controllers.
+- Feature controllers do not import `app/tui`.
+- `ai/agent` uses only the standard library.
+- `ai/cli` uses the standard library, `ai/agent`, PTY support, and TOML encoding. It does not import provider, UI, history, workspace, or integration implementations.
+
+Keep package unit tests beside implementation. Test helpers belong in `_test.go` or `tests/support`, outside the application binary. Architecture tests enforce these boundaries.
 
 ## Design principles
 
-Keep one owner for each rule and use direct Go calls between the existing packages. An abstraction should remove a duplicated rule or enforce a boundary; it should not create a second registry, a universal resource model, or a controller framework. Remove retired execution paths and their tests together. Preserve saved identities, exact revisions and supported settings when simplifying storage or navigation.
+Give each rule one owner. Add an abstraction only when it removes duplication or enforces a boundary. Switch consumers and remove the old path together.
 
 | Rule | Owner and enforcement |
 | --- | --- |
 | Calculate facts once | Integrations own workload readiness, measurements, budgets and quota accounting. Tables, Describe, charts and tool projections consume those facts. |
 | Preserve meaning until display | Keep identity, units, source/collection times, coverage and unknown values typed. Formatting never drives arithmetic or numeric sorting. |
 | Enforce agent authority once | The host tool session captures scope, serializes calls, saves evidence before delivery and closes access with the turn. MCP transports that contract. |
-| Keep human actions explicit | The TUI calls shared Go logic directly. Its separate save path validates the exact draft and target; shared facts do not grant agents write access. |
-| Resolve input ownership once | Root composition selects the active panel or overlay. Its controller owns local input and retained state; mouse and keyboard actions use the same guards. |
+| Keep human actions explicit | The TUI calls shared Go logic directly. Its separate save path validates the exact draft and target. Shared facts do not grant agents write access. |
+| Resolve input ownership once | Root composition selects the active panel or overlay. Its controller owns local input and retained state. Mouse and keyboard actions use the same guards. |
 | Measure before drawing | Shared viewport measurement supplies wrapped rows, bounds and hit areas. Controllers update selection and scales before rendering. |
 
-Domain fixtures specify expected facts independently. Consumer tests check shared meaning; [schema tests](../../internal/ai/tool_schema_test.go) check advertised arguments; [tool parity tests](../../internal/ai/tool_parity_test.go) check direct and MCP delivery, scope and durable evidence. [Interaction tests](../../internal/app/tui/interaction_test.go) and [viewport tests](../../internal/ui/viewport_test.go) check input ownership and geometry. Identical results from separate live reads are not required because observation times can differ.
+Preserve saved identities, exact revisions, and supported settings. Remove retired execution paths and their tests together.
+
+Use independent domain fixtures for expected facts. Test schema arguments, direct/MCP parity, input ownership, and layout geometry. Separate live reads can have different observation times.
 
 ## Reuse components and controls
 
-Shared viewers own text, selection, scrolling, search and theme. App adapters supply data, target identity and actions. Keep API calls, credentials, persistence and writes outside viewers. The Editor owns drafts/undo; the Diff Reviewer returns an identity-bound decision. The caller validates the exact draft and target before writing. Navigation or validation alone never authorizes a save.
+Shared viewers own text layout, selection, search, scrolling, and theme. App adapters supply data and actions. Keep API calls, credentials, persistence, and writes outside viewers.
 
-The Monitor namespace picker owns request cancellation, loading, result acceptance and sorting for Kubernetes, Helm and GitOps. Feature adapters supply acquisition and timeout policy, check their target identity, and apply the selected scope. Helm menus carry typed action IDs; shared action definitions supply labels and availability to menus and Help. Dispatch uses the selected ID rather than displayed text.
+The Editor owns the draft and undo history. The Diff Reviewer returns a decision tied to that draft and target. Callers validate before writing. Opening or reviewing a document does not authorize a save.
 
-`internal/app/tui/panels.go` resolves panel and overlay ownership for local input. Inactive searches retain state without receiving keys, mouse actions or paste. Visibility checks must not capture connections or initialize feature state. `internal/ui/viewport.go` supplies wrapped rows, visible bounds and scroll limits to charts and read-only details. Rendered mouse markers travel with those rows; rendering must not change selection or scale state.
+Use the shared Monitor namespace picker and typed action IDs. Dispatch must not depend on display labels.
 
-Use the shared text theme and form input rather than adding resource-specific copies. Markdown rendering does not fetch content or execute links. Log retention counts source bytes, even when formatting changes. Preserve original text for copy/search and captured identity for caches.
+`app/tui/panels.go` chooses the input owner. Inactive searches keep state without receiving input. `ui/viewport.go` supplies measured rows and bounds. Rendering must not change selection or scales.
 
-Application aliases live in `internal/app/tui/commands.go`; resource actions have a shared registry. Use one case-sensitive letter and update handler, contextual Help and [keymap](../reference/keymap.md) together. Keep field/editor/terminal input ownership intact. Tests check aliases, collisions and advertised actions.
+Keep application aliases in `app/tui/commands.go` and resource actions in their registry. Update handlers, Help, and the [keymap](../reference/keymap.md) together. Aliases use one case-sensitive letter.
 
 ## Run checks
 
@@ -87,44 +99,62 @@ Application aliases live in `internal/app/tui/commands.go`; resource actions hav
 | `make docs-check` | Markdown navigation, links and anchors |
 | `make dist` | Local distribution archives and verification |
 
-Focus a Go run with `make test-unit TEST_PACKAGES=./internal/ai/... TEST_FLAGS='-count=1 -run TestName'`. Use `TEST_PACKAGES` with `test-race` too. Focus a terminal run with `make test-e2e TEST_E2E_PATTERN=test_chat.py`. `GO` and `PYTHON` select alternate installed tools.
+Focused examples:
 
-The default suite uses temporary profiles, synthetic kubeconfig and loopback APIs. It does not alter the owner's profile or clusters and does not call paid providers. HTTP fixtures need loopback ports; terminal tests need pseudo-terminals. `make test-ai-live` and `make test-minikube` require explicit opt-in for their provider or cluster. See [test setup and coverage](../../tests/README.md) and [benchmark instructions](../../benchmark/README.md).
+```sh
+make test-unit \
+  TEST_PACKAGES=./internal/ai/... \
+  TEST_FLAGS='-count=1 -run TestName'
 
-Verify the changed behavior and meaningful failure cases. Run make check for application changes and make dist for packaging changes. Distinguish fixtures from live verification. Scripted models test mechanics, not answer quality.
+make test-e2e TEST_E2E_PATTERN=test_chat.py
+```
+
+`GO` and `PYTHON` select alternate installed tools. Use `TEST_PACKAGES` with race checks too.
+
+Default tests use temporary profiles, synthetic kubeconfig, loopback APIs, and scripted models. They do not use the owner's clusters or paid providers. Live provider and Minikube checks require explicit opt-in.
+
+Run `make check` for application changes and `make dist` for packaging. See [test setup](../../tests/README.md). Scripted models verify mechanics, not answer quality.
 
 ## Continuous integration
 
-CI runs on pushes to main and on pull requests. New commits cancel superseded runs for the same ref. Independent jobs check documentation/formatting/vet, Go behavior, terminal behavior, and distribution archives, so a terminal failure does not hide race or packaging results.
+CI runs on main pushes and pull requests. Jobs independently check source docs, formatting, vet, Go tests, terminal tests, and archives.
 
-The complete Go suite runs once per OS: with race detection on Linux and normally on macOS. Acceptance cases and PlousBench are already included. Both platforms run the complete executable suite with tmux installed. The optional playground chart checks additionally run when Helm is available. Go dependencies and build outputs are cached; `-count=1` still forces tests to execute. Runner OS versions are explicit in the workflow.
+Linux Go tests use race detection. macOS runs the normal Go suite. Both platforms run terminal tests with tmux. Optional playground chart tests run when Helm is available.
 
-Failed terminal jobs retain review frames and wait-failure diagnostics for seven days. Release waits for every CI job, then publishes the same verified archives from the distribution artifact after checking their checksums and the tag against `cmd/plous/VERSION`. It does not rebuild them.
+Terminal failures retain diagnostics for seven days. Release waits for every CI job, verifies the tag against `VERSION`, and publishes the already-built archives after checksum checks.
 
 ## Screen and performance review
 
-The screen matrix spans 80x16 to 240x60 with side panels shown/hidden. Terminal journeys reconstruct the actual current screen and check visible content, not only earlier output. Native stdout/stderr must not escape the renderer. Use `PLOUS_REVIEW_DIR=/tmp/plous-review make test-ux` to retain synthetic review frames and inspect compact/wide layouts after visual changes.
+The screen matrix covers 80×16 through 240×60 with side panels shown and hidden. Terminal journeys check the current rendered screen rather than earlier output.
 
-`make bench` measures opening, unchanged redraws, scrolling, search and appends separately. Compare the same workload and machine; there is no timing pass/fail threshold. Override `BENCH_FLAGS` for selected repeated measurements. Performance does not replace correctness checks.
+```sh
+PLOUS_REVIEW_DIR=/tmp/plous-review make test-ux
+```
+
+Review compact and wide layouts after visual changes. Native stdout and stderr must remain inside the renderer.
+
+`make bench` measures opening, redraw, scrolling, search, and append workloads. Compare the same workload on the same machine. There is no timing pass/fail threshold.
 
 ## Providers
 
-The maintained catalog in `internal/ai/model/models.go` owns exact IDs, display names, capacities and initial defaults. One saved application-wide selection is captured per operation. Defaults apply to setup or an explicit connection change, never failed-request fallback. API proxies do not expand the allowlist. Verify streaming/tool calls and keep the public model table aligned.
+`internal/ai/model/models.go` owns model IDs, names, capacities, and defaults. Each operation captures one application-wide selection. Defaults are not failed-request fallbacks. Proxies do not expand the catalog.
 
-The pinned Eino Anthropic adapter needs delayed reads from successful response bodies until its stream is returned to avoid a streaming initialization race. Preserve provider race coverage when upgrading it. Local mock results do not verify a vendor service.
+The pinned Eino Anthropic adapter delays successful-body reads until the stream is returned to avoid an initialization race. Preserve race coverage when upgrading it. Mock tests do not verify a live provider.
 
 ## Benchmarks
 
-[PlousBench](../../benchmark/README.md) measures tool contracts, projected evidence, and repeated direct/MCP workloads. Start with `make test-plousbench` for offline checks, then use `make bench-plousbench` for measurements. Its reports describe the selected fixtures and run conditions; they do not establish live-provider answer quality. Use the [screen and performance checks](#screen-and-performance-review) for renderer measurements.
+[PlousBench](../../benchmark/README.md) checks tool contracts and evidence through direct calls and MCP. Use `make test-plousbench` for offline checks and `make bench-plousbench` for measurements.
+
+Reports describe fixture workloads and run conditions. They do not measure live-provider answer quality.
 
 ## Documentation and packaging
 
-The [documentation website guide](website.md) covers local previews, website checks, GitHub Pages setup, and deployment recovery. Website tooling lives in `website/` and reads the same Markdown used by GitHub and release archives.
+Write task instructions in guides, exact controls in Keymap, settings in Configuration, and implementation details here. Keep one source under `docs/`. The [website guide](website.md) covers rendering and publication.
 
-Maintain Markdown under docs/. Give each guide one title and an index link. Keep the README concise: purpose, features, a working quick start, MCP, documentation links, contributing, and license. The documentation index groups guides, integrations, references, and development material. Keep setup and examples in guides, detailed contracts in reference pages, and implementation details in contributing docs. Keep a single page per workflow, detailed controls in Keymap and settings in Configuration. Write actual current behavior, with plain wording and no em dashes. Update incoming links when moving a page. Do not copy proposals, internal decision records or private paths into public guides.
+Use short sentences and concrete names. Put an action before its edge cases. Avoid semicolons and em dashes in prose. Keep warnings beside the operations they affect. Review rendered pages as well as links.
 
-`make docs-check` needs no third-party Python packages and does not contact websites. Read the Markdown after structural changes. Command-registry tests also scan nested guides.
+Do not publish proposals, private paths, or local decision files. Preserve incoming URLs when moving content.
 
-`make dist` builds macOS/Linux archives for amd64/arm64 with executable, license, README, guides and assets, verifies checksums and runs the matching executable. It does not publish. Hosted CI/release success must be verified separately. Keep binaries, reports, private data and local dot-directories out of source control; root `.github/` is the workflow exception.
+Run `make docs-check` for Markdown. Website changes also need `make website-check` and `make website-build`. Check examples and code colors in both static HTML and live Rune rendering.
 
-See [Releasing Plous](releases.md) for version tags, automatic Homebrew updates, and recovery after publication failures. `make test-packaging` checks formula generation and release version handling without network access.
+See [releases](releases.md) for application archives and Homebrew. Keep generated outputs out of source control.

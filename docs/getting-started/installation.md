@@ -4,13 +4,13 @@
 
 ## Requirements
 
-Use macOS or Linux and an interactive terminal at least **80 columns by 16 rows**. Plous is an early development build; native Windows is not supported.
+- macOS or Linux. Native Windows is not supported.
+- A terminal at least 80 columns wide and 16 rows tall.
+- A kubeconfig for cluster access, including any authentication helper it needs.
 
-Plous embeds the Go libraries for Kubernetes access and Helm. These features do not require `kubectl` or `helm` executables. A kubeconfig that uses an external authentication helper still requires that helper.
+Plous includes Kubernetes and Helm libraries. You do not need `kubectl` or `helm` for normal use. Plous is still in early development.
 
 ## Install with Homebrew
-
-With Homebrew installed:
 
 ```sh
 brew install simjay/tap/plous
@@ -18,40 +18,43 @@ plous --version
 plous
 ```
 
-Homebrew makes `plous` available on your PATH. It installs a compatible bottle when available and otherwise builds from source with its declared build dependencies. See the [tap](https://github.com/simjay/homebrew-tap) for platform coverage.
+Homebrew installs a bottle when available, or builds from source. See the [tap](https://github.com/simjay/homebrew-tap) for supported bottle platforms.
 
 ## Published releases and development docs
 
-Homebrew installs the published release. Standalone `plous setup` and `plous mcp serve` are included starting with v0.0.3. On the website, select documentation matching `plous --version`. Development documentation follows `main` and can describe features ahead of the latest release.
+Choose website documentation matching `plous --version`. Development docs follow `main` and may describe unreleased features.
+
+Standalone MCP and `plous setup` require v0.0.3 or newer.
 
 ## Build from source
 
-Source builds require Git, Make, and Go **1.26.4 or newer**.
+You need Git, Make, and Go 1.26.4 or newer.
 
 ```sh
 git clone https://github.com/simjay/plous.git
 cd plous
 make build
+./bin/plous
 ```
 
-The executable is `bin/plous`. Run `./bin/plous` from the checkout or install it below. The website's Node and Rust tooling is separate from building Plous.
+This builds development `main`. Website tools are separate and are not needed to build Plous.
 
 ## Install on your PATH
 
-Homebrew handles this automatically. For a source build, to make it available outside the checkout, copy it into a directory on your shell's `PATH`. For example:
+Homebrew handles this automatically. For a source build, copy the executable to a directory on PATH:
 
 ```sh
 mkdir -p "$HOME/.local/bin"
 install -m 755 bin/plous "$HOME/.local/bin/plous"
 ```
 
-If that directory is not on `PATH`, run `~/.local/bin/plous` or add the directory using your shell's configuration.
+Add `~/.local/bin` to PATH if needed, or launch `~/.local/bin/plous` directly.
 
 ## Update
 
-Close Plous and [back up its data](../reference/data-and-privacy.md#back-up-or-recover-a-profile) before trying a newer development build. Data formats can change during early development.
+Close Plous and [back up its data](../reference/data-and-privacy.md#back-up-or-recover-a-profile). Early development builds can change data formats.
 
-For a Homebrew installation:
+For Homebrew:
 
 ```sh
 brew update
@@ -59,18 +62,20 @@ brew upgrade plous
 plous --version
 ```
 
-For a source installation, update your checkout, run `make build`, and replace any copy you installed elsewhere. Check `--version` on the executable you actually launch. Rebuilding alone does not update a separate installed copy.
+For a source installation, update the checkout and run `make build`. Replace any executable you copied elsewhere. Rebuilding the checkout does not update that separate copy.
 
 ## Distribution archives
 
-Maintainers can run `make dist` to build macOS and Linux archives for amd64 and arm64. Each contains the executable, license, and Markdown guides. Published archives are available from [Plous releases](https://github.com/simjay/plous/releases).
+[GitHub releases](https://github.com/simjay/plous/releases) include macOS and Linux archives for amd64 and arm64. Each contains the executable, license, and Markdown guides.
+
+Maintainers build them with `make dist`.
 
 ## Uninstall
-
-For Homebrew:
 
 ```sh
 brew uninstall plous
 ```
 
-For a manual installation, remove the executable you installed. Workspace data remains in `~/.plous/`, or the directory supplied with `--data-dir`. Keep it if you plan to return; removing the executable does not remove credentials or conversations. See [Data and privacy](../reference/data-and-privacy.md) before deleting or moving a profile.
+For a manual installation, remove the executable you installed.
+
+Uninstalling keeps data in `~/.plous/` or the chosen `--data-dir`. That includes credentials and conversations. See [Data and privacy](../reference/data-and-privacy.md) before deleting a profile.

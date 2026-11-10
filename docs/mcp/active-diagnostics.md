@@ -2,43 +2,67 @@
 
 [MCP server](README.md) · [Tools and permissions](../reference/mcp.md#active-diagnostics)
 
-The server exposes reads by default. Add diagnostic grants to your MCP client’s server arguments for the environment you intend to test. Equivalent launch commands are shown below; the client owns the stdio connection.
+Agent tools read cluster data by default. Enable commands or temporary tests only for the cluster and namespace you intend to investigate.
 
-Enable bounded commands in existing containers with `--allow-exec`:
+## Run commands in a container
+
+Add `--allow-exec` to your client's server arguments:
 
 ```sh
-plous mcp serve --agent codex --context staging --namespace shop --allow-exec
+plous mcp serve \
+  --agent codex \
+  --context staging \
+  --namespace shop \
+  --allow-exec
 ```
 
-`kubernetes_exec_run` runs one noninteractive command in an existing container, using an argument array and the exact Pod UID obtained from a read. No shell, stdin, or TTY is inserted. The executable must exist in that container. Commands can modify application state. A timeout or broken connection leaves the remote outcome unknown and does not guarantee that the remote process stopped.
+`kubernetes_exec_run` runs one noninteractive command in an existing container. It uses an argument array and a Pod UID from a previous read. Plous does not add a shell, stdin, or a TTY.
 
-For temporary tests, choose a diagnostic image containing `curl`, `nslookup`, and `nc`, with support for running as UID 65532 on a read-only filesystem:
+The executable must exist in the container. Commands can change application state. A timeout does not guarantee that the remote command stopped.
+
+## Run a temporary test
+
+Choose an image containing `curl`, `nslookup`, and `nc`. It must run as UID 65532 with a read-only filesystem.
 
 ```sh
-plous mcp serve --agent codex --context staging --namespace shop \
+plous mcp serve \
+  --agent codex \
+  --context staging \
+  --namespace shop \
   --diagnostic-image registry.example.com/team/diagnostics@sha256:YOUR_IMAGE_DIGEST
 ```
 
-`kubernetes_diagnostic_run` supports one HTTP GET, DNS lookup, or TCP connection check. The agent supplies the test and target; it cannot override the configured image, attach credentials or volumes, copy application labels, or supply an arbitrary Pod manifest. HTTP does not follow redirects or retry. An HTTP GET can still change application data if the endpoint implements it that way.
+`kubernetes_diagnostic_run` performs one HTTP GET, DNS lookup, or TCP connection check in a temporary Job. The agent cannot change the configured image or submit an arbitrary Pod manifest.
 
-Temporary tests create a Job with one container, no retries, a runtime deadline, resource limits, no mounted service-account token, and no elevated privileges. Plous collects the exit code and bounded logs, then requests identity-checked cleanup. Finished Job TTL is a fallback if the client or Plous exits abruptly. Cleanup failures and pending deletion are reported rather than presented as confirmed removal.
+HTTP tests do not follow redirects or retry. Choose an endpoint that is safe to call. Even a GET can change data if the application implements it that way.
 
-Both execution capabilities are restricted to the captured default namespace. Resource reads may still use other namespaces allowed by Kubernetes credentials. Kubernetes RBAC must permit the requested operation: exec needs access to `pods/exec`; temporary diagnostics need Job creation/get/deletion, Pod list/get, and Pod logs.
+Plous collects the result and logs, then requests Job deletion. It reports failed or pending cleanup. Job TTL provides fallback cleanup if the process exits.
 
-Each operation lasts at most 120 seconds, plus up to 10 seconds for temporary cleanup. Combined exec output and diagnostic log delivery are bounded to 64 KiB. A temporary Pod has its own identity, labels, and network policy. A successful test there does not establish that the application can make the same request.
+## Permissions and limits
+
+| Requirement | Details |
+| --- | --- |
+| Namespace | Commands and tests use the configured default namespace |
+| Exec RBAC | Access to `pods/exec` |
+| Temporary-test RBAC | Create, read, and delete Jobs. List and read Pods and their logs. |
+| Deadline | Up to 120 seconds per operation, plus 10 seconds for temporary cleanup |
+| Output | Up to 64 KiB of combined command output or diagnostic logs |
+| Temporary Job | One container, no retries, resource limits, no mounted service-account token, no elevated privileges |
+
+A temporary Pod has different labels and network policies from your application. A successful request there does not prove that the application can make it.
 
 Example requests:
 
-> From the checkout container, test whether payments.shop.svc resolves. Use the exact Pod identity and report where the test ran.
+> In the checkout container, check whether payments.shop.svc resolves. Tell me which Pod and container you used.
 
-> Use a temporary diagnostic workload to GET http://payments.shop.svc:8080/health. Report its response, exit code, and cleanup status.
-
-To enable these same tools for assistants inside the TUI, launch `plous --allow-exec` and/or `plous --diagnostic-image IMAGE`. These are launch-time grants, not saved preferences. They apply to the connection captured by each assistant operation or native session. Personal skill discovery remains disabled inside hosted native terminals; Plous supplies the shared debugging guidance itself.
+> From a temporary diagnostic Pod, GET http://payments.shop.svc:8080/health. Report the response and whether cleanup finished.
 
 ## Enable diagnostics with managed skill setup
 
-For [plous-debug](../agent-skills/plous-debug.md), add these same grants to `plous setup codex` or `plous setup claude`, then reconnect the client. Setup installs the skill and registers its MCP entry together. Direct MCP registration works without the skill.
+Add the same options to `plous setup codex` or `plous setup claude`, then reconnect. See [plous-debug](../agent-skills/plous-debug.md).
+
+For the assistant panel inside Plous, launch with `plous --allow-exec` or `plous --diagnostic-image IMAGE`. These options apply only to that launch and are not saved preferences.
 
 ## Next steps
 
-Read [scope and lifecycle](scope.md) before interpreting a timeout, cancellation, or pending cleanup. Use the [plous-debug guide](../agent-skills/plous-debug.md) for investigation and verification prompts.
+Read [scope and saved evidence](scope.md) for cancellation and storage behavior.

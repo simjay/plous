@@ -2,11 +2,11 @@
 
 [Documentation](../README.md) · [Learn the interface](../guides/navigation.md)
 
-Keyboard reference for the current development build. **Navigation** means you are outside a text field, search editor, or chat composer. Colon commands work from any navigation panel; ordinary keys affect the focused panel. Type a colon command and press **Enter** to run it.
+Navigation means you are outside a text field, search, or composer. Ordinary keys affect the focused panel. Type a colon command and press Enter to run it.
 
-Application action aliases use one letter and are case-sensitive. Capitals distinguish actions when lowercase is taken, such as `c` for chat and `C` for new chat. Full names are optional alternatives. The double-key navigation shortcuts below, editor sequences such as `gg`, `dd`, and `:wq`, and Kubernetes resource abbreviations such as `po` and `svc` keep their own meanings.
+Commands are case-sensitive. `:c` opens chat and `:C` starts a new conversation.
 
-Jump to [essential controls](#essential-controls), [commands](#commands), [Overview](#cluster-overview), [Kubernetes](#kubernetes-explore), [Helm](#helm-explore), [Argo and Flux](#argo-and-flux), [Editor and Diff](#plous-editor-and-diff-reviewer), [logs and terminals](#containers-and-logs), or [AI assistant](#ai-assistant).
+Jump to [commands](#commands), [Kubernetes](#kubernetes-explore), [Helm](#helm-explore), [Editor](#plous-editor-and-diff-reviewer), [logs and Exec](#containers-and-logs), or [AI](#ai-assistant).
 
 ## Essential controls
 
@@ -25,7 +25,7 @@ Jump to [essential controls](#essential-controls), [commands](#commands), [Overv
 
 ## Double-key shortcuts
 
-Press the same key twice consecutively. These run on the second key, with no Enter and no timing deadline.
+Press the same key twice consecutively. The second key runs the shortcut without Enter or a timing deadline.
 
 | Shortcut | Command alternative | Action |
 | --- | --- | --- |
@@ -39,11 +39,13 @@ Press the same key twice consecutively. These run on the second key, with no Ent
 | `hh` | `:h` | Help. |
 | `ff` | `:f` | Fullscreen or restore the previous layout. |
 
-The footer shows a pending first key. Esc cancels that prefix first. Another key, panel focus change, resize, or paste also clears it; another reserved first key starts its own sequence. Single numbers do not change views.
+The footer shows a pending first key. Esc, another input, a focus change, resize, or paste clears it. A different reserved key starts its own sequence. Single numbers do not switch views.
 
-These shortcuts work during navigation, including Help, history, and form action buttons. They also work in read-only YAML and value views outside search input. YAML keeps `z` for selection. Text fields accept them literally, and the editable document's Vim keys take precedence while its document has focus. Switching Settings or views cannot discard an unfinished form.
+Fields accept these keys as text. Editable documents keep their own keys. Navigation cannot discard an unfinished form.
 
 ## Commands
+
+These commands work from navigation. In a text field, colon is ordinary text.
 
 | Short command | Full spelling | Action |
 | --- | --- | --- |
@@ -63,86 +65,84 @@ These shortcuts work during navigation, including Help, history, and form action
 
 `:1`, `:2`, and `:3` select Overview, Explore, and Activity. They have no word aliases.
 
-In the command box, Enter runs and Esc cancels, restoring the originating focus. Alt+Left/Right can leave and resume the draft, including inside overlays. A fresh colon from another navigation panel replaces it. Completing a double-key shortcut from another panel also replaces it. Pasting into the command box is ignored.
+Esc cancels the command box. Alt+Left / Alt+Right leaves and resumes its draft. A new colon or completed double-key shortcut from another panel replaces it. Pasted commands are ignored.
 
 ## Switch panels
 
-**Tab** switches between the tree and main during ordinary navigation. A hidden tree is revealed, and leaving main fullscreen restores the layout. Tab does not move into or out of the agent. **Shift+Tab** has no panel-switching role. Forms, search and command input, editable documents, Help, Sources and native terminals retain local Tab behavior.
+Alt+Right cycles sidebar → main → assistant. Alt+Left reverses the order. Hidden panels are skipped. These keys work in forms, editors, overlays, and captured terminals.
 
-**Ctrl+]** focuses the agent panel, revealing it if hidden. Press it again to return to the previous sidebar or main panel. It works during typing, in editors, forms, overlays, command input, and native Claude Code or Codex input. Drafts, overlays and running sessions stay intact. If the previous panel is hidden, return goes to main. In captured Exec, Ctrl+] retains its output-review action; it toggles agent focus from Exec review.
+Tab switches tree and main during navigation. Ctrl+] handles the agent separately. Drafts and running sessions stay intact.
 
-Alt+Right cycles sidebar → main → assistant through visible panels; Alt+Left reverses that order. They work everywhere, including chat typing, every editor mode, forms, pickers, command input and captured terminals. Drafts and running processes stay intact. Settings, Help, Sources and the reply reader pause when you leave their panel and return when you focus it again.
-
-On macOS, use Option+Left/Right. Plous accepts Alt-arrows (`ESC [ 1 ; 3 D` / `ESC [ 1 ; 3 C`), iTerm2’s Meta-arrows (`ESC [ 1 ; 9 D` / `ESC [ 1 ; 9 C`), and Escape+b/f. Both Alt and Meta arrow encodings also work with the Kitty keyboard protocol. Because Escape+b/f is also Alt+B/F, those keys switch panels too, including in text fields and embedded terminals. Plous reserves these keys before forwarding input to Claude Code, Codex or Exec. A shortcut intercepted by the terminal itself must be changed in that terminal’s settings.
+On macOS, use Option+Left / Option+Right. Plous accepts Alt and Meta arrow encodings, Kitty variants, and Escape+b/f. Alt+B/F therefore also switch panels. A terminal binding that consumes the shortcut must be changed in the terminal.
 
 ### Show or hide panels
 
-Use **bb** / `:b` to toggle the sidebar. **ii** / `:i` cycles the assistant from normal width to double width, hidden, then normal. Double width retains room for main on smaller terminals. Hiding the focused panel moves focus to main. Size and visibility are saved; panel travel skips hidden panels. Chat commands and Ctrl+] reveal the assistant.
+Use `bb` for the sidebar and `ii` to cycle the assistant through normal, double width, and hidden. Hiding the focused panel moves focus to main. Visibility and assistant size survive restart.
 
-**ff** temporarily expands main and restores the assistant size on exit. In a native Claude Code or Codex terminal, press **Ctrl+]** to return to Plous navigation before using sizing shortcuts; press it again to resume the same terminal.
+Ctrl+] reveals the agent. `ff` expands main temporarily. Leave a native terminal with Ctrl+] before using navigation shortcuts.
 
 ## Search the focused panel
 
 | View | `/` behavior | Finish or clear |
 | --- | --- | --- |
-| Workspace tree | Filter names, including collapsed paths in loaded resource catalogs. | Arrows select; Enter opens; Esc restores the unfiltered tree. |
-| Kubernetes table | Edit the row text filter. | Enter applies; Esc cancels the edit; Backspace clears an applied filter while navigating rows. |
-| Activity list / chat history | Filter displayed entries. | Arrows select; Enter opens; Esc restores the list. |
-| Cluster Overview | Filter the lower lists. | Enter inspects a match; Esc clears the query. |
-| Workspace summary, connection settings, details, logs, conversation | Find and highlight text. Conversation find also searches unloaded saved messages. | Enter finishes query input; n/N next/previous match; Esc clears find. |
+| Workspace tree | Filter names, including collapsed paths in loaded resource catalogs. | Arrows select. Enter opens. Esc restores the unfiltered tree. |
+| Kubernetes table | Edit the row text filter. | Enter applies. Esc cancels the edit. Backspace clears an applied filter while navigating rows. |
+| Activity list / chat history | Filter displayed entries. | Arrows select. Enter opens. Esc restores the list. |
+| Cluster Overview | Filter the lower lists. | Enter inspects a match. Esc clears the query. |
+| Workspace summary, connection settings, details, logs, conversation | Find and highlight text. Conversation find also searches unloaded saved messages. | Enter finishes query input. N/N next/previous match. Esc clears find. |
 
-The bar shows **Backspace clear** for an applied table filter. Clearing preserves namespace, labels, sorting, and selection. While typing, Backspace deletes a character. Root Esc preserves an applied filter.
+Backspace clears only an applied table text filter. Namespace, labels, sorting, and selection remain. In input, Backspace deletes text.
 
-Alt+Left/Right can leave and resume search, including inside overlays. Search fields accept literal paste. Log search pauses following; Space resumes after search closes. `/` in a chat draft or form remains text, apart from the explicit chat model commands below.
+Search can be left and resumed with Alt+Left / Alt+Right. Log search pauses following. Close it, then press Space to resume.
 
 ## Mouse controls
 
-Mouse support is on by default. Change **Settings → Application → Mouse support** with a click or the keyboard. Off is saved across restarts and lets the terminal handle mouse input normally.
+Mouse support is on by default. Change it under **Settings → Application → Mouse support**.
+
+- Click a panel to focus it. Click a row to select and double-click to open.
+- Click tabs, buttons, and actions to activate them. Save uses the same checks as keyboard Save.
+- Click a field to place its cursor. Drag selects text, and double-click selects a word in fields and viewers.
+- Wheel scrolls the view under the pointer without discarding edits.
+- Clicking another panel leaves a native agent running. Clicking its panel resumes input.
+
+Logs keep collecting while you scroll. Use **Jump live** to follow again. Exec suspends mouse reporting while it captures input.
+
+Horizontal scrolling, hover, right-click menus, dragging panel sizes, and forwarding clicks into Exec are unavailable. Turn mouse support off for native terminal selection.
 
 | Target | Action |
 | --- | --- |
 | Panel background or title | Focus that panel. |
 | Tabs, buttons, named footer actions, menus, and Settings entries | Click to activate. |
 | Sidebar label | Click to select or open. Click its triangle to fold or expand only. |
-| Resource rows, Helm cards and revisions, Activity, conversation history, and Sources lists | Click to select; double click to open. |
+| Resource rows, Helm cards and revisions, Activity, conversation history, and Sources lists | Click to select. Double click to open. |
 | Table heading or namespace control | Click to sort or choose scope. |
-| Field, search box, command box, or composer | Click text to place the cursor. Drag to select; double click to select a word. Typing replaces a field selection. Labels and borders focus without submitting. |
-| Editor or shared viewer text | Click to position; drag to select; double click to select a word. Click **Copy selection** in the footer or use `y`. |
+| Field, search box, command box, or composer | Click text to place the cursor. Drag to select. Double click to select a word. Typing replaces a field selection. Labels and borders focus without submitting. |
+| Editor or shared viewer text | Click to position. Drag to select. Double click to select a word. Click **Copy selection** in the footer or use `y`. |
 | Tables, labels, Help, chat transcript, and native agent output | Drag to select visible text, then click **Copy selection** in the footer. A drag does not activate the control underneath it. |
 | Option value or context checkbox | Click to change the pending value. Save remains explicit. |
-| Reply and its Sources hint | Click the reply to select it; click Sources to open saved evidence. |
+| Reply and its Sources hint | Click the reply to select it. Click Sources to open saved evidence. |
 | Scrollable content | Wheel scrolls under the pointer without changing keyboard focus. |
-| Help section | Click to select; wheel scrolls that section. |
-
-A double click means two left clicks within 400 ms on the same item. Dragging selects text in fields and viewers; it cancels button and row activation. Resizing, scrolling, source changes, or intervening keyboard input cancels the gesture. Overlays block clicks on the panels behind them. Clicked Save uses the same validation and confirmation as keyboard Save.
-
-Wheel scrolling preserves editor drafts, cursor, mode, selection, and undo history. In logs it pauses following while collection continues. Click **Jump live** to return to new log output. Mouse controls remain available while a native assistant captures keyboard input. Click another panel to move focus; click the native panel to resume its input without restarting the session. Mouse reporting is suspended while Exec captures terminal input.
-
-Text placement respects wrapping, tabs, and Unicode characters. Viewer copying excludes gutters and visual wrapping. Esc clears field selections before leaving input. Clicking an editable document preserves Insert mode; dragging or selecting a word enters Select. Dragging outside the text area keeps the last selection without scrolling or activating another control. Chat transcript text can be selected directly; **Read reply** offers source-aware selection and copying of a complete answer.
-
-Horizontal scrolling, hover, right-click menus, panel resizing, and forwarding clicks into Exec remain unavailable. Turn mouse support Off or use your terminal's own mouse override modifier for native terminal selection. The modifier varies by terminal.
+| Help section | Click to select. Wheel scrolls that section. |
 
 ## Copy and paste
 
-On macOS, use your terminal's **⌘C / ⌘V**. GNOME Terminal on Ubuntu uses **Ctrl+Shift+C / Ctrl+Shift+V**. These shortcuts normally belong to the terminal itself. Its Copy command copies a native terminal selection, not a selection drawn by Plous.
+For a Plous selection, drag over text and click **Copy selection** in the footer. Viewers also support `y`. If the footer itself is selected, the copy control appears in the top bar.
 
-For a Plous selection, click **Copy selection** in the footer. You can drag across text in tables, the sidebar, labels, Help, chat transcripts, and native agent output while mouse controls stay on. Selection stays within the panel or overlay where the drag started. This copies visible text, including displayed wrapping and table formatting. Esc clears the selection first. Typing, paste, scrolling, focus changes, resizing, and changes to the selected text clear it. Normal clicks and double clicks retain their actions.
+Terminal Copy uses the terminal's own selection. macOS commonly uses ⌘C / ⌘V, and GNOME Terminal uses Ctrl+Shift+C / Ctrl+Shift+V. Turn Plous mouse support off to use native selection everywhere.
 
-Footer messages and hints can also be selected. While selecting the footer, **Copy selection** appears in the top bar so the selected text stays in place. Copying releases that footer selection and shows the clipboard result.
+Plous also accepts these shortcuts when the terminal forwards them. Copy needs a selection. Paste inserts text without sending or running it. Navigation and the command box ignore paste. Native terminals and Exec receive terminal paste.
 
-Fields, searches, the composer, documents, logs, and comparisons keep their text-aware selection. Shared viewers retain **y** to copy a selection or line. These copy source text without gutters or visual wrapping. Masked credential fields do not expose their contents through Copy. Selecting text alone does not replace the clipboard.
+Screen selections include visible wrapping and table formatting. Text-aware viewers copy source text without gutters. Masked credential fields do not expose their contents.
 
-Plous also recognizes **⌘C / ⌘V** and **Ctrl+Shift+C / Ctrl+Shift+V** when a terminal forwards those keys. Copy requires selected text. With a visible screen selection, forwarded Copy and Esc act on that selection even in a native assistant. Other typing clears that selection and resumes native input. Paste inserts literal text into the active field, search, composer, or editable document without submitting it. Paste in navigation and colon-command input is ignored. Captured Exec and native assistants receive native terminal paste. Captured Exec keeps native terminal selection; enter output review with Ctrl+] for Plous selection.
+Esc clears selection. Typing, paste, scrolling, focus changes, resizing, or changed selected content also clear a screen selection.
 
-Local clipboard actions use macOS's clipboard tools or available Linux tools (`wl-copy` / `wl-paste`, `xclip`, or `xsel`). Clipboard reads happen only after an explicit forwarded Paste shortcut. If a clipboard read fails or those tools are unavailable, use the terminal's Paste command. Moving focus or editing before a read finishes cancels that paste. Copy falls back to a terminal clipboard request when native access is unavailable; its success depends on the terminal. SSH and Mosh sessions use terminal copying and native terminal paste rather than the remote machine's desktop clipboard.
+Local clipboard support uses macOS tools or `wl-copy` / `wl-paste`, `xclip`, or `xsel` on Linux. If unavailable, use terminal Copy/Paste. SSH and Mosh use terminal copying rather than the remote desktop clipboard.
 
-To use native selection and copy shortcuts throughout the screen, turn **Settings → Application → Mouse support Off**. Terminal shortcuts that the terminal consumes cannot be remapped by Plous. **Ctrl+C goes to the active native agent terminal; elsewhere it saves and exits Plous.**
+Ctrl+C is not Copy. It goes to the active native agent, or saves and exits Plous elsewhere.
 
 ## Sidebar refresh
 
-With the sidebar focused, **g**, **:g**, or **:refresh** refreshes discovery for the highlighted cluster or tool branch. Connections start collapsed when Plous opens. Search fields keep literal input.
-
-For a Monitor cluster connection or tool branch, **g** refreshes controller API and Helm release metadata discovery. In the main Argo or Flux view, **g** refreshes that view.
+Press `g`, `:g`, or `:refresh` on a cluster or tool branch to rediscover APIs and Helm metadata. In an Argo CD or Flux main view, `g` refreshes that view.
 
 ## Workspace tree
 
@@ -153,41 +153,43 @@ For a Monitor cluster connection or tool branch, **g** refreshes controller API 
 | Page Up / Page Down | Move ten rows. |
 | Right | Expand a branch without changing the active scope or main view. |
 | Left | Collapse an expanded branch, otherwise move to its parent. |
-| Enter | Select workspace/tool/connection and toggle its branch; toggle a category; open a resource; activate a setup/Settings row. |
+| Enter | Select workspace/tool/connection and toggle its branch. Toggle a category. Open a resource. Activate a setup/Settings row. |
 
-The same fold controls apply to every row with a triangle: workspace, tool, Kubernetes connection, and category. Enter preserves the main mode and tree focus while selecting that row's scope. Left/Right only arrange the tree. Search results expand when selected with Enter. Opening a resource selects Explore and focuses its table. Setup actions open a centered window.
+Enter selects a workspace or connection and toggles its branch. Left / Right only folds branches. Opening a resource selects Explore and focuses its table. Search results expand their path.
 
 ## Cluster Overview
 
-Select a Monitor connection and use **11** or **:1**. The [Overview guide](../guides/overview.md) explains scope and availability.
+Select a cluster connection and use `11` or `:1`. See [Overview](../guides/overview.md) for data meanings.
 
 | Key | Command | Action |
 | --- | --- | --- |
 | Left / Right | | Move across Pulse tiles or between lower columns, without wrapping. |
-| Up / Down, j / k | | Move through rows and cross into the section above or below at list edges. Down from Pulse enters the column below; Up from its first row returns above. |
+| Up / Down, j / k | | Move through rows and cross into the section above or below at list edges. Down from Pulse enters the column below. Up from its first row returns above. |
 | Page Up / Page Down, Home / End | | Move through the section's items. |
-| Enter | | CPU and Memory open focused metric details. Nodes, Pods, and Autoscaling open resource lists. Other rows inspect resources or releases, grouped warnings open members, and Snapshot counters open their lists. Previous change records and Availability open evidence. |
-| Up / Down or j / k in Snapshot | | Move through integration headings and their counters; continue at the edges to adjacent cards or sections. |
+| Enter | | Open the selected metric, resource, release, warning group, inventory, or evidence. |
+| Up / Down or j / k in Snapshot | | Move through integration headings and their counters. Continue at the edges to adjacent cards or sections. |
 | e | `:e` / `:expandsection` | Expand or restore the selected section. |
 | g | `:g` / `:refresh` | Refresh discovery and cluster observations. |
 | / | | Filter Overview lists. Search text and paste remain literal. |
 | Esc | | Clear search, return from a warning group or Snapshot counter list, cancel pending inspection, restore section expansion, then go back. |
 
-Clicking a Pulse tile performs the same action as selecting it and pressing Enter. In CPU and Memory details, Enter opens Source details; Esc clears local search or selection, then returns from sources to the chart, then to Overview. Arrows and page keys scroll, Home/End reach the first/last row, and **/** finds text with **n/N** moving between matches. Coverage and relevant warnings remain in the chart view. **g** refreshes and **ff** expands main; **e** is only for Overview sections.
+In metric details, Enter opens Source details. Esc returns through search or selection, Sources, the chart, then Overview. `g` refreshes and `ff` expands main.
 
-Alt+Left/Right switch the outer panels. **ff** keeps its global fullscreen behavior, and **hh** opens contextual Help. Arrows follow the displayed layout. When Attention is above Snapshot, Down from its last row enters Snapshot and Up from Snapshot’s first row returns to Attention. In compact or expanded views, Up/Down at section edges moves through Pulse, Deployments, Attention, and Snapshot in order. Expanded Pulse uses Up/Down between tile rows. Left/Right never moves down into another row or section. Snapshot counters use Up/Down; Tab switches between the outer tree and main panels. Section selection and scroll positions survive refresh and resizing when possible.
+Arrows follow the displayed rows and columns. Up / Down moves between sections at their edges. Selection and scroll are kept where possible.
 
 ## Kubernetes Explore
 
+
+
 ### Resource commands
 
-These work from any navigation panel and open Explore. If no Kubernetes connection is selected, a connection picker opens first. In Current Workspace, `:K` / `:connections` searches local kubeconfig contexts; in a saved workspace it searches saved cluster connections. Choosing a target changes Plous only.
+Resource commands open Explore from any navigation panel. If needed, a connection picker opens first. In Current Workspace, `:K` searches kubeconfig contexts. In a saved workspace, it searches saved connections.
 
 | Resource or control | Commands |
 | --- | --- |
 | Connection picker | `:K`, `:connections` |
 | Namespace picker | `:N`, `:namespace` |
-| Set namespace directly | `:N shop`, `:namespace shop`; use `*` for all namespaces. |
+| Set namespace directly | `:N shop`, `:namespace shop`. Use `*` for all namespaces. |
 | Pods | `:po`, `:pod`, `:pods` |
 | Deployments | `:deploy`, `:deployment`, `:deployments` |
 | StatefulSets / DaemonSets / ReplicaSets | `:sts`, `:ds`, `:rs`, or each plural name. |
@@ -200,9 +202,9 @@ These work from any navigation panel and open Explore. If no Kubernetes connecti
 | CustomResourceDefinitions | `:crd`, `:customresourcedefinitions` |
 | Refresh | `:g`, `:refresh` |
 
-Other discovered names and unambiguous short names work too. Qualify an ambiguous resource with its API group, for example `:widgets.example.io`. Commands are case-sensitive: `:N` chooses a namespace scope, while `:ns` opens Namespaces. `:X` stops chat, while `:sc` opens StorageClasses.
+Discovered names and unambiguous abbreviations work. Qualify ambiguous types, such as `:widgets.example.io`.
 
-Resource commands accept an optional namespace, such as `:pods shop` or `:pods *`. Only `*` means all namespaces; `all` is treated as a namespace named `all`.
+`:N` chooses a namespace. `:ns` opens Namespaces. Resource commands accept a namespace, such as `:pods shop` or `:pods *`. Only `*` means all namespaces.
 
 ### Tables and pickers
 
@@ -218,18 +220,20 @@ Resource commands accept an optional namespace, such as `:pods shop` or `:pods *
 | Backspace | Clear only the applied text filter while navigating. |
 | `I` | In Pod or Node lists, open [top consumers](#usage-charts) within the current filters. |
 | `L` | Edit a Kubernetes label selector. Apply an empty value to clear it. |
-| `S` | Choose a sort column; choosing the current column reverses it. |
+| `S` | Choose a sort column. Choosing the current column reverses it. |
 | `g` | Reconnect and rediscover APIs. `:g` / `:refresh` also works. |
 | Esc | Return to the previous related view, or reveal and focus the sidebar at the root. |
 
-Click the resource heading or press Esc from the resource table to reveal and focus the sidebar. Use its search to choose a resource type. There is no table `o` shortcut. In the connection picker, type to search, arrows select, Enter applies, and Esc cancels. In the namespace picker, clear the search and choose **Reload namespaces** to reload; manual entry remains available. Alt+Left/Right leave and resume a picker without applying it.
+Click the resource heading or press Esc from a root table to reveal the sidebar. Use sidebar search to choose a resource type. `o` is a Pod container chooser, not a table action.
+
+In pickers, type to search, use arrows and Enter to choose, or Esc to cancel. The namespace picker offers Reload namespaces and manual entry. Alt+Left / Alt+Right leaves and resumes a picker.
 
 ### Object details
 
 | Key | Command | Action |
 | --- | --- | --- |
 | `d` | `:d` / `:describe` | Describe. |
-| `y` | `:y` / `:yaml` | Open YAML; within YAML, `y` copies text. |
+| `y` | `:y` / `:yaml` | Open YAML. Within YAML, `y` copies text. |
 | `e` | | Events. |
 | `r` | | Related resources. Enter follows a selected relationship. |
 | `[` / `]` | | Previous / next detail section. |
@@ -238,11 +242,13 @@ Click the resource heading or press Esc from the resource table to reveal and fo
 | `v` in Secret YAML | | Reveal / hide values for this view. |
 | Esc | | Return to the preceding resource or list. |
 
-YAML uses Plous Editor in read-only mode: **/** searches, **n/N** moves between matches, **z** selects, and **y** copies the selection or current line without line numbers. Secret YAML reserves **v** for reveal/hide. Esc clears search or selection first, then returns to the section that opened YAML with its scroll position preserved. YAML opened directly from a list returns to that list. The tab shows `:y` inside YAML because `y` copies text there. Lowercase **e** opens Events; uppercase **E** starts editing. Paste in navigation is ignored; paste into search stays literal.
+In read-only YAML, `/` searches, `n/N` selects matches, `z` selects text, and `y` copies. Secret YAML uses `v` to reveal or hide values.
+
+Esc clears search or selection, then returns to the view that opened YAML. Lowercase `e` opens Events. Uppercase `E` edits.
 
 ### Detail actions
 
-Open an object's details first. Commands and keys run the same action, subject to its API capabilities and permissions.
+Open resource details before running an action. Availability depends on the resource API and permissions.
 
 | Key | Full command | Short alias | Action |
 | --- | --- | --- | --- |
@@ -258,11 +264,11 @@ Open an object's details first. Commands and keys run the same action, subject t
 | `w` | `:exportyaml` | `:w` | Export YAML to a new file. |
 | `u` | `:usenamespace` | `:u` | Use the open Namespace as browsing scope. |
 
-Case matters: **D/E/R** are actions; **d/e/r** are sections.
+Case matters: `D/E/R` perform actions, while `d/e/r` open sections.
 
-After Scale, Restart, or Delete is accepted, the progress view uses **Enter/Esc** to return to details, arrows or **j/k** and Page Up/Down to scroll, and Home/End for the first/last page. When checking has stopped without confirmed completion, **g** checks status again. It does not repeat the mutation.
+After Scale, Restart, or Delete, Enter or Esc returns to details. `g` checks progress again without repeating the change. Confirmations use Left / Right and Enter.
 
-Confirmations use Left/Right to select and Enter to activate. Resource editing and comparison use the dedicated controls below. See [Kubernetes actions](../integrations/kubernetes/README.md#resource-actions) for the validation and submission steps.
+See [resource actions](../integrations/kubernetes/README.md#resource-actions).
 
 ### Expand a view
 
@@ -271,17 +277,17 @@ Confirmations use Left/Right to select and Enter to activate. Resource editing a
 | `:f` | `:fullscreen` | Expand or restore main in any view, including Overview, tables, details, Activity, Logs, and Editor. |
 | `:L` | `:linenumbers` | Toggle line numbers in YAML, a value preview, or the editing document. |
 
-Press **ff** during navigation to expand or restore without a colon or Enter. The first `f` appears as a pending shortcut in the footer; the second runs it. Text fields and search accept `ff` literally. Editable documents keep their own keys; use `:f` from Normal or Select. Read-only Kubernetes YAML supports `ff` and keeps `z` for selection.
+`ff` expands main during navigation. In an editable document, use `:f` from Normal or Select. Text input keeps literal keys.
 
-Expansion focuses main and temporarily gives it the full width. It works from any navigation panel and stays active when you navigate between main views. Esc closes search or selection first, then restores the layout before leaving the view. In Editor Insert mode, Esc first returns to Normal. Alt+Left/Right restore the layout when switching panel focus, including in Editor Insert mode. Tab still indents in Insert. Chat commands also restore it. Help and Settings temporarily cover the expanded view and return to it. Close those overlays before changing expansion. Saved panel visibility stays unchanged; restoring does not reveal a side panel you had already hidden. In live Exec, enter output review with Ctrl+] before using these commands.
+Expansion stays while navigating within main. Esc handles search, selection, and editor mode before restoring layout. Panel focus changes and explicit panel toggles also restore it.
 
-Log Viewer and Diff Reviewer show the visible line range within their retained content. Wrapped display rows count as their original source line; diff ranges refer to comparison rows, including hunk headers.
+Help and Settings preserve expansion underneath. Saved panel visibility does not change. In live Exec, enter review with Ctrl+] first.
 
 ### Plous Editor and Diff Reviewer
 
-Editing a resource opens the Editor in **NORMAL**. Its document keys take precedence over app double-key shortcuts. In **INSERT**, text and colons are literal. In **SELECT**, movements extend the selection. Read-only [YAML](#object-details) and [value inspection](#read-only-value-inspection) use the controls in their own sections. Simple forms and chat retain their existing controls.
+The editor starts in NORMAL. INSERT accepts literal text and colons. SELECT extends the selection. Document keys take precedence over app double-key shortcuts.
 
-Type **`:h`** / **`:help`** in Normal or Select for the editor reference in Help's center section. In Insert, press Esc first. Page Up/Down scrolls the reference; Esc returns to your draft without changing its cursor, selection, or undo history. Help follows the active editor, diagnostic, or review screen and names its actual save target. Read-only comparisons omit Save. `hh` belongs to document navigation while editing, so use the colon command there.
+Use `:h` for editor Help. In Insert, press Esc first. Help preserves the draft, cursor, selection, and undo history.
 
 | Editor key | Action |
 | --- | --- |
@@ -303,43 +309,45 @@ Type **`:h`** / **`:help`** in Normal or Select for the editor reference in Help
 | Esc in Insert or Select | Return to Normal. |
 | Esc in Normal | Focus the editor action row. |
 | Left / Right, Enter in actions | Choose and run an action. |
-| Esc in actions | Request Close; changed documents offer Keep Editing / Discard Changes. |
+| Esc in actions | Request Close. Changed documents offer Keep Editing / Discard Changes. |
 | Tab in Insert | Insert two spaces. |
 | Alt+Left / Alt+Right | Switch panels in every editor mode and retain the document. |
-
-Bracketed paste is one literal undoable edit. Search, selection, syntax colors, line numbers, and screen wrapping do not alter document contents. The editor has no counts, macros, registers, or full Vim command language. In the focused editable document or its review, the commands below take precedence. Outside that workflow, `:q` exits Plous and `:w` exports resource YAML. `:quit` always exits Plous.
 
 | Short command | Full command | Action in the active document workflow |
 | --- | --- | --- |
 | `:w` | | **Save**: validate and save to the named target, then stay in the editor. Works in the editor and optional review. |
 | `:wq` | | **Save and close**: validate, write, and close after success. If unchanged, close without a request. |
-| `:q` | | Close the document; changed text offers Keep Editing / Discard Changes. |
+| `:q` | | Close the document. Changed text offers Keep Editing / Discard Changes. |
 | `:q!` | | Discard the document and close without applying it. |
 | `:v` | `:review` | **Review changes**: validate and open an optional comparison without saving. |
 | `:u` | `:undo` | Undo in the editor. |
 | `:U` | `:redo` | Redo in the editor. |
 
-The target is the captured Kubernetes object or Helm values draft shown by the editor. Saving Kubernetes YAML writes to the cluster after validation; saving Helm values updates only the preview draft. Use `:w` or the visible Save control. Failed saves preserve the draft in the editor; **!** in Normal or editor actions opens full error details. Ctrl+C exits without saving the draft.
+Paste is one literal, undoable edit. The editor does not implement full Vim counts, macros, or registers.
 
-Diff Reviewer uses arrows, page keys, Home/End, **[ / ]** for previous/next change, **/** search, **n/N** matches, and **v/y** select/copy. **a** focuses its action row. Enter activates an action only while that row is focused; navigation Enter never saves. The **`:w` Save** control is visible while reading. Review alone saves nothing. **Saved to Kubernetes** appears only after a successful save response. The Esc label names its next action: cancel/clear search, clear selection, restore layout, or **Back to editor**. Returning preserves the draft.
+Kubernetes Save writes to the cluster after validation. Helm values Save updates the preview draft only. Failed saves keep the draft. `!` opens the error. Ctrl+C exits without applying it.
+
+Diff Reviewer uses arrows, page keys, `[` / `]` for changes, `/` and `n/N` for search, and `v/y` for selection/copy. `a` focuses its actions. Enter saves only when the Save action is focused. Use `:w` for explicit Save.
+
+Review alone saves nothing. Esc returns to the editor with the draft intact. **Saved to Kubernetes** appears only after success.
 
 ### Read-only value inspection
 
-Open **Values** from resource details with `V` or `:V` / `:copyvalue`, then choose a key. Back starts selected; reading keys enter the document. Editing and pasted replacements are disabled.
+Press `V` or `:V` in resource details, then choose a value. Editing and replacement paste are disabled.
 
 | Key | Action |
 | --- | --- |
 | Arrows, Page Up / Page Down | Read the value. Left/Right chooses a button while actions are focused. |
 | Home / End | Document start / end. |
 | `/`, Enter, `n` / `N` | Find, finish entering the query, and move between matches. |
-| `v` / `V`, `y` | Select text / lines and copy; `y` alone copies the current line. |
+| `v` / `V`, `y` | Select text / lines and copy. `y` alone copies the current line. |
 | `a` | Switch between reading and actions. |
 | Enter in actions | Activate Back, Copy value, or Export PEM where available. |
 | `:f` / `:fullscreen` | Expand / restore the value view. |
 | `:L` / `:linenumbers` | Toggle line numbers. |
 | Esc | Clear search or selection, restore expansion, then hide the value. |
 
-Global commands and double-key shortcuts remain available outside search input. Copy value copies the entire value; hiding it clears the preview buffer.
+Copy value copies the whole value. Hiding it clears the preview. Global navigation remains available outside search input.
 
 ### Containers and logs
 
@@ -359,7 +367,7 @@ Global commands and double-key shortcuts remain available outside search input. 
 | Logs | `v` / `y` | Select / copy selection or current line. |
 | Logs | Esc | Clear search or selection before returning to the originating detail. |
 
-In **Exec**, normal input, Esc, Tab, and colons go to the container. **Ctrl+]** enters **Plous controls active** for output review while the remote process continues. **Alt+Left/Right** move panels directly and resume terminal input on return. **Ctrl+C exits Plous** in either mode.
+Press Ctrl+] in Exec for output review:
 
 | Key in Exec review | Action |
 | --- | --- |
@@ -373,9 +381,13 @@ In **Exec**, normal input, Esc, Tab, and colons go to the container. **Ctrl+]** 
 | `t` | Send Ctrl+C to interrupt the remote process. |
 | `x` or Esc | Close and return to resource details. |
 
-Finished sessions keep output for review; Resume and Interrupt are unavailable. **e** opens the command editor with shell choices, and **R** explicitly retries. The launcher uses Up/Down and Enter to select sh, bash, or Custom command, then Start. Escape from a field stops editing; Escape from the launcher returns to the previous view.
+In Exec, input, Esc, Tab, colons, and paste go to the container. Ctrl+] enters output review while the process continues. Alt+Left / Alt+Right moves panels and resumes input on return. Ctrl+C exits Plous in either Exec mode.
+
+Finished sessions keep output. `e` edits the command and `R` retries explicitly. Closing does not guarantee remote process termination.
 
 ## Usage charts
+
+Use `I` in Pod, Node, or workload Describe for chart inspection. In Pod or Node lists, it shows the top ten CPU and memory consumers within current filters.
 
 | Short command | Full spelling | Action |
 | --- | --- | --- |
@@ -383,38 +395,40 @@ Finished sessions keep output for review; Resume and Interrupt are unavailable. 
 | `:W` | `:chartrange` | Switch between 5 and 15 minutes. |
 | `:P` | `:chartlatest` | Follow the latest sample. |
 
-In Pod, Node, or workload Describe views, **I** opens chart inspection. In Pod or Node lists, **I** opens the top ten CPU and memory consumers within the current filters. **I** or **Esc** returns without changing the underlying list or detail scroll. Rankings are read-only; Enter and resource-table actions are inactive until you return to the list.
+Left / Right selects samples, `W` chooses 5 or 15 minutes, and `P` follows latest. Clicking a sample selects it. Selection survives new data until it leaves the visible range.
 
-In time-series charts, **Left / Right** selects actual samples, **W** switches 5 / 15 minutes, and **P** follows the latest sample. Clicking a plotted sample selects it. The same observation stays selected as new measurements arrive or the view resizes. Pod and Node points use source time; workload snapshots use collection time and show their source timestamp range. If it leaves the visible range, Plous reports that and follows latest. **Up / Down**, **PgUp / PgDn**, and **Home / End** scroll. **ff** expands the view; Esc leaves chart inspection before restoring fullscreen. Alt+Left/Right still switch panels. Help and Settings preserve the selection. An existing Describe search is suspended during inspection and restored on return. **/** returns to Describe and resumes that query, or opens a new search when none exists.
+Use arrows and page keys to scroll. `ff` expands. Esc leaves inspection before restoring fullscreen. `/` returns to Describe search.
+
+Top-consumer rankings are read-only. Press `I` or Esc to return to the list before opening a resource.
 
 ## Helm Explore
 
-Each Helm connection contains **Releases** and **Charts**. Select these in the sidebar with Up/Down and Enter. Left/Right folds sidebar branches and switches sections inside an opened release. Arrow keys navigate chart cards. Enter opens an item. `/` filters the release inventory; Backspace clears an applied filter. `g` refreshes the selected view.
+Choose Releases or Charts in the sidebar. Enter opens an item. `/` filters, Backspace clears the filter, `S` sorts, and `g` refreshes.
+
+In a release, Up / Down selects a revision, page keys scroll its block, `v` opens changes, and Enter inspects the revision. Left / Right switches Resources, Values, and Chart.
+
+Use `n` or `:N` for namespaces. `:N *` selects all. `J` and `F` open searchable release and revision pickers.
 
 | Short command | Full spelling | Action |
 | --- | --- | --- |
 | `:B` | `:rollback` | Preview rollback to an older selected revision. From a prepared rollback, open confirmation. |
-| `:J` | `:release` | Open the chart inspector's release dropdown; selection loads its latest revision. |
+| `:J` | `:release` | Open the chart inspector's release dropdown. Selection loads its latest revision. |
 | `:F` | `:revision` | Open the chart inspector's recorded revision dropdown. |
 
-Press `n` or `:N` to open the searchable namespace picker. Choose **All namespaces**, select a discovered name, or enter one manually when discovery is unavailable. Esc from manual entry returns to the picker; another Esc restores the view. `:N <name>` selects a scope directly; `:N *` lists all namespaces. `S` opens table sorting; select the same column again to reverse the order.
+The values editor saves to a draft with `:w` or `:wq`. `:v` reviews without saving, and `:q!` discards unsaved text. These actions do not change the cluster or source files.
 
-Releases opens a revision timeline, newest first. Up/Down selects revisions; Page Up/Page Down scrolls within the selected block, keeping its revision visible. `v` opens full recorded changes, or the complete object summary when the diff is too large; Enter opens that revision in the chart inspector. Charts shows groups of release cards, navigated with arrows. In the inspector, `J` chooses a release, `F` chooses a revision, and Left/Right switches Resources, Values, and Chart. The Release and Revision pickers accept search and mark the current selection. Enter in Resources opens full configuration; Enter in Values or Chart chooses the displayed document. `/` finds text in place, including loaded timeline diffs; Enter finishes typing and `n`/`N` moves between matches. Esc clears search before returning to the originating timeline or list.
-
-Helm also uses `:g` / `:refresh`, `:N` / `:namespace`, `:a` / `:actions`, and `:v` / `:review`. These operate on the selected Helm connection. Enter in a comparison never applies a rollback.
-
-In the Helm values editor, `:w` validates and saves values to the **draft**; `:wq` also closes the editor. `:v` reviews changes to draft values. `:q` closes with an unsaved-change prompt and `:q!` discards unsaved editor changes. These saves do not change the cluster or source files.
+Enter in a comparison does not execute rollback. See [Helm](../integrations/helm/README.md).
 
 ## Argo and Flux
 
-Expand **Argo** or **Flux** under a Monitor connection in Current Workspace or a saved workspace and select a category. These read-only Explore tables show a compact selection preview; Enter opens full details.
+Expand Argo or Flux under a cluster and choose a category. These views are read-only. Enter opens full details.
 
 | Key | Command | Action |
 | --- | --- | --- |
 | Up/Down | | Select a list row or a link in details. |
 | Enter | | Open details or the selected resource, source object, or dependency. |
 | Esc | | Return through the detail trail to the list. |
-| / | | Filter the list; Enter opens a match. Find text in details. |
+| / | | Filter the list. Enter opens a match. Find text in details. |
 | Page Up/Page Down | | Scroll details. |
 | End, Enter | | Select and expand Configuration & revisions in details. |
 | Backspace | | Clear the applied list filter. |
@@ -431,8 +445,8 @@ See [Argo CD](../integrations/argo/README.md) and [Flux](../integrations/flux/RE
 | Empty workspace Overview | Enter | Add Connection. |
 | Context setup | Up / Down | Select path, context, or action. |
 | Context row | Space or Enter | Toggle its checkbox. |
-| Available context row | Right or click Name | Set an optional connection display name. Use name returns to the picker; adding still requires Add Selected Contexts. |
-| Kubeconfig Path | Enter | Move to Refresh Contexts; another Enter loads it. |
+| Available context row | Right or click Name | Set an optional connection display name. Use name returns to the picker. Adding still requires Add Selected Contexts. |
+| Kubeconfig Path | Enter | Move to Refresh Contexts. Another Enter loads it. |
 | Context setup outside path input | Home / End | Go to path field / Cancel. |
 | Context setup | Enter on an action | Refresh Contexts, add checked contexts, or cancel. |
 | Activity list | Up / Down, Page Up / Page Down, Home / End | Select an entry and update its preview. |
@@ -461,28 +475,26 @@ See [Argo CD](../integrations/argo/README.md) and [Flux](../integrations/flux/RE
 | `:` or double-key shortcut on an action button | Run navigation without applying the form. Commands cannot discard unfinished edits. |
 | Alt+Left / Alt+Right | Leave and resume Settings without submitting or discarding edits. |
 
-Text and paste in fields remain text. An explicit chat command from an action button can preserve an unfinished form while you use the assistant.
+Fields and paste stay literal. Chat can preserve an unfinished form while you use the assistant.
 
 ## AI assistant
 
-With Claude Code or Codex selected, the right panel hosts its native terminal interface:
+For Claude Code or Codex, the right panel contains the CLI's native terminal:
 
 | Key or command | Result |
 | --- | --- |
 | **cc** / `:c` | Open, resume or enter the native terminal |
-| Alt+Left / Alt+Right | Move directly to the previous / next panel; returning resumes native input |
-| Ctrl+] | Toggle focus between the agent and previous panel; preserve the running session |
-| Wheel over the native panel / Page Up / Page Down | Read retained normal-screen terminal output; fullscreen CLI views handle their own scrolling |
-| End / Esc while reading terminal output | Return to live output; typing or paste also returns live |
+| Alt+Left / Alt+Right | Move directly to the previous / next panel. Returning resumes native input |
+| Ctrl+] | Toggle focus between the agent and previous panel. Preserve the running session |
+| Wheel over the native panel / Page Up / Page Down | Read retained normal-screen terminal output. Fullscreen CLI views handle their own scrolling |
+| End / Esc while reading terminal output | Return to live output. Typing or paste also returns live |
 | Tab, Esc, arrows, slash commands and typing while captured | Forward to the native CLI |
 | `:X` after leaving the agent panel | Close the native session and revoke its tools |
 | `:C` after closing the session | Open a new native conversation in the selected scope |
-| Ctrl+C during native input | Forward to the CLI for its native interrupt behavior; Plous stays open |
+| Ctrl+C during native input | Forward to the CLI for its native interrupt behavior. Plous stays open |
 | Ctrl+] then Ctrl+C | Return to tree/main, then save and exit Plous |
 
-Ctrl+C is interpreted by the CLI: while idle it may clear input or exit that CLI. `:X` closes the whole native session. Use the native CLI's `/resume` for its saved conversations. Normal-screen terminal scrollback retains up to 5,000 history rows in memory and holds the reading position during output and resizing. Scrolling does not recall prompts or change keyboard focus. Changing focus preserves the screen and process. The panel heading keeps the session's captured scope while you browse elsewhere. Click another panel to move focus while the native process continues. Click the native panel to resume input, including after Ctrl+] moved focus away. Fullscreen CLI views receive wheel events only when they enable mouse input; clicks remain Plous panel controls. The following chat controls apply to **Plous**:
-
-Use **cc** or `:c` to enter typing; Esc leaves it and keeps the draft. Chat commands work before workspace creation as well as within workspaces.
+With **Plous** selected:
 
 | Key or input | Action |
 | --- | --- |
@@ -502,15 +514,21 @@ Use **cc** or `:c` to enter typing; Esc leaves it and keeps the draft. Chat comm
 | Up / Down, Enter in history | Select and open a conversation. |
 | `/` during navigation | Find conversation text, or filter history. |
 
-Reading older messages keeps your position steady as replies stream. Home/End moves the draft caret while typing. In the model picker, arrows select, Enter applies, Esc cancels, and Home/End moves to the first entry or Manage in Settings. Selection is application-wide. Pasted and restored drafts are literal, including `/model`. See [AI chat](../guides/ai-chat.md) for setup and conversation commands.
+The CLI manages `/resume`, models, and native conversation storage. Normal-screen history retains up to 5,000 rows. The session's cluster stays fixed while you browse elsewhere.
 
-Use `:A` / `:readreply` for the selected finished answer in the wider Markdown viewer. `/` searches, `v` selects, `y` copies, `Y` copies Markdown source, and `R` switches rendered/source text. Enter opens Sources for that answer. Esc clears local selection or search before returning; the draft and reading position are preserved.
+For Plous chat, `cc` enters typing and Esc keeps the draft. A freshly typed `/model` opens the picker. Pasted or restored commands stay literal.
 
-In Sources, arrows choose a source and Enter opens its details. One source skips the list. Enter in details opens the saved result in a read-only viewer: `/` finds text, `v` selects, and `y` copies. Arrows and page keys scroll details. Esc closes search or selection first, then returns through source details and the list to the same reply. Alt+Left/Right leave and resume Sources with its reading position intact. **hh** opens Help; **cc** returns to your draft.
+`:A` opens a finished answer in the wider reader. Use `/` to search, `v/y` to select/copy, `Y` to copy Markdown, and `R` for source mode. Enter opens Sources.
+
+In Sources, arrows choose and Enter opens details or saved content. Esc returns through each layer without making a new cluster request. Alt+Left / Alt+Right keeps your reading position.
+
+See [AI chat](../guides/ai-chat.md) for setup and history.
 
 ## Help
 
-Open with **hh** or `:h`. Left/Right selects a top section; Up/Down and Page Up/Page Down scroll it; Home/End jumps to its start/end. The global section stays visible below. Alt+Left/Right pause Help and restore it when its panel regains focus. Esc closes Help and restores the previous view, including an unfinished Settings form.
+Press `hh` or `:h`. Left / Right chooses a top section. Arrows and page keys scroll it. Home / End goes to its start or end.
+
+Esc restores the previous view, including an unfinished Settings form. Alt+Left / Alt+Right leaves and restores Help without losing position.
 
 ## Text editing
 
@@ -523,14 +541,16 @@ Open with **hh** or `:h`. Left/Right selects a top section; Up/Down and Page Up/
 | Ctrl+A / Ctrl+E | Beginning / end of the whole input. |
 | Ctrl+U | Delete text before the caret. |
 
-Chat Home/End operates on the whole draft; Up/Down does not move between its lines. Plous Editor has its own document modes and line-based controls. Paste edits fields and chat without running commands or sending messages; navigation and the command box ignore paste.
+Chat Home / End moves across the whole draft. Up / Down does not move between its lines. Plous Editor has separate document controls.
 
-The BS form of Backspace also works in searches and Editor Insert mode. Ctrl+H has no navigation action. Captured terminals receive it unchanged.
+Paste does not send messages or run commands. Navigation and the command box ignore it. Backspace works as DEL or BS. Ctrl+H has no navigation action.
 
 ## Cancel and exit
 
-Esc closes one layer at a time: pending shortcut, command/search/editor, picker or operation, detail, then root focus. It does not erase applied table filters or stop chat replies. Use `:X` for a running reply and Backspace for an applied table text filter.
+Esc closes one layer: pending shortcut, search or input, picker, detail, then root focus. It keeps applied table filters and does not stop a running reply. Use Backspace for the table filter and `:X` for the reply.
 
-`:quit` exits during navigation. `:q` does the same except in the focused editable document, where it requests closing that document. Ctrl+C saves and exits outside captured native agent input, including forms, Help, small-terminal fallback, and captured Exec input. In an active Claude Code or Codex terminal, Ctrl+C goes to that CLI; press Ctrl+] first to return to Plous navigation before exiting. Exiting does not save unfinished form edits or undo submitted cluster operations.
+`:quit` exits Plous. `:q` also exits unless a focused editable document owns it. Ctrl+C saves and exits everywhere except the focused native agent terminal. There, press Ctrl+] first, then Ctrl+C.
 
-Below 80 columns by 16 rows, most views offer only restricted navigation and exit controls. Cluster Overview additionally supports a minimal view from 40 columns by 12 rows, including its metric details and temporary resource lists. Direct Overview links to individual resources use recorded evidence below 80 columns. Alt+Left/Right can focus the sidebar or assistant at these widths. Resize the terminal to restore the full interface.
+Exiting does not apply unsaved forms or resource drafts and does not undo submitted operations.
+
+Below 80×16, most views have restricted navigation. Overview has a minimal view from 40×12. Resize to restore the full interface.

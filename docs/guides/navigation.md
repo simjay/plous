@@ -2,164 +2,121 @@
 
 [Documentation](../README.md) · [Keymap](../reference/keymap.md)
 
-Plous has three panels. The blue focus border and footer identify the panel receiving your keys. This is called **focus**. Main's tab outlines turn neutral when another panel has focus.
+Plous has three panels. The blue border shows which panel receives your keys.
 
-| Panel | What it contains |
+| Panel | Contents |
 | --- | --- |
-| Left: Connections | Current Workspace, saved workspaces, connection views, and Settings. |
-| Main | Overview, Explore, or Activity for the current selection. |
-| Right: AI assistant | Plous chat with its bottom composer, or the selected native agent's terminal UI. |
+| Left | Current Workspace, saved workspaces, connections, and Settings |
+| Main | Overview, Explore, or Activity |
+| Right | Plous chat, Claude Code, or Codex |
 
-Panel widths adapt to your terminal. Switching focus keeps the layout steady; hiding a side panel gives its space to main. Use **ff** to expand main temporarily. Very small terminals restrict available views; see [small-terminal behavior](../reference/keymap.md#cancel-and-exit).
+Use **Alt+Left / Alt+Right** to move between panels. These keys also work while typing or using an agent terminal.
 
-Click a panel to focus it, click tabs and controls to activate them, and use the wheel over the content you want to scroll. Data rows use one click to select and a double click to open. Click text in fields and the composer to place the cursor without submitting. Drag selects text; double click selects a word in fields and viewers. Tables, labels, Help, chat transcripts, and native agent output also support drag selection without activating their controls. Click **Copy selection** in the footer to copy selected text. Mouse support can be turned off in **Settings → Application** for native terminal selection and copy shortcuts. See the [mouse reference](../reference/keymap.md#mouse-controls) for viewer behavior and limitations.
+Click a panel to focus it. Click a data row to select it and double-click to open it. Drag over text to select it, then use **Copy selection** in the footer. See [mouse controls](../reference/keymap.md#mouse-controls) for details.
 
-Press **Alt+Right** to move focus forward or **Alt+Left** to move backward, including while typing or using an embedded terminal. Arrows, Enter, scrolling, and `/` apply to the focused panel.
-
-The footer names the current view and shows a few relevant controls. A hint such as **n Namespace** means press `n` to choose a namespace. **hh Help** means press `h` twice for the full controls. Narrow terminals omit lower-priority hints; Help keeps the complete list. While typing, the footer shows the keys for finishing or leaving that input.
+The footer shows controls for the current view. **n Namespace** means press `n`. **hh Help** means press `h` twice.
 
 ## Understand the workspace tree
 
-The sidebar starts with **Current Workspace**, followed by **Workspaces** and **Application / Settings**. Current Workspace contains the selected cluster under Monitor. It reuses the same tree and controls as saved connections. Saved workspaces follow this structure. These are example names, not preloaded data:
+**Current Workspace** uses the cluster selected from your terminal kubeconfig. **Workspaces** contains connections you have saved. Both use the same tree:
 
-```text
-Commerce
-  Monitor
-    Production (k8s)
-      Kubernetes
-        Workloads
-          Pods
-      Helm
-        Releases
-        Charts
-      Argo
-      Flux
-```
+- A workspace contains Monitor connections.
+- A cluster connection contains Kubernetes and any detected Helm, Argo CD, or Flux tools.
+- A tool contains resource groups and lists.
 
-**Monitor** organizes cluster connections within each workspace. Kubernetes is always available; Helm appears after release metadata is detected, and Argo and Flux appear after their APIs are discovered. A connection identifies the configured context. Its name does not establish that the target is reachable.
+| Key | Tree action |
+| --- | --- |
+| Enter | Select a workspace or connection and toggle its branch. Open a resource list. |
+| Right | Expand a branch |
+| Left | Collapse a branch, or move to its parent |
+| `/` | Search names, including items in collapsed branches |
+| `g` | Refresh discovery for the selected cluster or tool |
 
-Connection labels stay on one line. Long names end in `...` so their muted type label, such as `(k8s)`, stays visible. Sidebar search uses the full name. Overview and Settings show the saved name.
+Kubernetes is always available. Helm appears when Plous finds release metadata. Argo CD and Flux appear when their APIs are available.
 
-Every row with a triangle uses the same fold controls, including workspaces, tools such as **Kubernetes**, connections such as **minikube**, and resource categories:
+**Tool discovery incomplete** means a check failed or access was denied. It does not confirm that the tool is absent.
 
-- **Enter** toggles expanded/collapsed. On a workspace, tool, or connection, it also selects that scope for the main panel.
-- **Right** expands without changing the active scope or main view.
-- **Left** collapses without changing the active scope or main view. If already collapsed, it moves the cursor to the parent.
-
-Opening a branch keeps keyboard focus in the sidebar, even when its content opens in Explore. Use Left/Right when you only want to arrange the sidebar. Enter on a resource type opens its main-panel table; rows without children have nothing to fold. Enter on a search result selects and expands the branch so the result stays visible.
-
-Collapsing a cluster connection also collapses its tool branches. Reopening the connection shows Kubernetes and any detected tools as collapsed branches. At startup, Current Workspace opens Overview and expands the selected cluster and Kubernetes branch. Saved workspace connections and their cluster tool branches start collapsed. Choose a connection to resume its saved preferences. Workspace, Monitor section and resource-category fold choices remain saved. Loading or reconnecting Kubernetes preserves these folds; choosing a resource explicitly can reveal its path. Refreshes preserve fold choices. Selecting or expanding a cluster connection discovers Helm release metadata and Argo and Flux APIs. Press `g` on the cluster or a tool branch to refresh discovery. **Tool discovery incomplete** means some checks failed or were denied; it does not mean those tools are absent. Collapsing it only changes sidebar visibility. Live Kubernetes resource requests follow the [active Explore view](../integrations/kubernetes/README.md#explore-resources).
-
-The filled highlight follows your keyboard selection. The active resource path remains accented when you move elsewhere. Opening resources can expand their path automatically. Deliberate fold choices remain until you change them, collapse the containing cluster connection, or restart as described above.
-
-A small lighthouse appears above Application when the full tree fits with spare room. It disappears as the tree grows, on smaller sidebars, or during search. It never reduces the visible tree area.
-
-Choose which agent supplies the right panel in **Settings → Application → Agent**. Fresh profiles use Plous. Claude Code and Codex run your installed CLI with its own prompt, transcript, and menus. Plous records their tool evidence separately for Sources. See [AI chat](ai-chat.md#choose-an-agent) for setup.
+Use [Workspaces and connections](workspaces.md) to save clusters and organize them.
 
 ## Choose a main view
 
-| View | What you use it for | Shortcut | Command |
+| View | Purpose | Shortcut | Command |
 | --- | --- | --- | --- |
-| Overview | See [cluster health, observed changes, warnings, and inventory](overview.md) for a Monitor connection. Workspace selections show saved connections. | `11` | `:1` |
-| Explore | Open the selected tool connection. Available views depend on the integration. | `22` | `:2` |
-| Activity | Review workspace changes, Helm operations, and observed release history. | `33` | `:3` |
+| [Overview](overview.md) | Cluster health, warnings, and inventory | `11` | `:1` |
+| Explore | Resource lists and details | `22` | `:2` |
+| [Activity](activity.md) | Workspace changes and Helm history | `33` | `:3` |
 
-Press a shortcut's two keys consecutively. It runs on the second key, without Enter. A single number does not switch views.
+Press both keys consecutively. A single number does not switch views.
 
-Plous starts on Overview in Current Workspace each time. Explore starts with Pods in the kubeconfig context namespace, or `default` when unset. Your saved workspaces, conversations, drafts, panel visibility, and tool preferences remain available. Only the current cluster connects at startup. Use `:K` to switch context, or select a saved connection under Workspaces. Without a resolved target, Enter opens context selection and `:s` offers a kubeconfig path. Use `:n` for optional workspace setup.
-
-See [Tool integrations](../integrations/README.md) for each tool's current capabilities.
-
-Kubernetes **Events** describe events reported by the cluster for an object. Plous **Activity** combines saved workspace changes with Helm operation outcomes and observed release history. It is not a complete cluster audit. See [Activity and history](activity.md).
+Plous starts in Overview. Explore starts with Pods in the context's namespace, or `default` if none is set. Type `:K` to choose another context.
 
 ## Run a command
 
-1. While navigating, press **:**.
-2. Type a command name in the box at the bottom of the main panel. For example, type `s` for Settings.
-3. Press **Enter** to run it, or **Esc** to cancel and restore the previous focus.
+1. Press `:` while navigating.
+2. Type a command, such as `s` for Settings.
+3. Press Enter to run it, or Esc to cancel.
 
-The docs write that sequence as `:s`. Commands work from any navigation panel. They are not shell commands, and you do not need to enter a separate command mode first.
+These docs write that sequence as `:s`. Commands work from any navigation panel.
 
-Help keeps global navigation visible and shows view controls for the current screen, such as Logs, Exec, YAML, or Settings.
-
-Use short commands: `:h` for Help, `:s` for Settings, and `:c` for chat. Full names are optional alternatives listed in the [keymap](../reference/keymap.md#commands).
+Common commands are `:h` for Help, `:s` for Settings, and `:c` for chat. The [keymap](../reference/keymap.md#commands) lists their full names.
 
 ## Switch between tree and main
 
-Press **Tab** during navigation to switch between the tree and main. It reveals the tree if hidden and restores the layout when leaving main fullscreen. **Ctrl+]** handles the agent separately. Tab never enters or leaves the agent; Shift+Tab does not switch panels. Forms, search and command input, editable documents, Help, Sources and native terminals keep their local Tab behavior.
+Press Tab during navigation to switch between the sidebar and main panel. Tab reveals a hidden sidebar and leaves main fullscreen.
+
+Use **Ctrl+]** for the agent panel. Tab does not enter or leave it. Forms, searches, editors, Help, Sources, and native terminals keep their own Tab behavior.
 
 ## Know when you are typing
 
-A focused search field, form field, command box, or chat composer accepts text. Typing `cc`, `22`, or `:pods` inside an ordinary text field inserts those characters; it does not navigate.
+Text fields accept literal text. Typing `cc`, `22`, or `:pods` in a field does not run a shortcut.
 
-With the Plous agent selected, use `:c` or **cc** while navigating to start a chat draft. Merely focusing the right panel does not enter typing. Press **Esc** to leave Plous chat typing and keep your draft. For a native agent, **cc** enters its terminal; **Ctrl+]** toggles focus between the agent and the previous panel, preserving its running session. See [native agent controls](ai-chat.md#choose-an-agent).
+- Press `cc` from navigation to enter chat or the native agent terminal.
+- Press Esc to leave Plous chat typing and keep your draft.
+- Press Ctrl+] to leave a native agent terminal.
+- Use arrows and Enter to move through forms. Save applies changes. Esc cancels.
 
-In forms, **Up / Down** moves between fields and buttons. **Enter** advances to the next field or activates the selected button. **Left / Right** changes a choice such as an AI vendor. Save applies changes; Esc cancels them. Alt+Left/Right leave and resume Settings and Help without losing unfinished work.
-
-Paste works in fields, searches, and active chat input. Paste into navigation or the colon command box is ignored. Type colon commands directly.
+Paste works in text fields and chat. Pasted navigation keys and colon commands are ignored.
 
 ## Search and clear a filter
 
-Press **/** while navigating. A bordered field opens inside the focused panel.
+Press `/` in the panel you want to search.
 
-| Where you search | What happens |
+| View | Search behavior |
 | --- | --- |
-| Workspace tree | Names are filtered, including matching items inside collapsed branches. Arrows select; Enter opens. |
+| Sidebar, Activity, history | Filter entries. Use arrows and Enter to open a result. |
 | Kubernetes table | Type a row filter and press Enter to apply it. |
-| Activity or conversation history | Entries are filtered by their displayed text. Arrows select; Enter opens. |
-| Cluster Overview | Filter the lower lists; Enter inspects a match. Esc clears the query. |
-| Details, logs, workspace summary, or a conversation | Matches in the view's text are highlighted and counted. Enter finishes query input; n/N moves to the next or previous match. While typing, Down/Up steps through matches. |
+| Overview | Filter its lower lists |
+| Details, logs, chat | Find text. Press Enter to finish typing, then `n` / `N` for the next / previous match. |
 
-Tree search finds resource types after their connection's catalog has loaded. It does not contact other clusters to search them.
+Esc closes search. In a resource table, it cancels an unfinished edit but keeps an applied filter. Press Backspace in table navigation to clear that filter without changing the namespace, labels, or sorting.
 
-An applied table filter stays in its bar with **Backspace clear**. Press **Backspace** while navigating the table to clear the text filter. Namespace, label selector, sorting, and selection stay as they were. Backspace still deletes a character while you are typing.
-
-A search in a covered view keeps its query but does not receive input. After Enter finishes text-find input, visible action keys work normally; `n`/`N` still navigates matches.
-
-**Esc** closes an active search or cancels an unfinished filter edit. It preserves a table filter you already applied with Enter. In tree, Activity, and history search, Esc restores the unfiltered list. Log search pauses following; after closing search, **Space** resumes it.
+Log search pauses following. Press Space after closing search to resume it.
 
 ## Go back with Esc
 
-Each press closes one current layer:
+Esc closes one layer at a time: search, selection, input, then the current detail or document. A modified editor asks whether to keep editing or discard changes.
 
-- An unfinished command, search, picker, or form closes or cancels first.
-- Chart inspection closes before the underlying Describe search, expanded layout, or detail view.
-- Activity comparison returns to its summary.
-- Search and selection close before leaving a document or output view.
-- An expanded view restores the panel layout before closing.
-- YAML returns to the detail section that opened it, retaining its scroll position. YAML opened from a list returns to that list.
-- A value preview returns to its value picker and clears the preview buffer.
-- Logs returns to the resource detail that opened it.
-- A related resource returns to the previous resource.
-- A resource detail returns to its list, keeping the filter and selection.
-- At a root main view, Esc focuses the visible sidebar. It does not reveal a sidebar you hid.
+Returning from a detail view keeps the list's filter and selection. At a root main view, Esc focuses the visible sidebar.
 
-If you pressed only the first key of a double-key shortcut, Esc clears that pending key first. Look at the footer to see the pending prefix.
-
-Leaving chat typing does not stop a running reply. Use `:X` to stop it. Leaving an operation after Kubernetes has accepted it does not undo that operation.
+Esc does not stop a running chat reply. Use `:X` for that. Leaving a resource operation does not undo a request Kubernetes has already accepted.
 
 ## Make more room
 
-Press **bb** to hide or show the sidebar. **ii** or `:i` cycles the assistant through normal width, double width, hidden, and back to normal. Double width keeps room for main on smaller terminals. Panel travel skips hidden panels. Plous remembers size and visibility across restarts.
+| Key | Action |
+| --- | --- |
+| `bb` | Hide or show the sidebar |
+| `ii` | Cycle the assistant through normal width, double width, and hidden |
+| `ff` or `:f` | Expand or restore main |
+| Ctrl+] | Focus the agent, or return to the previous panel |
 
-**Ctrl+]** switches to the agent panel and back to the previous panel. It reveals a hidden assistant and preserves drafts, forms and overlays. For Claude Code or Codex, use it to reach Plous navigation, then press it again to resume the same CLI. Captured Exec retains Ctrl+] for output review. **ff** temporarily expands main and restores the previous assistant size when closed.
+Fullscreen lasts while you navigate within main. Repeat `ff`, change panel focus, or toggle a panel to restore the layout. In an editable document, use `:f`.
 
-Use `:c` to reveal the assistant and type again. Hiding it preserves drafts and lets a reply continue.
-
-Use **ff**, `:f`, or `:fullscreen` from any navigation panel to expand main to the full width. This works in every main view, including Overview, Explore tables and details, and Activity. Navigating within main keeps it expanded. Repeat the command to restore your previous layout, or use Alt+Left/Right to move to a side panel. Saved panel visibility stays unchanged. In an editable document, use `:f` so document keys retain their meaning. Read-only Kubernetes YAML also supports `ff`. See [Expand a view](../reference/keymap.md#expand-a-view) for focus and Esc behavior.
+Panel visibility and assistant size are saved across restarts. Hiding the assistant keeps its draft and running session.
 
 ## Use Help
 
-Press **hh** or run `:h`. Help opens above the retained view with workspace, view, chat, and global controls.
+Press `hh` or `:h`. Help shows controls for the workspace tree, current view, and chat, with global controls below.
 
-Each upper section describes its own context. Workspace Help follows the highlighted tree row. The center follows the open Monitor view, integration, resource, and any active editor, picker, or dialog. Chat Help follows the composer, history, reply reader, or Sources. Opening Help selects the section you came from.
+Use Left / Right to choose a section. Use arrows or page keys to scroll. Esc returns to your previous view, including an unfinished form.
 
-The controls also follow the current interaction: typing a search or namespace, selecting text, reading a comparison, or choosing its actions. Global view commands (`:1` to `:3`, or `11`, `22`, and `33`) stay in the bottom box.
-
-Primary keys appear first; alternative keys and full command names follow below. A position indicator shows when more controls are available by scrolling. Help captures the current controls when opened, so background updates do not move the reference while you read. Close and reopen it to refresh the context.
-
-**Left / Right** selects one of its three upper sections. **Up / Down** and **Page Up / Page Down** scroll that section. **Esc** closes Help and returns to what you were doing, including an unfinished Settings form. Alt+Left/Right pause Help and restore it when you return to its panel.
-
-Selecting a Help section does not change the underlying panel, connection, or resource. Local keys describe the view you will return to; pressing them in Help does not run that action. The global box keeps shared navigation and exit controls visible.
-
-Next: [Manage workspaces](workspaces.md) or [Explore Kubernetes](../integrations/kubernetes/README.md#explore-resources).
+Next: [Save a workspace](workspaces.md) or [explore Kubernetes](../integrations/kubernetes/README.md#explore-resources).

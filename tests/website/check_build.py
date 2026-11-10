@@ -5,6 +5,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlsplit
 import os
 import json
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -20,10 +21,21 @@ class Page(HTMLParser):
         self.links = []
         self.titles = 0
         self.h1 = 0
+        self.stack = []
+        self.code_colors = {}
         self.feed(source)
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
+        key = attrs.get("id", "")
+        if attrs.get("aria-label", "").endswith(" code example"):
+            key = f"code-block-{len(self.code_colors)}"
+            self.code_colors[key] = set()
+        if tag not in {"meta", "link", "img", "input", "br", "hr"}:
+            self.stack.append((tag, key))
+        for _, ancestor in self.stack:
+            if ancestor in self.code_colors:
+                self.code_colors[ancestor].update(re.findall(r"(?:^|;)color:(var\(--[a-z-]+\)|#[a-f0-9]{6})", attrs.get("style", "")))
         if "id" in attrs:
             self.ids.add(attrs["id"])
         self.titles += tag == "title"
@@ -33,6 +45,26 @@ class Page(HTMLParser):
                 self.links.append(attrs[attribute])
         if tag == "img" and "alt" not in attrs:
             raise ValueError("Image lacks alternative text")
+
+    def handle_endtag(self, tag):
+        for index in range(len(self.stack) - 1, -1, -1):
+            if self.stack[index][0] == tag:
+                del self.stack[index:]
+                break
+
+
+
+def contrast(first, second):
+    def luminance(value):
+        value = value.lstrip("#")
+        if len(value) == 3:
+            value = "".join(char * 2 for char in value)
+        channels = [int(value[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+        linear = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in channels]
+        return sum(c * weight for c, weight in zip(linear, (0.2126, 0.7152, 0.0722)))
+    a, b = sorted((luminance(first), luminance(second)))
+    return (b + 0.05) / (a + 0.05)
+
 
 
 def main():
@@ -95,10 +127,32 @@ def main():
                 failures.append(f"Missing documentation page: {root}: {name}")
             elif 'data-rune-static' not in target.read_text():
                 failures.append(f"Documentation page was not exported by Rune: {root}: {name}")
+    if not manifest.exists():
+        examples = {
+            "docs/getting-started/index.html": [("code-block-0", 1)],
+            "docs/mcp/setup/index.html": [("code-block-0", 2), ("code-block-1", 2)],
+            "docs/reference/configuration/index.html": [("code-block-1", 2)],
+        }
+        for route, blocks in examples.items():
+            page = pages.get(DIST / route)
+            for block, minimum in blocks:
+                colors = page.code_colors.get(block, set()) if page else set()
+                if len(colors) < minimum:
+                    failures.append(f"{route}: {block} lacks syntax token colors")
+                source = (DIST / route).read_text() if page else ""
+                for theme in (r":root", r":root\[data-theme=dark\]"):
+                    style = re.search(theme + r"\{([^}]+)\}", source)
+                    palette = dict(re.findall(r"--([a-z-]+):(#[a-f0-9]{3,6})(?:;|$)", style[1])) if style else {}
+                    for color in colors:
+                        token = re.fullmatch(r"var\(--([a-z-]+)\)", color)
+                        value = palette.get(token[1]) if token else color
+                        if not value or "surface" not in palette or contrast(value, palette["surface"]) < 4.5:
+                            failures.append(f"{route}: {block} token {color} has insufficient contrast in {theme}")
+
     if failures:
         print("\n".join(failures), file=sys.stderr)
         return 1
-    print(f"Verified {len(pages)} HTML pages: source coverage, titles, images, local links, anchors and search assets ({BASE}).")
+    print(f"Verified {len(pages)} HTML pages: source coverage, titles, images, local links, anchors, code colors and search assets ({BASE}).")
     return 0
 
 

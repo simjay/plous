@@ -147,9 +147,9 @@ fn workflows(p: Paint,phone: bool) -> El {
 fn home(s: &State,cx: &Cx<State>,phone: bool,p: Paint) -> El {
     let size=if phone {40.0} else {64.0};
     let intro=col().w_full().gap(22.0).pt(if phone {40.0} else {72.0}).pb(44.0)
-        .child(txt("top","A clearer view of\nyour Kubernetes.",TextStyle::new(size,600.0).lh(size+8.0).tracking(-1.2),p.ink).role("heading").level(1))
+        .child(txt("top","Kubernetes,\nin your terminal.",TextStyle::new(size,600.0).lh(size+8.0).tracking(-1.2),p.ink).role("heading").level(1))
         .child(version_button(p))
-        .child(txt("home-intro","Inspect clusters, follow workload evidence, and investigate with your AI assistant. Choose the workflow that fits how you work.",TextStyle::new(19.0,400.0).lh(31.0),p.muted).max_w(650.0));
+        .child(txt("home-intro","Browse resources, read logs, and debug failures from one terminal.",TextStyle::new(19.0,400.0).lh(31.0),p.muted).max_w(650.0));
     let product=col().key("product").w_full().gap(16.0).py(48.0)
         .child(row().href(format!("{}assets/plous-overview.png",content().base)).label("Open full size Plous workspace screenshot").w_full()
             .child(picture(s,cx,"product-image","plous-overview.png",1200.0,"Plous workspace overview with cluster health and the Codex assistant.").w_full().aspect_ratio(3024.0/1964.0).radius(10.0).border(1.0,p.line)))
@@ -160,7 +160,7 @@ fn home(s: &State,cx: &Cx<State>,phone: bool,p: Paint) -> El {
     }
     let contributor=col().w_full().gap(16.0).py(48.0)
         .child(txt("contribute-title","Built in the open",TextStyle::new(28.0,600.0).lh(36.0),p.ink).role("heading").level(2))
-        .child(txt("contribute-copy","Plous is in early development. Read the guides, report a bug, or help improve the project.",BODY,p.muted).max_w(640.0))
+        .child(txt("contribute-copy","Report a bug or contribute to Plous.",BODY,p.muted).max_w(640.0))
         .child(link("contributor-guide","Read the contributor guide",&format!("{}docs/contributing/",content().base),p));
     col().w_full().child(intro).child(workflows(p,phone)).child(product).child(rule("integrations-rule",p)).child(integrations).child(rule("contribute-rule",p)).child(contributor)
 }
@@ -196,15 +196,16 @@ fn markdown(s: &State,page: &Page,width: f32,p: Paint) -> El {
     let mut style=MarkdownStyle::neutral(s.dark).text(p.ink).muted(p.muted).link(p.blue).rule(p.line)
         .body_font(BODY).heading_font(2,TextStyle::new(25.0,600.0).lh(34.0).tracking(-0.3))
         .heading_font(3,TextStyle::new(19.0,600.0).lh(28.0))
-        .inline_code_bg(p.surface).code_block(p.surface,p.line).shell_code(p.surface,p.line,p.ink)
-        .code_block_font(TextStyle::new(13.0,400.0).lh(22.0).mono()).code_block_padding(18.0,16.0)
+        .inline_code_bg(p.surface).code_block(p.surface,p.line)
+        .code_block_font(TextStyle::new(14.0,400.0).lh(24.0).mono()).code_block_padding(18.0,16.0)
         .table_font(TextStyle::new(14.0,400.0).lh(23.0)).table_cell_padding(12.0,10.0)
         .table_full_width(true).table_header_fill(p.surface).table_rules(p.line).text_width(width).wide_fade(0.0);
+    let code_blue=hex(if s.dark {"#8db4ff"} else {"#2458b8"});
     let green=hex(if s.dark {"#94d7af"} else {"#206a43"});
     let violet=hex(if s.dark {"#cfadff"} else {"#7045ba"});
     let amber=hex(if s.dark {"#e7bc83"} else {"#905500"});
     let red=hex(if s.dark {"#f3a5af"} else {"#b63e50"});
-    for (kind,color) in [(Syntax::Keyword,violet),(Syntax::String,green),(Syntax::Number,amber),(Syntax::Comment,p.muted),(Syntax::Type,violet),(Syntax::Function,p.blue),(Syntax::Property,p.blue),(Syntax::Punctuation,p.muted),(Syntax::Inserted,green),(Syntax::Deleted,red),(Syntax::Parameter,p.ink),(Syntax::Heading,violet),(Syntax::Link,p.blue),(Syntax::Operator,p.muted),(Syntax::Regex,green),(Syntax::Attribute,amber),(Syntax::Variable,p.ink)] {
+    for (kind,color) in [(Syntax::Keyword,violet),(Syntax::String,green),(Syntax::Number,amber),(Syntax::Comment,p.muted),(Syntax::Type,violet),(Syntax::Function,code_blue),(Syntax::Property,code_blue),(Syntax::Punctuation,p.muted),(Syntax::Inserted,green),(Syntax::Deleted,red),(Syntax::Parameter,code_blue),(Syntax::Heading,violet),(Syntax::Link,code_blue),(Syntax::Operator,p.muted),(Syntax::Regex,green),(Syntax::Attribute,amber),(Syntax::Variable,violet)] {
         style=style.syntax(kind,color);
     }
     let md=Markdown::new(source.clone()).selectable(true).scroll_wide(true)
@@ -218,7 +219,7 @@ fn markdown(s: &State,page: &Page,width: f32,p: Paint) -> El {
         .on_link_tx(|_: &mut State,url,tx| {let _=tx.open_url_same_tab(url);})
         .code_frame(move |card,code| {
             let value=code.source.to_owned();
-            col().w_full().gap(8.0).child(row().w_full().justify_between().center_y()
+            col().role("region").label(format!("{} code example",code.language.unwrap_or("text"))).w_full().gap(8.0).child(row().w_full().justify_between().center_y()
                 .child(txt(&format!("language-{}",code.index),code.language.unwrap_or("text"),SMALL,p.muted))
                 .child(button(&format!("copy-{}",code.index),"Copy",p).label(format!("Copy code block {}",code.index+1)).on_press_tx(move |_: &mut State,tx| tx.copy(value.clone()))))
                 .child(card)
@@ -231,7 +232,7 @@ fn article(s: &State,cx: &Cx<State>,page: &Page,phone: bool,p: Paint) -> El {
         .child(txt("section-name",&page.section,LABEL,p.blue))
         .child(txt("top",&page.title,TextStyle::new(if phone {32.0} else {38.0},600.0).lh(if phone {40.0} else {48.0}).tracking(-0.6),p.ink).role("heading").level(1));
     if page.route=="docs/" { body=body.child(txt("index-intro","Choose how you want to work with Plous.",BODY,p.muted)).child(workflows(p,true)); }
-    body.child(markdown(s,page,width,p)).child(rule("edit-rule",p)).child(link("edit-source",if content().version=="Development" {"Edit this page on GitHub"} else {"View tagged source"},&page.edit,p))
+    body.child(markdown(s,page,width,p)).child(rule("edit-rule",p)).child(link("edit-source",if content().version=="Development" {"Edit this page on GitHub"} else {"View source"},&page.edit,p))
 }
 fn toc(page: &Page,phone: bool,p: Paint) -> El {
     let mut out=col().key("contents").role("navigation").label("On this page").w(180.0).gap(8.0).py(44.0)

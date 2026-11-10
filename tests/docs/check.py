@@ -1,5 +1,6 @@
 """Check repository Markdown without a website build or network access."""
 
+from html import unescape
 from collections import Counter
 from pathlib import Path
 import re
@@ -50,6 +51,11 @@ def main():
         text = content[source]
         if source in guides and len(re.findall(r"^#\s+", text, re.MULTILINE)) != 1:
             failures.append(f"{source.relative_to(ROOT)}: expected one page title")
+        if source in guides:
+            readable = re.sub(r"`+[^`]*`+", "", text)
+            readable = unescape(re.sub(r"<[^>]*>", "", readable))
+            if "—" in readable or ";" in readable:
+                failures.append(f"{source.relative_to(ROOT)}: use periods instead of semicolons or em dashes in prose")
         edges[source] = set()
         for match in LINK.finditer(text):
             href = match[1] or match[2]

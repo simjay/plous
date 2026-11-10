@@ -1,0 +1,55 @@
+name: Correct released documentation
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: Published version to correct, such as v0.0.3
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: documentation-correction
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Verify and build correction
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/docs.yml
+    with:
+      correction_tag: ${{ inputs.release_version }}
+
+  publish:
+    name: Preserve correction and queue Pages
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-documentation
+          path: documentation-release
+      - name: Publish without replacing release assets
+        env:
+          CORRECTION_TAG: ${{ inputs.release_version }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          python3 website/scripts/publish.py --upload-correction "$CORRECTION_TAG"
+          gh workflow run docs.yml --ref main

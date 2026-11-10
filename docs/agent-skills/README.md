@@ -1,19 +1,19 @@
 # Agent skills
 
-[Documentation](../README.md) · [Choose your workflow](../getting-started/workflows.md)
+[Documentation](../README.md)
 
-Agent skills provide instructions for completing a task with your coding agent. Plous MCP tools provide the cluster operations those instructions use. Skills use the agent's existing model and authentication.
+A skill gives your coding agent instructions for a task. Plous's **plous-debug** skill guides Kubernetes investigations using cluster tools provided through MCP.
 
 ## Available skills
 
-| Skill | Use it to | Supported agents |
+| Skill | Purpose | Agents |
 | --- | --- | --- |
-| [plous-debug](plous-debug.md) | Investigate Kubernetes failures, reproduce problems, and verify deployed fixes | Codex and Claude Code |
+| [plous-debug](plous-debug.md) | Investigate failures, test causes, and check deployed fixes | Codex and Claude Code |
 
-The plous-debug page contains installation, invocation, examples, limits, and removal in one place. `plous setup` installs that skill and registers its MCP server together.
+Run `plous setup` to install the skill and configure its MCP connection. The [plous-debug guide](plous-debug.md) covers installation, examples, and removal.
 
 ## Skills and MCP
 
-You can [configure MCP directly](../mcp/setup.md) and call the tools without installing a skill. A skill adds a recommended investigation workflow, including how to distinguish evidence, likely causes, and verified outcomes.
+You can [connect MCP](../mcp/setup.md) without installing a skill. MCP provides the tools. The skill explains how to use them during debugging.
 
-Inside the [Plous assistant panel](../guides/plous-mcp.md), Plous supplies embedded debugging guidance. Personal skill discovery is disabled in hosted native sessions. Install plous-debug for independent coding-agent sessions.
+The [assistant panel inside Plous](../guides/plous-mcp.md) already receives debugging instructions. Install plous-debug for agents running outside Plous.

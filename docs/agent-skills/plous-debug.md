@@ -1,69 +1,94 @@
 # plous-debug
 
-[Agent skills](README.md) · [MCP reference](../reference/mcp.md) · [Plous assistant panel](../guides/plous-mcp.md)
+[Agent skills](README.md) · [MCP tools](../reference/mcp.md)
 
-Use Plous from your existing Codex or Claude Code session to investigate Kubernetes failures, reproduce in-cluster errors, and verify deployed fixes. Your coding agent keeps its normal repository tools. Plous supplies cluster tools through a local MCP subprocess; the Plous TUI does not need to be running.
+Use **plous-debug** in Codex or Claude Code to investigate Kubernetes failures, test a suspected cause, and check a deployed fix.
 
-One skill, **plous-debug**, guides all three workflows. It contains investigation guidance rather than another model or agent. The standalone server and Plous assistant use the same guarded tool implementations.
+Your agent keeps its usual repository tools. Plous adds cluster tools through MCP. The Plous terminal UI does not need to be running.
 
 ## Install
 
-Install Plous so `plous` is available on PATH. Setup discovers and records the executable automatically; you do not need to supply its path. Use your installed coding agent and its own authentication.
+Install [Plous](../getting-started/installation.md), then run the command for your agent:
 
 ```sh
 plous setup codex
-# Or:
+```
+
+For Claude Code:
+
+```sh
 plous setup claude
 ```
 
-Interactive setup asks for a kubeconfig path and context. For explicit or noninteractive setup:
+Setup asks for your kubeconfig and context. It checks the API connection, installs the skill, and configures MCP. It finds the Plous executable automatically.
+
+Restart or reconnect your agent. Invoke `$plous-debug` in Codex or `/plous-debug` in Claude Code.
+
+To supply the target without prompts:
 
 ```sh
-plous setup codex --kubeconfig /path/to/kubeconfig --context staging --namespace shop
-plous setup claude --kubeconfig /path/to/kubeconfig --context staging --namespace shop
+plous setup codex \
+  --kubeconfig /path/to/kubeconfig \
+  --context staging \
+  --namespace shop
 ```
 
-Setup checks the Kubernetes API connection, installs the skill, and registers the `plous_debug` MCP server. It does not change kubeconfig, the active Kubernetes context, or your selected Plous assistant. `--skip-check` skips only the API check, not local target validation. It does not check that every resource or diagnostic permission is available.
+Use `claude` in place of `codex` for Claude Code. Both use the client's existing authentication.
 
-| Client | Installed skill | MCP configuration |
+### Files installed
+
+| Client | Skill | MCP configuration |
 | --- | --- | --- |
 | Codex | `~/.agents/skills/plous-debug/SKILL.md` | `~/.codex/config.toml`, or `$CODEX_HOME/config.toml` |
 | Claude Code | `~/.claude/skills/plous-debug/SKILL.md` | `~/.claude.json` |
 
-Existing client settings and other MCP servers are retained. Setup refuses an unmanaged `plous_debug` server or an unrelated skill at its destination. Rerun setup to update Plous's own installation. `--home PATH` chooses a separate installation home, including both the skill and client configuration.
+Setup preserves other MCP entries. It stops if an unrelated skill or unmanaged `plous_debug` entry already uses the destination. Rerun setup to update an installation managed by Plous.
 
-Restart or reconnect your coding agent after setup. Codex can invoke `$plous-debug`; Claude Code can invoke `/plous-debug`. Both can also select the skill when a request matches its description. Organization settings may restrict skill or MCP availability.
+`--home PATH` chooses a separate installation home. `--skip-check` skips the API connection test but still validates the local target settings.
 
 ## Investigate, reproduce, and verify
 
-Start with the symptom and intended target:
+Name the symptom, context, and namespace:
 
-> Use plous-debug. Checkout returns 502 in staging/shop. Inspect the failing workload's status, events, and current or previous container logs. Connect the observed error to repository code and test the fix locally.
+> Use plous-debug. Checkout returns 502 in staging/shop. Check its Pods, events, and logs. Find the cause and test a fix in this repository.
 
-Reads include Kubernetes resources, events, bounded container logs, available usage, and relevant Helm, Argo, and Flux evidence. Exact tool names are in the [MCP reference](../reference/mcp.md#available-tools). The agent must identify the container before requesting its logs. Missing permissions and partial results remain explicit.
+The agent can read Kubernetes objects, events, logs, metrics, and available Helm, Argo CD, and Flux data. See the [tool list](../reference/mcp.md#available-tools).
 
-After deploying the fix through your existing process:
+Deploy through your usual process. Then ask:
 
-> Verify the checkout fix. Confirm the intended image is running, repeat the failing request if active diagnostics are enabled, and check fresh errors. Separate local test results from cluster verification.
+> Verify the checkout fix in staging/shop. Check the running image and new errors. Repeat the failing request if diagnostics are enabled.
 
-The agent cannot infer a successful deployment from a repository edit or a passing health endpoint.
+A passing local test does not confirm that a fix is deployed.
 
 ## Enable active debugging
 
-Setup exposes reads by default. To enable bounded commands in existing containers, add `--allow-exec` when running setup. To enable temporary HTTP, DNS, or TCP tests, supply `--diagnostic-image IMAGE`. Both apply to the captured default namespace and require Kubernetes permission for the operation.
+Reads are enabled by default. Add `--allow-exec` during setup to allow commands in existing containers.
 
-Follow [Active diagnostics](../mcp/active-diagnostics.md) for commands, image requirements, limits, remote-outcome handling, and cleanup. State-changing tests need explicit intent; a failed connection does not establish that an action never ran.
+```sh
+plous setup codex --allow-exec
+```
+
+Add `--diagnostic-image IMAGE` to allow temporary HTTP, DNS, and TCP tests. Both options apply to the selected default namespace and require Kubernetes permissions.
+
+See [Active diagnostics](../mcp/active-diagnostics.md) for examples, image requirements, and cleanup.
 
 ## Scope, evidence, and lifecycle
 
-Setup fixes the cluster context, default namespace, and diagnostic grants until the agent reconnects. Reads may use other namespaces allowed by the captured credentials. Each standalone process saves its own evidence profile; previous standalone sessions are not automatically imported or searched.
+The cluster, default namespace, and diagnostic permissions stay fixed until the agent reconnects. Reads can use other namespaces permitted by your Kubernetes credentials.
 
-Read [Scope, evidence, and lifecycle](../mcp/scope.md) for profile locations, persistence, and cancellation. Logs and command output may be sent to your agent's model provider; kubeconfig credentials stay with Plous.
+Each MCP process saves its own tool evidence. It does not search earlier standalone sessions automatically. Logs and command output may be sent to the agent's model provider. Kubeconfig credentials stay with Plous.
+
+See [Scope and saved evidence](../mcp/scope.md) for storage locations and cancellation behavior.
 
 ## Remove the integration
 
-Remove the installed `plous-debug` skill directory and its `plous_debug` MCP configuration. For Codex, remove only the block between `BEGIN PLOUS DEBUG MCP` and `END PLOUS DEBUG MCP`. For Claude Code, remove only `mcpServers.plous_debug`. Reconnect the client. Saved evidence remains until you remove its standalone profiles.
+Delete the installed `plous-debug` skill directory and remove its MCP entry:
+
+- **Codex:** remove the block between `BEGIN PLOUS DEBUG MCP` and `END PLOUS DEBUG MCP`.
+- **Claude Code:** remove `mcpServers.plous_debug`.
+
+Reconnect the client. Saved evidence remains until you delete the standalone profiles.
 
 ## Next steps
 
-Use the [restarting-Pod tutorial](../guides/investigate-restarting-pod.md) as a concrete target. [MCP setup](../mcp/setup.md) covers manual tool connections without a skill. The installed instructions are maintained in [skills/plous-debug](../../skills/plous-debug/SKILL.md).
+Try [Investigate a restarting Pod](../guides/investigate-restarting-pod.md). Use [MCP setup](../mcp/setup.md) for a connection without the skill. The skill's source is [skills/plous-debug](../../skills/plous-debug/SKILL.md).
