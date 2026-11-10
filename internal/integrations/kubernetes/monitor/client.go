@@ -109,6 +109,11 @@ func (c *Client) read(ctx context.Context, path string, into any) error {
 	return json.Unmarshal(data, into)
 }
 
+func (c *Client) CheckConnection(ctx context.Context) error {
+	var version map[string]any
+	return c.read(ctx, "/version", &version)
+}
+
 func (c *Client) discoveryGroups(ctx context.Context) (metav1.APIGroupList, map[schema.GroupVersion]*metav1.APIResourceList, []error) {
 	data, err := c.discovery.Get().AbsPath("/apis").SetHeader("Accept", discovery.AcceptV2+","+discovery.AcceptV1).Timeout(12 * time.Second).Do(ctx).Raw()
 	var response struct {

@@ -4,11 +4,11 @@
 
 Start with the symptom below. The footer shows which panel has focus; the Explore header shows the context and namespace. Check these before changing configuration.
 
-Jump to [launch](#plous-will-not-launch), [keyboard and panels](#panel-or-editing-keys-do-not-work), [cluster access](#explore-cannot-connect), [missing integrations](#helm-argo-or-flux-is-missing), [Code and rendering](#code-is-empty-or-a-render-fails), [AI setup](#ai-chat-will-not-send), [MCP](#an-external-agent-cannot-use-plous-tools), or [profile recovery](#plous-reports-corrupt-data).
+Jump to [launch](#plous-will-not-launch), [keyboard and panels](#panel-or-editing-keys-do-not-work), [cluster access](#explore-cannot-connect), [missing integrations](#helm-argo-or-flux-is-missing), [AI setup](#ai-chat-will-not-send), [MCP](#an-external-agent-cannot-use-plous-tools), or [profile recovery](#plous-reports-corrupt-data).
 
 ## Plous will not launch
 
-**It says an interactive terminal is required.** Run Plous directly in a terminal window. Its interface cannot run through redirected input/output or a pipe. `./bin/plous --version` and `./bin/plous --help` can be used without opening the interface.
+**It says an interactive terminal is required.** Run Plous directly in a terminal window. Its interface cannot run through redirected input/output or a pipe. `plous --version` and `plous --help` can be used without opening the interface.
 
 **It says to resize the terminal.** Make the window at least 80 columns by 16 rows. Hidden actions are disabled while the window is too small. Ctrl+C can still save and exit.
 
@@ -38,7 +38,7 @@ The automated suite replays keyboard encodings and exercises an isolated tmux se
 
 ## Copy or paste does nothing
 
-Native terminal Copy needs a native terminal selection. With Plous mouse support On, dragging in fields and viewers creates a Plous selection: click **Copy selection** in the footer, or use `y` in a viewer. Turn Mouse support Off in Settings to use native terminal selection everywhere.
+Native terminal Copy needs a native terminal selection. With Plous mouse support On, dragging creates a Plous selection in fields, viewers, tables, labels, Help, chat transcripts, and native agent output. Click **Copy selection** in the footer, or use `y` in a viewer. This keeps mouse controls available. Turn Mouse support Off in Settings if you prefer native terminal selection everywhere.
 
 Paste into an active field, search, composer, or editable document. Navigation and colon-command input ignore paste. Mac terminals normally use ⌘V; GNOME Terminal uses Ctrl+Shift+V. Plous cannot intercept shortcuts consumed by the terminal. See [Copy and paste](keymap.md#copy-and-paste) for forwarded shortcuts, local clipboard tools, and remote sessions.
 
@@ -104,22 +104,7 @@ If listing namespaces is denied, use **Enter namespace manually** or `:N NAME`, 
 
 Select the cluster in the sidebar and press **g** to repeat discovery. Helm appears after release metadata is detected; Argo and Flux appear when their APIs are discovered. A tool appearing in a source repository does not establish that its controller or release storage exists in this cluster.
 
-**Tool discovery incomplete** means a check failed or was denied. Confirm permissions for that context before interpreting a hidden branch as absence. Helm checks its configured storage, or Secrets and then ConfigMaps by default; it can fall back to the context namespace when cluster-wide discovery is denied. See [Helm discovery](../integrations/helm/README.md#connection-and-discovery) and [GitOps discovery](../integrations/gitops/README.md#open-the-view).
-
-## Code is empty or a render fails
-
-| Symptom | What to check |
-| --- | --- |
-| Current Workspace shows the wrong directory | Code uses the directory where Plous was launched. Relaunch there or add an explicit saved source. |
-| A technology browser is empty | Check the selected source and scan status. Open Files to confirm the path, then **g** to refresh. A scan does not render. |
-| A file is missing from browsing or search | Check the profile's `.plousignore`, repository `.gitignore`, and displayed coverage limits. See [source exclusions](data-and-privacy.md#global-source-scanning-exclusions). |
-| My edit is missing from rendered output | Save the file first. Rendering uses saved bytes, not the editor's unsaved buffer. |
-| A remote source shows old content | Refresh the source. Reads and renders use its acquired revision until refreshed. |
-| Rendering fails | Open **Technical details** for the full diagnostic. Check declared dependencies, input limits, and [supported engine behavior](../integrations/kustomize/README.md#engines-and-boundaries). |
-| Previous output or a stale result remains visible | The latest render did not replace that result. Correct the input and use **r** to retry. |
-| The assistant cannot explain generated output | Render the target in Code first. Its analysis tool reads captured results and cannot initiate rendering. |
-
-Follow the [Code walkthrough](../guides/code.md) for the edit, render, and compare sequence. A successful local render does not establish Kubernetes acceptance or readiness.
+**Tool discovery incomplete** means a check failed or was denied. Confirm permissions for that context before interpreting a hidden branch as absence. Helm checks its configured storage, or Secrets and then ConfigMaps by default; it can fall back to the context namespace when cluster-wide discovery is denied. See [Helm discovery](../integrations/helm/README.md#connection-and-discovery) and [Argo CD discovery](../integrations/argo/README.md#open-the-view) and [Flux discovery](../integrations/flux/README.md#open-the-view).
 
 ## My search or filter will not clear
 
@@ -202,8 +187,8 @@ The [MCP troubleshooting table](../guides/plous-mcp.md#troubleshoot-the-connecti
 
 | Symptom | What to do |
 | --- | --- |
-| Missing connection or wrong namespace | Select the intended context or Code source in Plous, then choose or name the namespace. Chat is restricted to that one connection. Changing the selected page does not retarget a running response. |
-| Write or unsupported command denied | The assistant supports the scoped reads in the [tool reference](mcp.md#available-tools). Use the explicit [Kubernetes actions](../integrations/kubernetes/README.md#resource-actions) for changes. |
+| Missing connection or wrong namespace | Select the intended context in Plous, then choose or name the namespace. Chat is restricted to that one connection. Changing the selected page does not retarget a running response. |
+| Write or unsupported command denied | Check the [tool reference](mcp.md#available-tools). Container commands and temporary tests require explicit [active diagnostic grants](mcp.md#active-diagnostics); general changes use the user-operated [Kubernetes actions](../integrations/kubernetes/README.md#resource-actions). |
 | Plous turn budget or an individual read limit reached | Narrow the request to one resource or a shorter log window. Built-in Plous turns have shared time, call, and token limits; native sessions keep CLI-managed context and spending. Individual Plous tool reads remain bounded for every agent. |
 | Search is pending or unavailable | Known saved references remain readable. Lexical retrieval works without embeddings. Check the explicit embedding connection if semantic search remains unavailable. |
 | Old runtime configuration is rejected | Remove retired `history_mode`, `rlm`, CLM and raw-result options. Use the smaller [current configuration](configuration.md#agent-runtime-configuration). |
@@ -227,6 +212,6 @@ To keep working independently, launch with a new `--data-dir` path. That does no
 
 Include the Plous version, OS, terminal name, window size, expected behavior, and the steps that produced the problem. For input problems, include which panel or editor had focus. For Kubernetes problems, describe the resource type and whether the issue also occurs with the same context in your usual client.
 
-Run `./bin/plous --version` to get the version. You can include a screenshot, but remove private names, tokens, API Keys, and Secret values. Do not attach your kubeconfig or whole Plous data directory.
+Run `plous --version` to get the version. You can include a screenshot, but remove private names, tokens, API Keys, and Secret values. Do not attach your kubeconfig or whole Plous data directory.
 
 Report the issue in the [project issue tracker](https://github.com/simjay/plous/issues).

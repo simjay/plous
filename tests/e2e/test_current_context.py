@@ -1,12 +1,39 @@
 """Default context journeys use only a local API and temporary state."""
 
 import json
+import threading
 
 from test_explore import ExploreFixture
 from support import Terminal
 
 
 class CurrentContextTests(ExploreFixture):
+    def test_sidebar_expansion_during_discovery_keeps_folds_and_selection(self):
+        before = self.prepare_current()
+        self.discovery_gate = threading.Event()
+        self.addCleanup(self.discovery_gate.set)
+        app = self.start()
+        app.wait(lambda: any(path == "/apis" for _, path, _ in self.requests), "pending API discovery")
+        app.send("\x1b[1;3D\x1b[H\x1b[D\x1b[C\x1b[B\x1b[B\x1b[B\x1b[D\x1b[C")
+        app.expect_screen("▾ Kubernetes")
+        self.discovery_gate.set()
+        app.expect_screen("Workloads")
+        app.expect_screen("Cluster Pulse")
+        app.send("\x1b[B\x1b[B\x1b[C")
+        app.expect_screen("▾ Workloads")
+        app.wait_json(self.state / "session.json", lambda s: s.get("mode") == 0 and s.get("focus") == 0
+                      and s.get("tree_key", "").endswith("/category/workloads"))
+        app.send("\x1b[D")
+        app.resize(180, 44)
+        app.expect_screen("▸ Workloads")
+        app.send("\x1b[C")
+        app.expect_screen("▾ Workloads")
+        app.capture_screen("sidebar-expanded-after-delayed-discovery")
+        app.send("\x03")
+        app.assert_exit()
+        self.assertEqual(self.config.read_text(), before)
+        self.assertFalse(self.mutations)
+
     def test_overview_arrows_follow_tiles_columns_and_stacked_sections(self):
         before = self.prepare_current()
         app = self.start()

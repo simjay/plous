@@ -9,7 +9,6 @@ import (
 	"github.com/simjay/plous/internal/ai/history"
 	helm "github.com/simjay/plous/internal/integrations/helm/monitor"
 	kubernetes "github.com/simjay/plous/internal/integrations/kubernetes/monitor"
-	"github.com/simjay/plous/internal/source"
 )
 
 type showTool struct {
@@ -22,7 +21,6 @@ func showTools() []showTool {
 	return []showTool{
 		{"kubernetes_show", "kubernetes", kubernetes.ShowHelp, kubernetes.ShowSchema, kubernetes.ValidateShow},
 		{"helm_show", "helm", helm.ShowHelp, helm.ShowSchema, helm.ValidateShow},
-		{"source_show", "source", source.ShowHelp, source.ShowSchema, source.ValidateShow},
 		{"history_show", "", history.ShowHelp, history.ShowSchema, history.ValidateShow},
 	}
 }

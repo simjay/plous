@@ -1,8 +1,0 @@
-resources:
-- ../base
-namePrefix: prod-
-patches:
-- path: replicas.yaml
-replicas:
-- name: api
-  count: 6

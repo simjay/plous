@@ -1,46 +1,119 @@
 package monitor
 
-func (h *HelmState) ActionItems() []string {
-	var items []string
+type HelmAction string
+
+const (
+	HelmOpenDocument                HelmAction = "open-document"
+	HelmPreviewChartChanges         HelmAction = "preview-chart-changes"
+	HelmPreviewRollback             HelmAction = "preview-rollback"
+	HelmInspectRevisionChart        HelmAction = "inspect-revision-chart"
+	HelmReviewRecordedChanges       HelmAction = "review-recorded-changes"
+	HelmRefreshHistory              HelmAction = "refresh-history"
+	HelmRevealSection               HelmAction = "reveal-section"
+	HelmRefreshRelease              HelmAction = "refresh-release"
+	HelmReviewResourceDifferences   HelmAction = "review-resource-differences"
+	HelmRevealResourceDifferences   HelmAction = "reveal-resource-differences"
+	HelmReviewValues                HelmAction = "review-values"
+	HelmInspectPreviewSummary       HelmAction = "inspect-preview-summary"
+	HelmEditInputs                  HelmAction = "edit-inputs"
+	HelmExecuteRollback             HelmAction = "execute-rollback"
+	HelmDiscardWorkflow             HelmAction = "discard-workflow"
+	HelmResumeWorkflow              HelmAction = "resume-workflow"
+	HelmRefreshReleases             HelmAction = "refresh-releases"
+	HelmChooseNamespace             HelmAction = "choose-namespace"
+	HelmRecordedConfiguration       HelmAction = "recorded-configuration"
+	HelmRevealRecordedConfiguration HelmAction = "reveal-recorded-configuration"
+	HelmCompareRecordedLive         HelmAction = "compare-recorded-live"
+	HelmRevealRecordedLive          HelmAction = "reveal-recorded-live"
+)
+
+type HelmMenuItem struct {
+	Label  string
+	Action HelmAction
+}
+
+var helmActionLabels = map[HelmAction]string{
+	HelmOpenDocument:                "Open document",
+	HelmPreviewChartChanges:         "Preview chart changes",
+	HelmPreviewRollback:             "Preview rollback",
+	HelmInspectRevisionChart:        "Inspect revision chart",
+	HelmReviewRecordedChanges:       "Review recorded changes",
+	HelmRefreshHistory:              "Refresh history",
+	HelmRevealSection:               "Reveal this section",
+	HelmRefreshRelease:              "Refresh release",
+	HelmReviewResourceDifferences:   "Review resource differences",
+	HelmRevealResourceDifferences:   "Reveal resource differences",
+	HelmReviewValues:                "Review values",
+	HelmInspectPreviewSummary:       "Inspect preview summary",
+	HelmEditInputs:                  "Edit inputs",
+	HelmExecuteRollback:             "Execute rollback",
+	HelmDiscardWorkflow:             "Discard unfinished action",
+	HelmResumeWorkflow:              "Resume unfinished action",
+	HelmRefreshReleases:             "Refresh releases",
+	HelmChooseNamespace:             "Choose namespace",
+	HelmRecordedConfiguration:       "Recorded configuration",
+	HelmRevealRecordedConfiguration: "Reveal recorded configuration",
+	HelmCompareRecordedLive:         "Compare recorded and live",
+	HelmRevealRecordedLive:          "Reveal recorded/live comparison",
+}
+
+func (action HelmAction) Item() HelmMenuItem {
+	return HelmMenuItem{Action: action, Label: helmActionLabels[action]}
+}
+
+func HelmMenuItems(labels []string) []HelmMenuItem {
+	items := make([]HelmMenuItem, len(labels))
+	for i, label := range labels {
+		items[i].Label = label
+	}
+	return items
+}
+
+func (h *HelmState) ActionItems() []HelmMenuItem {
+	var actions []HelmAction
 	switch {
 	case h.WorkflowVisible() && h.Plan == nil:
-		items = []string{"Discard unfinished action"}
+		actions = []HelmAction{HelmDiscardWorkflow}
 	case h.Timeline != nil && h.Detail == nil:
-		items = []string{"Inspect revision chart", "Review recorded changes"}
+		actions = []HelmAction{HelmInspectRevisionChart, HelmReviewRecordedChanges}
 		if revision := h.Timeline.Selected(); revision > 0 && revision < h.LatestRevision() {
-			items = append(items, "Preview rollback")
+			actions = append(actions, HelmPreviewRollback)
 		}
-		items = append(items, "Refresh history")
+		actions = append(actions, HelmRefreshHistory)
 	case h.Detail != nil:
-		items = nil
+		actions = nil
 		switch h.Tab {
 		case 5:
-			items = []string{"Compare recorded and live", "Reveal recorded configuration", "Reveal recorded/live comparison"}
+			actions = []HelmAction{HelmCompareRecordedLive, HelmRevealRecordedConfiguration, HelmRevealRecordedLive}
 		case 2:
-			items = []string{"Open document", "Reveal this section"}
+			actions = []HelmAction{HelmOpenDocument, HelmRevealSection}
 		case 1:
-			items = []string{"Open document"}
+			actions = []HelmAction{HelmOpenDocument}
 			if h.ChartDocument == 1 || h.ChartDocument == 2 {
-				items = append(items, "Reveal this section")
+				actions = append(actions, HelmRevealSection)
 			}
 		}
-		items = append(items, "Preview chart changes")
+		actions = append(actions, HelmPreviewChartChanges)
 		if h.Detail.Version < h.LatestRevision() {
-			items = append(items, "Preview rollback")
+			actions = append(actions, HelmPreviewRollback)
 		}
-		items = append(items, "Refresh release")
+		actions = append(actions, HelmRefreshRelease)
 	case h.Plan != nil && h.WorkflowVisible():
-		items = []string{"Review resource differences", "Review values", "Edit inputs"}
+		actions = []HelmAction{HelmReviewResourceDifferences, HelmReviewValues, HelmEditInputs}
 		if h.Plan.Operation == "rollback" {
-			items = append(items, "Execute "+h.Plan.Operation)
+			actions = append(actions, HelmExecuteRollback)
 		}
-		items = append(items, "Discard unfinished action", "Inspect preview summary")
-		items = append(items, "Reveal resource differences")
+		actions = append(actions, HelmDiscardWorkflow, HelmInspectPreviewSummary)
+		actions = append(actions, HelmRevealResourceDifferences)
 	default:
-		items = []string{"Refresh releases", "Choose namespace"}
+		actions = []HelmAction{HelmRefreshReleases, HelmChooseNamespace}
 	}
 	if h.Workflow != nil && !h.WorkflowVisible() {
-		items = append(items, "Resume unfinished action", "Discard unfinished action")
+		actions = append(actions, HelmResumeWorkflow, HelmDiscardWorkflow)
+	}
+	items := make([]HelmMenuItem, 0, len(actions))
+	for _, action := range actions {
+		items = append(items, action.Item())
 	}
 	return items
 }

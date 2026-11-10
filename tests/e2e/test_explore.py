@@ -101,6 +101,8 @@ class ExploreFixture(unittest.TestCase):
                 parsed = urlsplit(self.path)
                 path, query = parsed.path, parse_qs(parsed.query)
                 test.requests.append(("GET", path, query))
+                if path == "/apis" and getattr(test, "discovery_gate", None) is not None:
+                    test.discovery_gate.wait(8)
                 if path.endswith("/pods") and query.get("watch") != ["true"] and test.pod_list_gate is not None:
                     test.pod_list_gate.wait(8)
                 if "/namespaces/platform/" in path or (path == "/api/v1/namespaces" and test.namespace_list_denied):

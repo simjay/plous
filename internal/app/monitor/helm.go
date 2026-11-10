@@ -66,7 +66,7 @@ type HelmState struct {
 	Namespaces                 *NamespacePicker
 	PickerCursor               int
 	InputKind                  string
-	Menu                       []string
+	Menu                       []HelmMenuItem
 	MenuKind                   string
 	Draft                      *HelmDraft
 	Plan                       *helmtool.Plan

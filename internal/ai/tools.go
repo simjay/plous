@@ -15,7 +15,7 @@ import (
 	helmtool "github.com/simjay/plous/internal/integrations/helm/monitor"
 	kubernetes "github.com/simjay/plous/internal/integrations/kubernetes/monitor"
 	"github.com/simjay/plous/internal/integrations/observation"
-	"github.com/simjay/plous/internal/source"
+
 	"github.com/simjay/plous/internal/workspace"
 )
 
@@ -37,8 +37,6 @@ func externalDefinitions() []toolDefinition {
 		{"helm", "helm_diff_read", helmtool.CompareHelp, helmtool.ReadOperations("helm_diff_read"), func() map[string]any { return helmtool.ReadSchema("helm_diff_read") }},
 		{"kubernetes", "argo_resources_read", argo.ReadHelp, argo.ReadOperations(), argo.ReadSchema},
 		{"kubernetes", "flux_resources_read", flux.ReadHelp, flux.ReadOperations(), flux.ReadSchema},
-		{"source", "source_files_read", source.FilesHelp, source.ReadOperations("source_files_read"), func() map[string]any { return source.ReadSchema("source_files_read") }},
-		{"source", "source_analysis_read", source.AnalysisHelp, source.ReadOperations("source_analysis_read"), func() map[string]any { return source.ReadSchema("source_analysis_read") }},
 		{"workspace", "workspace_read", workspace.ReadHelp, workspace.ReadOperations(), workspace.ReadSchema},
 	}
 
@@ -108,8 +106,6 @@ func (op *operation) externalRead(ctx context.Context, name, input string) (any,
 		return op.readKubernetes(ctx, input)
 	case "helm_releases_read", "helm_configuration_read", "helm_diff_read":
 		return op.readHelm(ctx, input)
-	case "source_files_read", "source_analysis_read":
-		return op.readSource(ctx, input)
 	case "workspace_read":
 		if op.o.WorkspaceID == "" {
 			return nil, denyRead(errors.New("General chat has no connection tools"))
@@ -129,8 +125,30 @@ func (op *operation) externalRead(ctx context.Context, name, input string) (any,
 
 func (op *operation) toolDefinitions() []aimodel.Tool {
 	var result []aimodel.Tool
+	if op.hasTool("kubernetes") {
+		for _, name := range []string{"kubernetes_exec_run", "kubernetes_diagnostic_run"} {
+			if !op.debugEnabled(name) {
+				continue
+			}
+			parameters := kubernetes.DebugSchema(name)
+			properties := parameters["properties"].(map[string]any)
+			properties["purpose"] = map[string]any{"type": "string", "minLength": 1}
+			properties["connection_id"] = op.connectionParameter("kubernetes")
+			properties["fields"] = observation.FieldsSchema()
+			parameters["required"] = append(parameters["required"].([]string), "purpose", "connection_id")
+			description := kubernetes.ExecHelp
+			if name == "kubernetes_diagnostic_run" {
+				description = kubernetes.DiagnosticHelp
+			}
+			result = append(result, aimodel.Tool{Name: name, Description: description, Parameters: marshal(parameters), Mutating: true})
+		}
+	}
 	for _, d := range op.definitions() {
-		result = append(result, aimodel.Tool{Name: d.Name, Description: d.Description, Parameters: marshal(d.parameters())})
+		parameters := d.parameters()
+		if d.Owner != "workspace" {
+			parameters["properties"].(map[string]any)["connection_id"] = op.connectionParameter(d.Owner)
+		}
+		result = append(result, aimodel.Tool{Name: d.Name, Description: d.Description, Parameters: marshal(parameters)})
 	}
 	result = append(result, historyDefinitions()...)
 	if op.o.UI != nil {
@@ -141,6 +159,18 @@ func (op *operation) toolDefinitions() []aimodel.Tool {
 		}
 	}
 	return result
+}
+
+func (op *operation) connectionParameter(owner string) map[string]any {
+	var ids []string
+	var descriptions []string
+	for _, c := range op.o.Connections {
+		if c.Tool == owner {
+			ids = append(ids, c.ConnectionID)
+			descriptions = append(descriptions, c.Name+"; context="+c.Context+"; default_namespace="+c.Namespace)
+		}
+	}
+	return map[string]any{"type": "string", "enum": ids, "description": strings.Join(descriptions, " | ")}
 }
 
 func (d toolDefinition) prepareInput(input string) (string, error) {

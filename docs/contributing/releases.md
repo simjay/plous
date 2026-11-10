@@ -10,7 +10,7 @@ Push the tap's test and publication workflows before releasing Plous. The Plous 
 
 Both repositories must allow their declared GitHub Actions permissions. Tap publication pushes the tested formula and bottle metadata to `main`; repository rules must permit that workflow. No manual PR approval or GitHub auto-merge setting is required by this pipeline.
 
-The formula is created by the first release. Until the first Homebrew publication succeeds, use the source installation instructions. A successful local check does not verify hosted publication.
+The formula is published in the tap. User installation and update instructions are in [Installation](../getting-started/installation.md#install-with-homebrew). A successful local check does not verify a new hosted publication.
 
 ## Release a version
 
@@ -18,31 +18,22 @@ The formula is created by the first release. Until the first Homebrew publicatio
 2. Run `make check` and `make dist`.
 3. Commit the intended release files on `main`. Inspect the outgoing commits and tree for local internals; root `.github/` is the only permitted dot-directory.
 4. Push `main` and confirm CI succeeds.
-5. Create and push the matching tag. For example, if the version file contains `0.0.2`:
+5. Create and push the matching tag. For example, if the version file contains `0.0.3`:
 
    ```sh
-   git tag -a v0.0.2 -m "Release v0.0.2"
-   git push origin v0.0.2
+   git tag -a v0.0.3 -m "Release v0.0.3"
+   git push origin v0.0.3
    ```
 
-The Release workflow runs CI, verifies the tag and archive checksums, uploads the verified distribution artifact, and publishes the GitHub release with generated notes. Publication is automatic. Tags with prerelease suffixes are not supported.
+The Release workflow runs CI, verifies the tag and archive checksums, uploads the verified distribution artifact and tagged documentation snapshot, and publishes the GitHub release with generated notes. Publication is automatic. Tags with prerelease suffixes are not supported.
 
 Manually published GitHub releases also trigger the Homebrew update. Use the tag workflow above to run the full application checks and publish verified download archives as part of the release.
 
-The Homebrew job downloads the tagged source archive, checks its embedded version, computes its SHA-256, and opens a formula PR. The build dependency follows the Go major/minor version declared in the archive's `go.mod`, including the repository's local module replacement. It does not use `go install module@version` or override the embedded application version.
+The Homebrew job downloads the tagged source archive, checks its embedded version, computes its SHA-256, and opens a formula PR. The build dependency follows the Go major/minor version declared in the archive's `go.mod`. It does not use `go install module@version` or override the embedded application version.
 
-The tap builds and tests bottles on macOS 15 for Apple Silicon and Intel, and Linux for ARM64 and x86-64. Tests check the version, CLI behavior, and startup and exit in an isolated terminal. After every job succeeds, publication verifies the current PR commit, uploads the bottles, and pushes the formula with bottle metadata. Only owner-created release branches that change `Formula/plous.rb` qualify for automatic publication. The previous formula stays available if a build fails.
+The tap builds and tests bottles on macOS 15 for Apple Silicon, and Linux for ARM64 and x86-64. Intel Mac release archives are published separately. Tests check the version, CLI behavior, and startup and exit in an isolated terminal. After every job succeeds, publication verifies the current PR commit, uploads the bottles, and pushes the formula with bottle metadata. Only owner-created release branches that change `Formula/plous.rb` qualify for automatic publication. The previous formula stays available if a build fails.
 
-After the tap publishes, users with Homebrew installed can run:
-
-```sh
-brew install simjay/tap/plous
-# For an existing installation:
-brew update
-brew upgrade plous
-```
-
-Homebrew uses a compatible bottle when available and otherwise builds from source. See the tap README for platform coverage. GitHub release archives remain available for direct download.
+After the tap publishes, verify the formula and bottle metadata. Use the [Homebrew installation and update instructions](../getting-started/installation.md#install-with-homebrew) to check the published package. The tap README documents platform coverage; GitHub release archives remain available for direct download.
 
 ## Retry a failed update
 
@@ -52,3 +43,5 @@ Homebrew uses a compatible bottle when available and otherwise builds from sourc
 - **Bottle publication:** run **brew pr-pull** from the tap Actions tab with the PR number and its expected head SHA. The workflow repeats its release and test checks before publishing.
 
 Do not merge a release formula PR manually before bottle publication; the publishing workflow handles both together.
+
+The release documentation build must pass before publication. A successful release also queues the main Pages workflow to publish the new snapshot alongside Development and older versions. See [Website publication](website.md#publication-and-recovery) for URLs, retained snapshots, and retries.

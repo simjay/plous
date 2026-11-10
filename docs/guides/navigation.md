@@ -10,19 +10,17 @@ Plous has three panels. The blue focus border and footer identify the panel rece
 | Main | Overview, Explore, or Activity for the current selection. |
 | Right: AI assistant | Plous chat with its bottom composer, or the selected native agent's terminal UI. |
 
-The panels grow with the terminal: 12.5% for the sidebar, 62.5% for the main view, and 25% for the assistant. The sidebar normally stays at least 32 columns wide and the assistant at least 40. Compact terminals relax those minimums to preserve room for the main view. Cluster Overview keeps visible side panels at least 28 columns wide from an 80-column terminal. Switching focus keeps these widths unchanged. Hiding either side panel gives its space to the main view. Below 80 columns, Overview shows only the focused panel.
+Panel widths adapt to your terminal. Switching focus keeps the layout steady; hiding a side panel gives its space to main. Use **ff** to expand main temporarily. Very small terminals restrict available views; see [small-terminal behavior](../reference/keymap.md#cancel-and-exit).
 
-Click a panel to focus it, click tabs and controls to activate them, and use the wheel over the content you want to scroll. Data rows use one click to select and a double click to open. Click text in fields and the composer to place the cursor without submitting. Drag selects text; double click selects a word. Click **Copy selection** in the footer to copy selected text. Mouse support can be turned off in **Settings → Application** for native terminal selection and copy shortcuts. See the [mouse reference](../reference/keymap.md#mouse-controls) for viewer behavior and limitations.
+Click a panel to focus it, click tabs and controls to activate them, and use the wheel over the content you want to scroll. Data rows use one click to select and a double click to open. Click text in fields and the composer to place the cursor without submitting. Drag selects text; double click selects a word in fields and viewers. Tables, labels, Help, chat transcripts, and native agent output also support drag selection without activating their controls. Click **Copy selection** in the footer to copy selected text. Mouse support can be turned off in **Settings → Application** for native terminal selection and copy shortcuts. See the [mouse reference](../reference/keymap.md#mouse-controls) for viewer behavior and limitations.
 
 Press **Alt+Right** to move focus forward or **Alt+Left** to move backward, including while typing or using an embedded terminal. Arrows, Enter, scrolling, and `/` apply to the focused panel.
-
-Headings use near-white, while active headings, links and actions use light blue. Secondary details use muted cool gray. Status labels and symbols accompany green success, amber warning and red error colors.
 
 The footer names the current view and shows a few relevant controls. A hint such as **n Namespace** means press `n` to choose a namespace. **hh Help** means press `h` twice for the full controls. Narrow terminals omit lower-priority hints; Help keeps the complete list. While typing, the footer shows the keys for finishing or leaving that input.
 
 ## Understand the workspace tree
 
-The sidebar starts with **Current Workspace**, followed by **Workspaces** and **Application / Settings**. Current Workspace contains the selected cluster under Monitor and the launch directory under Code. Both reuse the same tree and controls as saved connections. Saved workspaces follow this structure. These are example names, not preloaded data:
+The sidebar starts with **Current Workspace**, followed by **Workspaces** and **Application / Settings**. Current Workspace contains the selected cluster under Monitor. It reuses the same tree and controls as saved connections. Saved workspaces follow this structure. These are example names, not preloaded data:
 
 ```text
 Commerce
@@ -36,20 +34,11 @@ Commerce
         Charts
       Argo
       Flux
-  Code
-    platform-config (local)
-      Files
-      Helm
-      Kustomize
-      Argo
-      Flux
 ```
 
-**Monitor** and **Code** organize connections within each workspace. Kubernetes is always available; Helm appears after release metadata is detected, and Argo and Flux appear after their APIs are discovered. A connection identifies the configured context or source. Its name does not establish that the target is reachable.
+**Monitor** organizes cluster connections within each workspace. Kubernetes is always available; Helm appears after release metadata is detected, and Argo and Flux appear after their APIs are discovered. A connection identifies the configured context. Its name does not establish that the target is reachable.
 
-Code provides **Files** for browsing and editing, grouped Helm, Argo and Flux configuration cards, and Kustomize dependency groups. H/K/A/F directory tags identify detected technologies. Open a Kustomize group, then a graph node, to choose **G Graph**, **r Render**, or **d Open source**. Back restores the preceding view, selection and search. Rendered objects have contextual field history, findings and comparisons. See [Code and Kustomize](../integrations/kustomize/README.md) for the full workflow.
-
-Connection labels stay on one line. Long names end in `...` so their muted type or source label, such as `(k8s)` or `(local)`, stays visible. Sidebar search uses the full name. Overview and Settings show the saved name. Equivalent legacy cluster records with the same name share one sidebar entry; their saved identities and history remain available.
+Connection labels stay on one line. Long names end in `...` so their muted type label, such as `(k8s)`, stays visible. Sidebar search uses the full name. Overview and Settings show the saved name.
 
 Every row with a triangle uses the same fold controls, including workspaces, tools such as **Kubernetes**, connections such as **minikube**, and resource categories:
 
@@ -57,11 +46,9 @@ Every row with a triangle uses the same fold controls, including workspaces, too
 - **Right** expands without changing the active scope or main view.
 - **Left** collapses without changing the active scope or main view. If already collapsed, it moves the cursor to the parent.
 
-Opening a branch keeps keyboard focus in the sidebar, even when its content opens in Explore. Opening a leaf view such as Files moves focus to main. Use Left/Right when you only want to arrange the sidebar. Enter on a resource type opens its main-panel table; rows without children have nothing to fold. Enter on a search result selects and expands the branch so the result stays visible.
+Opening a branch keeps keyboard focus in the sidebar, even when its content opens in Explore. Use Left/Right when you only want to arrange the sidebar. Enter on a resource type opens its main-panel table; rows without children have nothing to fold. Enter on a search result selects and expands the branch so the result stays visible.
 
-Selecting a Code source by Enter or clicking its name opens **Files**, its first view. Folding and reopening the selected source keeps its current page and any unfinished file edit. Clicking a disclosure triangle, like pressing Right or Left, only changes the tree.
-
-Collapsing a cluster connection also collapses its tool branches. Reopening the connection shows Kubernetes and any detected tools as collapsed branches. At startup, Current Workspace opens Overview and expands the selected cluster and Kubernetes branch. Saved workspace connections and their cluster tool branches start collapsed. Choose a connection to resume its saved preferences. Workspace, Monitor/Code section, resource-category, and file-folder fold choices remain saved. Loading or reconnecting Kubernetes preserves these folds; choosing a resource explicitly can reveal its path. Refreshes preserve fold choices. Selecting or expanding a cluster connection discovers Helm release metadata and Argo and Flux APIs. Press `g` on the cluster or a tool branch to refresh discovery. **Tool discovery incomplete** means some checks failed or were denied; it does not mean those tools are absent. Collapsing it only changes sidebar visibility. Live Kubernetes resource requests follow the [active Explore view](../integrations/kubernetes/README.md#explore-resources).
+Collapsing a cluster connection also collapses its tool branches. Reopening the connection shows Kubernetes and any detected tools as collapsed branches. At startup, Current Workspace opens Overview and expands the selected cluster and Kubernetes branch. Saved workspace connections and their cluster tool branches start collapsed. Choose a connection to resume its saved preferences. Workspace, Monitor section and resource-category fold choices remain saved. Loading or reconnecting Kubernetes preserves these folds; choosing a resource explicitly can reveal its path. Refreshes preserve fold choices. Selecting or expanding a cluster connection discovers Helm release metadata and Argo and Flux APIs. Press `g` on the cluster or a tool branch to refresh discovery. **Tool discovery incomplete** means some checks failed or were denied; it does not mean those tools are absent. Collapsing it only changes sidebar visibility. Live Kubernetes resource requests follow the [active Explore view](../integrations/kubernetes/README.md#explore-resources).
 
 The filled highlight follows your keyboard selection. The active resource path remains accented when you move elsewhere. Opening resources can expand their path automatically. Deliberate fold choices remain until you change them, collapse the containing cluster connection, or restart as described above.
 
@@ -73,13 +60,13 @@ Choose which agent supplies the right panel in **Settings → Application → Ag
 
 | View | What you use it for | Shortcut | Command |
 | --- | --- | --- | --- |
-| Overview | See [cluster health, observed changes, warnings, and inventory](overview.md) for a Monitor connection. Workspace and Code selections show saved connections. | `11` | `:1` |
+| Overview | See [cluster health, observed changes, warnings, and inventory](overview.md) for a Monitor connection. Workspace selections show saved connections. | `11` | `:1` |
 | Explore | Open the selected tool connection. Available views depend on the integration. | `22` | `:2` |
 | Activity | Review workspace changes, Helm operations, and observed release history. | `33` | `:3` |
 
 Press a shortcut's two keys consecutively. It runs on the second key, without Enter. A single number does not switch views.
 
-Plous starts on Overview in Current Workspace each time. Explore starts with Pods in the kubeconfig context namespace, or `default` when unset. Your saved workspaces, conversations, drafts, panel visibility, and tool preferences remain available. Only the current cluster connects at startup. The launch directory is scanned when you open Code, select or expand its source, or refresh it; saved Code sources are scanned when you select their workspace. Code remains available without a resolved Kubernetes target. Use `:K` to switch context, or select a saved connection under Workspaces. Without a resolved target, Enter opens context selection and `:s` offers a kubeconfig path. Use `:n` for optional workspace setup.
+Plous starts on Overview in Current Workspace each time. Explore starts with Pods in the kubeconfig context namespace, or `default` when unset. Your saved workspaces, conversations, drafts, panel visibility, and tool preferences remain available. Only the current cluster connects at startup. Use `:K` to switch context, or select a saved connection under Workspaces. Without a resolved target, Enter opens context selection and `:s` offers a kubeconfig path. Use `:n` for optional workspace setup.
 
 See [Tool integrations](../integrations/README.md) for each tool's current capabilities.
 
@@ -165,7 +152,7 @@ Use **ff**, `:f`, or `:fullscreen` from any navigation panel to expand main to t
 
 Press **hh** or run `:h`. Help opens above the retained view with workspace, view, chat, and global controls.
 
-Each upper section describes its own context. Workspace Help follows the highlighted tree row. The center follows the open Monitor or Code view, integration, resource, and any active editor, picker, or dialog. Chat Help follows the composer, history, reply reader, or Sources. Opening Help selects the section you came from.
+Each upper section describes its own context. Workspace Help follows the highlighted tree row. The center follows the open Monitor view, integration, resource, and any active editor, picker, or dialog. Chat Help follows the composer, history, reply reader, or Sources. Opening Help selects the section you came from.
 
 The controls also follow the current interaction: typing a search or namespace, selecting text, reading a comparison, or choosing its actions. Global view commands (`:1` to `:3`, or `11`, `22`, and `33`) stay in the bottom box.
 

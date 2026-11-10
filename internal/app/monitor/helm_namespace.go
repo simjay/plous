@@ -2,9 +2,7 @@ package monitor
 
 type HelmNamespaceResult struct {
 	State *HelmState
-	Run   *NamespaceRequest
-	Names []string
-	Err   error
+	NamespaceResult
 }
 
 func (h *HelmState) NamespaceScope() string {
@@ -15,8 +13,6 @@ func (h *HelmState) NamespaceScope() string {
 }
 
 func (h *HelmState) StopNamespacePicker() {
-	if h.Namespaces != nil && h.Namespaces.Run != nil {
-		h.Namespaces.Run.Cancel()
-	}
+	h.Namespaces.Cancel()
 	h.Namespaces = nil
 }

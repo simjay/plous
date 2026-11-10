@@ -1,116 +1,43 @@
+// Package app selects the interactive or standalone application entry point.
 package app
 
 import (
-	tea "charm.land/bubbletea/v2"
+	"context"
 	"flag"
 	"fmt"
-	"github.com/charmbracelet/x/term"
-	"github.com/go-logr/logr"
-	"github.com/simjay/plous/internal/ai/history"
-	"github.com/simjay/plous/internal/workspace"
-	"io"
-	klog "k8s.io/klog/v2"
-	"log"
 	"os"
-	"path/filepath"
+	"os/signal"
+	"syscall"
+
+	"github.com/simjay/plous/internal/app/debugging"
+	"github.com/simjay/plous/internal/app/tui"
+	kubernetes "github.com/simjay/plous/internal/integrations/kubernetes/monitor"
 )
 
 // Run starts the Plous executable and returns its process exit code.
 func Run(version string) int {
 	showVersion := flag.Bool("version", false, "Print the Plous version")
 	dataDir := flag.String("data-dir", "", "Persistent data directory (default ~/.plous)")
+	allowExec := flag.Bool("allow-exec", false, "Allow agent commands in containers in the captured default namespace")
+	diagnosticImage := flag.String("diagnostic-image", "", "Enable temporary agent tests using this diagnostic image")
+	flag.Usage = func() {
+		fmt.Fprintln(os.Stderr, "Usage: plous [options]\n       plous setup codex|claude [options]\n       plous mcp serve --context NAME [options]")
+		flag.PrintDefaults()
+	}
 	flag.Parse()
 	if *showVersion {
 		fmt.Println(version)
 		return 0
 	}
+	policy := kubernetes.DebugPolicy{Exec: *allowExec, Image: *diagnosticImage}
 	if flag.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "Usage: plous [--version] [--data-dir PATH]")
+		if flag.Arg(0) == "mcp" || flag.Arg(0) == "setup" {
+			ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+			defer cancel()
+			return debugging.Run(ctx, flag.Args(), os.Stdin, os.Stdout, os.Stderr, version, *dataDir, policy)
+		}
+		fmt.Fprintln(os.Stderr, "Usage: plous [--version] [--data-dir PATH] [--allow-exec] [--diagnostic-image IMAGE]\n       plous setup codex|claude [options]\n       plous mcp serve --context NAME [options]")
 		return 2
 	}
-	if !term.IsTerminal(os.Stdin.Fd()) || !term.IsTerminal(os.Stdout.Fd()) {
-		fmt.Fprintln(os.Stderr, "Plous needs an interactive terminal. Use --version to print the version.")
-		return 1
-	}
-	root := *dataDir
-	if root == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "Plous:", err)
-			return 1
-		}
-		root = filepath.Join(home, ".plous")
-	}
-	store, err := workspace.Open(root)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "Plous:", err)
-		return 1
-	}
-	output, err := reserveTerminalOutput()
-	if err != nil {
-		store.Close()
-		fmt.Fprintln(os.Stderr, "Plous: cannot reserve terminal output:", err)
-		return 1
-	}
-	defer output.Close()
-	archive, err := history.Open(store)
-	if err != nil {
-		store.Close()
-		fmt.Fprintln(output.diagnostics, "Plous:", err)
-		return 1
-	}
-	app, err := newModel(store, archive, version)
-	if err != nil {
-		store.Close()
-		fmt.Fprintln(output.diagnostics, "Plous:", err)
-		return 1
-	}
-	app.clipboard = systemClipboard()
-	// Dependency diagnostics bypass the renderer and move the terminal cursor.
-	// Explore renders request failures and Helm lint findings inside its panel.
-	klog.SetLoggerWithOptions(logr.Discard(), klog.ContextualLogger(true))
-	logOutput := log.Writer()
-	log.SetOutput(io.Discard)
-	defer log.SetOutput(logOutput)
-	_, runErr := tea.NewProgram(app, tea.WithInput(&utf8TerminalInput{File: os.Stdin}), tea.WithOutput(output.renderer)).Run()
-	app.stopViews()
-	app.stopChat()
-	app.drainNativeAgent()
-	app.drainChatRestores()
-	app.drainChat()
-	saveErr := app.saveSession()
-	closeErr := store.Close()
-	if err := firstError(runErr, saveErr, closeErr); err != nil {
-		fmt.Fprintln(output.diagnostics, "Plous:", err)
-		return 1
-	}
-	return 0
-}
-
-func (m *model) stopViews() {
-	if m.uiDone != nil && !m.uiStopped {
-		close(m.uiDone)
-		m.uiStopped = true
-	}
-	m.stopNativeAgent()
-	m.cancelClipboardPaste()
-	m.stopActivity()
-	m.stopHelm()
-	m.stopClusters()
-	for _, v := range m.overviews {
-		v.stop()
-	}
-	m.stopGitOps()
-	m.stopCode()
-	m.exploreClosed = true
-	m.stopExplore()
-}
-
-func firstError(errs ...error) error {
-	for _, err := range errs {
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	return tui.Run(version, *dataDir, policy)
 }

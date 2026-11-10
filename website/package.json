@@ -1,0 +1,15 @@
+{
+  "name": "plous-website",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.23.4" },
+  "scripts": {
+    "dev": "node scripts/build.mjs && python3 scripts/serve.py",
+    "build": "node scripts/build.mjs",
+    "preview": "python3 scripts/serve.py",
+    "check": "node scripts/check.mjs",
+    "test": "node --test ../tests/website/*.test.mjs",
+    "verify": "python3 ../tests/website/check_build.py"
+  },
+  "devDependencies": { "pagefind": "1.6.0" }
+}

@@ -19,6 +19,7 @@ import (
 type TerminalOptions struct {
 	Kind                              agent.Kind
 	Path, Directory, Instructions, ID string
+	Args                              []string
 	StateDirectory                    string
 	Resume                            bool
 	Tools                             agent.Tools
@@ -88,6 +89,7 @@ func StartTerminal(ctx context.Context, o TerminalOptions) (*Terminal, error) {
 		if err != nil {
 			return nil, nil, err
 		}
+		args = append(append([]string(nil), o.Args...), args...)
 		cmd := exec.CommandContext(ctx, path, args...)
 		cmd.Dir = o.Directory
 		cmd.Env = launch.env

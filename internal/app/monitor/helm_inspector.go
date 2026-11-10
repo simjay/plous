@@ -98,21 +98,21 @@ func (h *HelmState) OpenInspectorPicker(kind string) {
 	h.MenuKind, h.Choice = kind, 0
 	input := textview.NewField("")
 	h.Input, h.InputKind = &input, "picker"
-	h.Menu = []string{}
+	h.Menu = []HelmMenuItem{}
 	if kind == "release" {
 		for i, r := range h.InspectorReleases() {
-			h.Menu = append(h.Menu, fmt.Sprintf("%s · %s · Revision %d", r.Key(), HelmChartVersion(r.Version), r.Revision))
+			h.Menu = append(h.Menu, HelmMenuItem{Label: fmt.Sprintf("%s · %s · Revision %d", r.Key(), HelmChartVersion(r.Version), r.Revision)})
 			if r.Key() == h.Detail.Release().Key() {
 				h.Choice = i
-				h.Menu[i] += "  ✓"
+				h.Menu[i].Label += "  ✓"
 			}
 		}
 	} else {
 		for i, r := range h.InspectorRevisions() {
-			h.Menu = append(h.Menu, fmt.Sprintf("Revision %d · %s · %s", r.Revision, r.Status, r.Updated))
+			h.Menu = append(h.Menu, HelmMenuItem{Label: fmt.Sprintf("Revision %d · %s · %s", r.Revision, r.Status, r.Updated)})
 			if r.Revision == h.Detail.Version {
 				h.Choice = i
-				h.Menu[i] += "  ✓"
+				h.Menu[i].Label += "  ✓"
 			}
 		}
 	}
@@ -295,7 +295,8 @@ func (h *HelmState) ApplyInspectorSnapshot(s *helmtool.Snapshot) {
 func (h *HelmState) MenuChoices() ([]string, []int) {
 	var labels []string
 	var indices []int
-	for i, label := range h.Menu {
+	for i, item := range h.Menu {
+		label := item.Label
 		if h.InputKind == "picker" && h.Input != nil && !ui.SearchContains(label, h.Input.Text) {
 			continue
 		}
@@ -321,12 +322,12 @@ var HelmChartDocuments = []string{"Metadata and schema", "Rendered manifests", "
 
 func (h *HelmState) OpenInspectorDocuments() {
 	h.Choice, h.MenuKind = h.ValuesVariant, "values"
-	h.Menu = append([]string(nil), HelmValueLabels...)
+	h.Menu = HelmMenuItems(HelmValueLabels)
 	if h.Tab == 1 {
 		h.Choice, h.MenuKind = h.ChartDocument, "chart-document"
-		h.Menu = append([]string(nil), HelmChartDocuments...)
+		h.Menu = HelmMenuItems(HelmChartDocuments)
 	}
-	h.Menu[h.Choice] += "  ✓"
+	h.Menu[h.Choice].Label += "  ✓"
 }
 
 func HelmtoolHook(r manifestutil.Resource) string {

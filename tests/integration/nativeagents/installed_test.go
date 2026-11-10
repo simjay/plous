@@ -38,14 +38,11 @@ var installedToolCalls = []struct{ name, args string }{
 	{"helm_diff_read", `{"purpose":"fixture","connection_id":"cluster/helm","namespace":"apps","name":"shop","revision":2,"compare_revision":1}`},
 	{"argo_resources_read", `{"purpose":"fixture","connection_id":"cluster","operation":"get","resource":"applications.argoproj.io","namespace":"*"}`},
 	{"flux_resources_read", `{"purpose":"fixture","connection_id":"cluster","operation":"get","resource":"kustomizations.kustomize.toolkit.fluxcd.io","namespace":"*"}`},
-	{"source_files_read", `{"purpose":"fixture","connection_id":"source","operation":"list"}`},
-	{"source_analysis_read", `{"purpose":"fixture","connection_id":"source","operation":"catalog"}`},
 	{"workspace_read", `{"purpose":"fixture","operation":"workspace"}`},
 	{"history_read", `{"purpose":"fixture","operation":"search","query":"releases"}`},
 	{"ui_read", `{"purpose":"fixture"}`},
 	{"kubernetes_show", `{"purpose":"fixture","view":"list","connection_id":"cluster","resource":"pods","namespace":"apps"}`},
 	{"helm_show", `{"purpose":"fixture","connection_id":"cluster/helm","namespace":"apps","name":"shop","revision":2,"compare_revision":1}`},
-	{"source_show", `{"purpose":"fixture","connection_id":"source","path":"README.md"}`},
 	{"history_show", `{"purpose":"fixture","ref":"record:fixture:saved"}`},
 }
 
@@ -61,7 +58,6 @@ func (f *installedTools) Definitions() []agent.Tool {
 	return ai.ToolDefinitions(ai.Options{WorkspaceID: "fixture", UI: f, Connections: []ai.Connection{
 		{ConnectionID: "cluster", Tool: "kubernetes"},
 		{ConnectionID: "cluster/helm", Tool: "helm"},
-		{ConnectionID: "source", Tool: "source"},
 	}})
 }
 

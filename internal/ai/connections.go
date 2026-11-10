@@ -12,12 +12,10 @@ import (
 	helmtool "github.com/simjay/plous/internal/integrations/helm/monitor"
 	kubecommon "github.com/simjay/plous/internal/integrations/kubernetes/common"
 	kubernetes "github.com/simjay/plous/internal/integrations/kubernetes/monitor"
-	"github.com/simjay/plous/internal/source"
 )
 
 // Connection is a send-time snapshot. Local configuration stays out of prompts.
 type Connection struct {
-	SourceView     *source.ReadView   `json:"-"`
 	TargetCaptured bool               `json:"-"`
 	Target         *kubecommon.Target `json:"-"`
 	ConnectionID   string             `json:"connection_id"`
@@ -94,7 +92,7 @@ func connectionCommand(input string) (string, string, error) {
 func (op *operation) connection(id, tool string) (Connection, error) {
 	if op.o.WorkspaceID != "" {
 		for _, c := range op.o.Connections {
-			if c.ConnectionID == id && (tool == "" || c.Tool == tool) && (c.Tool == "kubernetes" || c.Tool == "helm" || c.Tool == "source") {
+			if c.ConnectionID == id && (tool == "" || c.Tool == tool) && (c.Tool == "kubernetes" || c.Tool == "helm") {
 				return c, nil
 			}
 		}

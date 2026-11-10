@@ -50,6 +50,17 @@ func NewProjector(client *Client, scope CommandScope, projections ...ResourcePro
 	}
 	config := rest.CopyConfig(client.config)
 	config.WarningHandlerWithContext = rest.NoWarnings{}
+	raw, err := guardedREST(config)
+	if err != nil {
+		return nil, err
+	}
+	return &Projector{
+		client: raw, scope: scope, projections: projections,
+		credentials: []string{config.BearerToken, config.Password, string(config.KeyData), string(config.CertData)},
+	}, nil
+}
+
+func guardedREST(config *rest.Config) (rest.Interface, error) {
 	httpClient, err := rest.HTTPClientFor(config)
 	if err != nil {
 		return nil, errors.New("cannot initialize scoped Kubernetes reads")
@@ -64,10 +75,7 @@ func NewProjector(client *Client, scope CommandScope, projections ...ResourcePro
 	if err != nil {
 		return nil, errors.New("cannot initialize scoped Kubernetes reads")
 	}
-	return &Projector{
-		client: raw, scope: scope, projections: projections,
-		credentials: []string{config.BearerToken, config.Password, string(config.KeyData), string(config.CertData)},
-	}, nil
+	return raw, nil
 }
 
 func (e *Projector) Execute(ctx context.Context, command Command) (result observation.Result, err error) {

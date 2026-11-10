@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"github.com/simjay/plous/internal/ai/agent"
 	ai "github.com/simjay/plous/internal/ai/model"
 	textview "github.com/simjay/plous/internal/ui/text"
 )
@@ -23,21 +24,18 @@ type Form struct {
 	Advanced                      bool
 	Agent                         ai.Config
 	ApiKey                        string
-	Source                        *SourceSetup
-	Directory                     *DirectoryPicker
 	Parent                        *Form
 	Rows                          []Row
+	EntryCommands                 agent.Commands
+	commandAgent                  agent.Kind
 }
 
 func (f *Form) Paste(s string) {
-	if f.Directory != nil {
-		if f.Directory.Editing {
-			f.Directory.Input.Insert(s, false)
-		}
-		return
-	}
 	if f.Index < len(f.Fields) && len(f.Fields[f.Index].Options) == 0 {
 		f.Fields[f.Index].Value.Insert(s, false)
+		if f.Kind == "mainagent" {
+			f.RefreshAgentNote()
+		}
 	}
 }
 
@@ -55,17 +53,8 @@ func (f *Form) Actions() []string {
 	if f.Kind == "helmchart" {
 		return []string{"Preview", "Edit Values", "Cancel"}
 	}
-	action := "Save"
-	if f.Source != nil {
-		action = "Add Source"
-		if f.Connection != "" {
-			action = "Save Changes"
-		}
-	}
-	actions := []string{action, "Cancel"}
-	if f.LocalDirectory() {
-		actions = []string{"Browse Folders", action, "Cancel"}
-	}
+	actions := []string{"Save", "Cancel"}
+
 	if f.Kind == "appsettings" {
 		label := "Advanced…"
 		if f.Advanced {

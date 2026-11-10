@@ -25,16 +25,16 @@ Existing report files are never overwritten. Use one Go benchmark invocation per
 
 ## Checks
 
-- Expected resource values, readiness, stale generations, controller status, Helm revision values and source facts.
+- Expected resource values, readiness, stale generations, controller status, Helm revision values.
 - Complete and partial inventories, denied access, typed history counts and saved pagination.
 - Captured connection and history scope, invalid arguments, cancellation, closure and fatal failure revocation.
 - Persistence before delivery and unchanged Sources after reopening storage.
-- Equivalent direct and MCP schemas and results across the 17-tool catalog.
+- Equivalent direct and MCP schemas and results across the supported tool catalog.
 - Capability boundaries and retired-name rejection before acquisition.
 - Workload log ownership, unavailable sources and shared byte limits; explicit Helm revision pairs.
-- UI view preparation and actual before/after Helm values and manifest content in both revision directions, plus scope rejection, missing/replaced targets, source boundaries and blocked display requests.
+- UI view preparation and actual before/after Helm values and manifest content in both revision directions, plus scope rejection, missing/replaced targets and blocked display requests.
 
-History cases include original decisions, corrections and background exchanges. All expected facts are explicit in [tools.json](fixtures/tools.json). `checks` verifies tool results; `display_checks` verifies prepared display content (`before`, `after`, or `text`). Reports retain display content separately and recheck those expectations when loaded. Fixture API responses and source files are separate input files; the fake server receives no expected answers. These development cases do not claim exhaustive tool coverage or agent answer quality.
+History cases include original decisions, corrections and background exchanges. All expected facts are explicit in [tools.json](fixtures/tools.json). `checks` verifies tool results; `display_checks` verifies prepared display content (`before`, `after`, or `text`). Reports retain display content separately and recheck those expectations when loaded. Fixture API responses are separate input files; the fake server receives no expected answers. These development cases do not claim exhaustive tool coverage or agent answer quality.
 
 ## Measurements
 
@@ -47,7 +47,7 @@ Compare runs with the same fixture and schema hashes, transport, repetition coun
 | Files | Purpose |
 | --- | --- |
 | `fixtures/tools.json`, `scenario.go` | Tool calls, expected JSON facts, validation |
-| Other `fixtures/*.json`, `cluster.go` | Synthetic API responses and source files |
+| Other `fixtures/*.json`, `cluster.go` | Synthetic API responses |
 | `runner.go`, `assessment.go` | Execute calls, bind returned references, measure and check results |
 | `integration/fixture_test.go` | Temporary workspace/history, production session and durability checks |
 | `integration/mcp_test.go` | Scripted client of the production MCP bridge |
@@ -60,7 +60,7 @@ scenario → temporary profile → guarded Tools.Call → integration → fixtur
          → check returned facts and saved evidence → report
 ```
 
-UI cases run the production navigation loader against fixture APIs/files and use a deterministic display endpoint. App tests exercise the actual viewers, focus, drafts and late-result guards. UI preparation and execution-receipt persistence are included in measured calls; terminal rendering is not measured.
+UI cases run the production navigation loader against fixture APIs and use a deterministic display endpoint. App tests exercise the actual viewers, focus, drafts and late-result guards. UI preparation and execution-receipt persistence are included in measured calls; terminal rendering is not measured.
 
 The toolkit stays out of the application binary. Tests use synthetic kubeconfig, temporary profiles and loopback APIs. No owner profile, kubeconfig, cluster or credentials are used.
 

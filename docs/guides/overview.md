@@ -4,7 +4,7 @@
 
 Overview is your starting point for a cluster investigation. See resource health and usage, find what needs attention, and follow an observation into its supporting details.
 
-Plous opens Overview for the terminal's current Kubernetes context at launch. To return, select a Monitor connection and press **11** or `:1`. It summarizes that one captured cluster across all namespaces. Selecting a workspace or Code source instead shows its connection summary.
+Plous opens Overview for the terminal's current Kubernetes context at launch. To return, select a Monitor connection and press **11** or `:1`. It summarizes that one captured cluster across all namespaces. Selecting a workspace instead shows its connection summary.
 
 ## Take a first look
 
@@ -90,3 +90,7 @@ CPU and memory start after Kubernetes discovery, without waiting for Helm or con
 Use **g** or `:g` to refresh discovery and observations explicitly. Failed reads and acquisition limits stay visible. Refresh and resize preserve selection where the resource still exists. Inspecting a resource keeps saved Explore filters and namespaces intact; Esc can cancel a pending inspection.
 
 Observations, chart samples, and section positions stay in memory. Overview does not collect background telemetry after you leave or save historical metrics. An assistant's explicit read can save a separate observation as [Sources](ai-chat.md#inspect-a-replys-sources).
+
+## Next steps
+
+Follow [Investigate a restarting Pod](investigate-restarting-pod.md) to practice tracing a symptom through status, events, and logs. For the complete inspection toolkit, see [Kubernetes resource actions](../integrations/kubernetes/README.md#resource-actions).

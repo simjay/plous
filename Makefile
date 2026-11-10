@@ -21,6 +21,19 @@ run: build
 docs-check:
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) tests/docs/check.py
 
+.PHONY: website-dev website-check website-build
+website-dev:
+	npm --prefix website run dev
+
+website-check:
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m unittest discover -s tests/website -p 'test_*.py' -v
+	npm --prefix website test
+	npm --prefix website run check
+
+website-build:
+	npm --prefix website run build
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) tests/website/check_build.py
+
 test: test-unit test-e2e test-packaging
 
 .PHONY: test-packaging
@@ -41,9 +54,8 @@ test-e2e: build build-test-tools
 	PLOUS_TEST_BINARY="$(CURDIR)/bin/plous" PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m unittest discover -s tests/e2e -p '$(TEST_E2E_PATTERN)' -v $(TEST_E2E_ARGS)
 
 test-ux: build build-test-tools
-	$(GO) test -count=1 -run 'TestUXScreenMatrix|TestTerminalOutputBelongsToRenderer|TestCodeStartupFramesStayInsideTerminal' ./internal/app
+	$(GO) test -count=1 -run 'TestUXScreenMatrix|TestTerminalOutputBelongsToRenderer' ./internal/app/tui ./internal/app/terminal
 	PLOUS_TEST_BINARY="$(CURDIR)/bin/plous" PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m unittest discover -s tests/e2e -p 'test_ux.py' -v
-	PLOUS_TEST_BINARY="$(CURDIR)/bin/plous" PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m unittest discover -s tests/e2e -p 'test_kustomize.py' -k restored_sources -v
 
 test-playground:
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m unittest discover -s tests/e2e -p 'test_playground.py' -v
@@ -75,7 +87,7 @@ test-race:
 	$(GO) test -race $(TEST_FLAGS) $(TEST_PACKAGES)
 
 bench:
-	$(GO) test -run '^$$' $(BENCH_FLAGS) ./internal/app ./internal/ui/logs ./internal/ui/diff ./internal/ui/editor ./internal/ui/text
+	$(GO) test -run '^$$' $(BENCH_FLAGS) ./internal/app/tui ./internal/ui/logs ./internal/ui/diff ./internal/ui/editor ./internal/ui/text
 
 test-coverage:
 	mkdir -p .cache/tests

@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/remotecommand"
+	"k8s.io/client-go/transport/spdy"
 	utilexec "k8s.io/client-go/util/exec"
 	"k8s.io/streaming/pkg/httpstream"
 )
@@ -57,11 +58,15 @@ func (c *Client) Exec(ctx context.Context, options ExecOptions) error {
 	if err != nil {
 		return err
 	}
-	spdy, err := remotecommand.NewSPDYExecutor(c.config, http.MethodPost, endpoint)
+	transport, upgrader, err := spdy.RoundTripperFor(c.config)
 	if err != nil {
 		return err
 	}
-	executor, err := remotecommand.NewFallbackExecutor(websocket, spdy, func(err error) bool {
+	spdyExecutor, err := remotecommand.NewSPDYExecutorRejectRedirects(transport, upgrader, http.MethodPost, endpoint)
+	if err != nil {
+		return err
+	}
+	executor, err := remotecommand.NewFallbackExecutor(websocket, spdyExecutor, func(err error) bool {
 		return httpstream.IsUpgradeFailure(err) || httpstream.IsHTTPSProxyError(err)
 	})
 	if err != nil {
@@ -73,7 +78,7 @@ func (c *Client) Exec(ctx context.Context, options ExecOptions) error {
 	})
 	var exit utilexec.ExitError
 	if errors.As(err, &exit) {
-		return operationError(fmt.Sprintf("The command exited with status %d.", exit.ExitStatus()))
+		return fmt.Errorf("The command exited with status %d: %w", exit.ExitStatus(), err)
 	}
 	return err
 }

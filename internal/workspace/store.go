@@ -119,10 +119,6 @@ func Open(root string) (*Store, error) {
 		s.Close()
 		return nil, err
 	}
-	if _, err := s.SourceIgnore(); err != nil {
-		s.Close()
-		return nil, err
-	}
 	return s, nil
 }
 

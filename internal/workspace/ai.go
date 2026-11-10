@@ -15,11 +15,12 @@ import (
 )
 
 type Settings struct {
-	MainAgent     agent.Kind  `json:"main_agent,omitempty"`
-	MouseDisabled bool        `json:"mouse_disabled,omitempty"`
-	Revision      uint64      `json:"revision"`
-	Agent         ai.Config   `json:"agent"`
-	Providers     []ai.Config `json:"providers,omitempty"`
+	MainAgent     agent.Kind     `json:"main_agent,omitempty"`
+	AgentCommands agent.Commands `json:"agent_commands,omitzero"`
+	MouseDisabled bool           `json:"mouse_disabled,omitempty"`
+	Revision      uint64         `json:"revision"`
+	Agent         ai.Config      `json:"agent"`
+	Providers     []ai.Config    `json:"providers,omitempty"`
 }
 
 // Agent is the selected model; Providers contains the saved connections.
@@ -34,6 +35,9 @@ func (s Settings) Configs() []ai.Config {
 func (s Settings) validate() error {
 	if !s.MainAgent.Valid() {
 		return errors.New("unknown main agent")
+	}
+	if err := s.AgentCommands.Validate(); err != nil {
+		return err
 	}
 	if err := s.Agent.Validate(); err != nil {
 		return err

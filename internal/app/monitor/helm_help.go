@@ -45,7 +45,7 @@ func (h *HelmState) Help() helpview.Section {
 		s.Add("Navigation", helpview.Key("page", "PgUp / PgDn", "Jump ten rows"), helpview.Key("ends", "Home / End", "First / last"))
 		if h.MenuKind == "actions" {
 			for _, item := range h.Menu {
-				s.Add("", helpview.Key("menu-"+item, "Enter", item))
+				s.Add("", helpview.Key("menu-"+string(item.Action), "Enter", item.Label))
 			}
 		}
 		if h.Input != nil {
@@ -129,8 +129,8 @@ func (h *HelmState) Help() helpview.Section {
 		s.Add("Navigation", helpview.List()...)
 	}
 	s.Add("Actions", helpview.Command("refresh", "g", "Refresh selected view"), helpview.Command("actions", "a", "Actions"))
-	for _, label := range h.ActionItems() {
-		s.Add("", helpview.Key("menu-"+label, "a →", label))
+	for _, item := range h.ActionItems() {
+		s.Add("", helpview.Key("menu-"+string(item.Action), "a →", item.Label))
 	}
 	if h.Err != "" {
 		s.Add("Error", helpview.Key("error", "!", "Read full error"))

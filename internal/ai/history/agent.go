@@ -103,6 +103,33 @@ func (s *Store) SaveObservation(w, id, turn, tool string, args json.RawMessage, 
 	return s.AppendReasoning(w, id, ReasoningEntry{MessageID: turn, Kind: "tool", Tool: tool, Input: args, Status: result.Outcome, Projection: &result})
 }
 
+// SaveToolIntent commits an active diagnostic request before any remote effect.
+// It belongs to execution metadata, outside searchable resource evidence.
+func (s *Store) SaveToolIntent(w, id, turn string, call agent.ToolCall) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed || s.closing {
+		return ErrClosed
+	}
+	h, err := s.conversationHistory(w, id)
+	if err != nil {
+		return err
+	}
+	if h.meta.Active != turn {
+		return errors.New("tool intent does not belong to active turn")
+	}
+	record := struct {
+		ID        string         `json:"id"`
+		MessageID string         `json:"message_id"`
+		Kind      string         `json:"kind"`
+		Status    string         `json:"status"`
+		Time      time.Time      `json:"time"`
+		Call      agent.ToolCall `json:"call"`
+	}{chronologicalID(), turn, "diagnostic-request", "started", time.Now().UTC(), call}
+	_, err = h.append("execution", record, turn, 0)
+	return err
+}
+
 // SaveMessages checkpoints the native provider conversation outside the searchable corpus.
 func (s *Store) SaveMessages(w, id, turn string, messages []aimodel.RequestMessage) error {
 	s.mu.Lock()

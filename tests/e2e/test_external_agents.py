@@ -14,12 +14,13 @@ from helm_api_fixture import HelmAPI
 
 
 class ExternalAgentTests(unittest.TestCase):
-    def open_agent(self, root, kind, label, moves, kubeconfig=FIXTURE):
+    def open_agent(self, root, kind, label, moves, kubeconfig=FIXTURE, entry_command=None):
         state = root / 'state'
         tools = root / 'bin'
         tools.mkdir()
-        binary = tools / kind
-        binary.write_text('#!/bin/sh\nexec ' + shlex.quote(sys.executable) + ' ' +
+        binary = tools / ('celai' if entry_command else kind)
+        wrapper = 'printf "%s\\n" "$1" >> fixture-wrapper-calls\nshift\n' if entry_command else ''
+        binary.write_text('#!/bin/sh\n' + wrapper + 'exec ' + shlex.quote(sys.executable) + ' ' +
                           shlex.quote(str(ROOT / 'tests/fixtures/ai/terminal_claude.py')) + ' "$@"\n')
         binary.chmod(0o700)
         env = {'PATH': str(tools)}
@@ -32,7 +33,11 @@ class ExternalAgentTests(unittest.TestCase):
         app.expect_screen('Agent: Plous')
         app.send('\r')
         app.expect_screen('Selected agent')
-        app.send('\x1b[C' * moves + '\r\r')
+        app.send('\x1b[C' * moves + '\r')
+        app.expect_screen('Entry command')
+        if entry_command:
+            app.send('\x7f' * len(kind) + entry_command)
+        app.send('\r\r')
         app.expect_screen('Agent: ' + label)
         app.send('\x1b')
         app.expect_screen('Native CLI fixture')
@@ -40,6 +45,29 @@ class ExternalAgentTests(unittest.TestCase):
         app.send(':c\r')
         app.expect_screen('Ctrl+] Return to panel')
         return app, state, env
+
+    def test_configured_entry_commands_launch_and_survive_restart(self):
+        for kind, label, moves in [('claude', 'Claude Code', 1), ('codex', 'Codex', 2)]:
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory(prefix='plous-entry-command-') as directory:
+                root = Path(directory)
+                app, state, env = self.open_agent(root, kind, label, moves, entry_command='celai ' + kind)
+                app.send('wrapper question\r')
+                app.expect_screen('Native reply: wrapper question')
+                app.send('\x1d\x03')
+                app.assert_exit()
+                app.close()
+                app = Terminal(state, FIXTURE, width=160, height=36, env_overrides=env)
+                self.addCleanup(app.close)
+                app.expect_screen('Native reply: wrapper question')
+                app.send(':s\r')
+                app.expect_screen('Agent: ' + label)
+                app.send('\r')
+                app.expect_screen('celai ' + kind)
+                calls = (root / 'launch/fixture-wrapper-calls').read_text().splitlines()
+                self.assertGreaterEqual(len(calls), 4 if kind == 'codex' else 2)
+                self.assertEqual(set(calls), {kind})
+                app.send('\x03')
+                app.assert_exit()
 
     def close_agent(self, app):
         app.send('\x1d')
@@ -98,7 +126,7 @@ class ExternalAgentTests(unittest.TestCase):
                     app.expect_screen('Agent: ' + current)
                     app.send('\r')
                     app.expect_screen('Selected agent')
-                    app.send(movement + '\r' + ('\x1b[B' if label == 'Plous' else '') + '\r')
+                    app.send(movement + '\r' + ('\x1b[B' if label == 'Plous' else '\r') + '\r')
                     app.expect_screen('Agent: ' + label)
                     with self.assertRaises(ProcessLookupError):
                         os.kill(previous, 0)

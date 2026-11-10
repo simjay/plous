@@ -108,7 +108,6 @@ func TestPresentationToolScopesAndArguments(t *testing.T) {
 	for _, tc := range []struct{ tool, owner, input, view string }{
 		{"kubernetes_show", "kubernetes", `{"view":"list","resource":"pods"}`, "list"},
 		{"helm_show", "helm", `{"namespace":"apps","name":"web","revision":2,"compare_revision":1}`, "compare"},
-		{"source_show", "source", `{"path":"README.md"}`, "source"},
 	} {
 		t.Run(tc.tool, func(t *testing.T) {
 			o, _ := workspaceFixture(t)
@@ -167,9 +166,6 @@ func TestPresentationOwnedContractsRejectUnrelatedArguments(t *testing.T) {
 		{"helm_show", `{"name":"web","namespace":"apps","revision":3,"compare_revision":2,"tab":"yaml"}`, false},
 		{"helm_show", `{"name":"web","namespace":"apps","revision":3,"compare_revision":2,"view":"compare"}`, false},
 		{"helm_show", `{"name":"web","namespace":"apps","revision":0,"compare_revision":2}`, false},
-		{"source_show", `{"path":"README.md","line":0}`, true},
-		{"source_show", `{"path":"README.md","line":-1}`, false},
-		{"source_show", `{"path":"README.md","offset":0}`, false},
 		{"history_show", `{"ref":"record:c:r","offset":0}`, true},
 		{"history_show", `{"ref":"record:c:r","limit":0}`, false},
 	} {

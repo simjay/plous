@@ -29,6 +29,11 @@ __pycache__/
 /plous
 /bin/
 /dist/
+/website/node_modules/
+/website/dist/
+/website/published/
+/website/rune/target/
+/website/rune/.generated/
 /.cache/
 .DS_Store
 

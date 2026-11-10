@@ -1,0 +1,157 @@
+name: Documentation website
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      snapshot_tag:
+        description: Release tag to build without deploying Pages
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ inputs.snapshot_tag || (github.event_name == 'pull_request' && github.ref) || 'publication' }}
+  cancel-in-progress: false
+
+env:
+  PLOUS_SITE_URL: ${{ vars.PLOUS_SITE_URL || 'https://simjay.github.io' }}
+  PLOUS_SITE_ROOT: ${{ vars.PLOUS_SITE_BASE || '/plous' }}
+
+jobs:
+  build:
+    name: Validate and build docs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.snapshot_tag || (github.event_name == 'pull_request' && github.sha) || 'main' }}
+          persist-credentials: false
+      - name: Select documentation channel
+        env:
+          SNAPSHOT_TAG: ${{ inputs.snapshot_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="/${PLOUS_SITE_ROOT#/}"
+          root="${root%/}"
+          if [ -n "$SNAPSHOT_TAG" ]; then
+            [[ "$SNAPSHOT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+            test "$SNAPSHOT_TAG" = "v$(cat cmd/plous/VERSION)"
+            echo "PLOUS_DOCS_VERSION=$SNAPSHOT_TAG" >> "$GITHUB_ENV"
+            echo "PLOUS_SITE_BASE=$root/$SNAPSHOT_TAG" >> "$GITHUB_ENV"
+          else
+            echo "PLOUS_SITE_BASE=$root/dev" >> "$GITHUB_ENV"
+          fi
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - name: Install native export libraries
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libxkbcommon-dev libwayland-dev
+      - name: Install pinned Rust toolchain
+        working-directory: website/rune
+        run: rustup toolchain install 1.99.1 --profile minimal --target wasm32-unknown-unknown
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin/wasm-bindgen
+            website/rune/target
+          key: rune-docs-${{ runner.os }}-1.99.1-${{ hashFiles('website/rune/Cargo.lock') }}
+      - name: Install matching Wasm bindings tool
+        working-directory: website/rune
+        run: |
+          if ! command -v wasm-bindgen >/dev/null || [ "$(wasm-bindgen --version)" != "wasm-bindgen 0.2.129" ]; then
+            cargo install wasm-bindgen-cli --version 0.2.129 --locked
+          fi
+      - run: make docs-check
+      - run: npm ci --prefix website
+      - run: make website-check
+      - run: make website-build
+      - name: Package permanent release documentation
+        if: inputs.snapshot_tag != ''
+        env:
+          SNAPSHOT_TAG: ${{ inputs.snapshot_tag }}
+        run: |
+          mkdir -p documentation-release
+          tar -czf "documentation-release/documentation-$SNAPSHOT_TAG.tar.gz" -C website/dist .
+          cd documentation-release
+          sha256sum "documentation-$SNAPSHOT_TAG.tar.gz" > "documentation-$SNAPSHOT_TAG.sha256"
+      - uses: actions/upload-artifact@v4
+        if: inputs.snapshot_tag != ''
+        with:
+          name: release-documentation
+          path: documentation-release/
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: inputs.snapshot_tag == ''
+        with:
+          name: documentation-website
+          path: website/dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  assemble:
+    name: Assemble retained versions
+    if: inputs.snapshot_tag == '' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@v4
+        with:
+          name: documentation-website
+          path: website/dist
+      - name: Download and verify permanent release snapshots
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 website/scripts/publish.py --base "$PLOUS_SITE_ROOT" --repository "$GITHUB_REPOSITORY"
+      - name: Verify assembled pages and links
+        env:
+          PLOUS_SITE_DIST: website/published
+          PLOUS_SITE_BASE: ${{ env.PLOUS_SITE_ROOT }}
+        run: python3 tests/website/check_build.py
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: website/published/
+
+  deploy:
+    name: Publish GitHub Pages
+    if: inputs.snapshot_tag == '' && github.event_name != 'pull_request'
+    needs: assemble
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    concurrency:
+      group: github-pages-publication
+      cancel-in-progress: false
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+      - uses: actions/deploy-pages@v4
+        id: deployment

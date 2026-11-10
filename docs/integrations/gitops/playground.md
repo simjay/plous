@@ -1,6 +1,6 @@
 # Argo and Flux playground
 
-[Argo and Flux](README.md) · [Kubernetes playground](../kubernetes/playground.md)
+[Argo CD](../argo/README.md) and [Flux](../flux/README.md) · [Kubernetes playground](../kubernetes/playground.md)
 
 These examples install real controllers and disposable workloads on Minikube for testing Plous Monitor. They are separate from `scripts/playground.py` and its existing workloads. Run the commands from the repository root with Helm and kubectl installed.
 

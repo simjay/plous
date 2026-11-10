@@ -1,10 +1,14 @@
 package monitor
 
 import (
-	tea "charm.land/bubbletea/v2"
 	"context"
-	textview "github.com/simjay/plous/internal/ui/text"
+	"sort"
 	"strings"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+	kubernetes "github.com/simjay/plous/internal/integrations/kubernetes/monitor"
+	textview "github.com/simjay/plous/internal/ui/text"
 )
 
 type NamespacePicker struct {
@@ -22,6 +26,48 @@ type NamespaceResult struct {
 	Generation uint64
 	Names      []string
 	Err        error
+}
+
+func (p *NamespacePicker) Cancel() {
+	if p != nil && p.Run != nil {
+		p.Run.Cancel()
+		p.Run = nil
+	}
+}
+
+func (p *NamespacePicker) Load(timeout time.Duration, list func(context.Context) (kubernetes.Collection, error)) func() NamespaceResult {
+	if p == nil || p.Loaded || p.Run != nil {
+		return nil
+	}
+	var ctx context.Context
+	var cancel context.CancelFunc
+	if timeout > 0 {
+		ctx, cancel = context.WithTimeout(context.Background(), timeout)
+	} else {
+		ctx, cancel = context.WithCancel(context.Background())
+	}
+	run := &NamespaceRequest{Cancel: cancel}
+	p.Run = run
+	return func() NamespaceResult {
+		defer cancel()
+		collection, err := list(ctx)
+		result := NamespaceResult{Run: run, Err: err}
+		for _, object := range collection.Objects {
+			result.Names = append(result.Names, object.GetName())
+		}
+		return result
+	}
+}
+
+func (p *NamespacePicker) Apply(result NamespaceResult) bool {
+	if p == nil || result.Run == nil || p.Run != result.Run {
+		return false
+	}
+	p.Cancel()
+	p.Loaded, p.Err = true, kubernetes.ErrorText(result.Err)
+	p.Names = result.Names
+	sort.Strings(p.Names)
+	return true
 }
 
 type NamespaceChoice struct {
@@ -110,10 +156,7 @@ func UpdateNamespacePicker(p *NamespacePicker, input **textview.Field, cursor *i
 	case "enter":
 		choice := choices[max(0, min(len(choices)-1, *cursor))]
 		if choice.Reload {
-			if p.Run != nil {
-				p.Run.Cancel()
-				p.Run = nil
-			}
+			p.Cancel()
 			p.Loaded, p.Err = false, ""
 		} else if choice.Manual {
 			p.Manual, p.Query = true, (*input).Text

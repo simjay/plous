@@ -7,8 +7,47 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/simjay/plous/internal/ai/agent"
 	ai "github.com/simjay/plous/internal/ai/model"
 )
+
+func TestAgentCommandsSurviveSettingsRevisionsAndRestart(t *testing.T) {
+	root := t.TempDir()
+	s, err := Open(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	next, err := s.ReadSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// An earlier revision has no entry commands, as in existing installations.
+	next, err = s.SaveSettings(next)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next.MainAgent = agent.Codex
+	next.AgentCommands = agent.Commands{Codex: "celai codex", ClaudeCode: `"/opt/Company Tools/celai" claude`}
+	saved, err := s.SaveSettings(next)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	s, err = Open(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	got, err := s.ReadSettings()
+	if err != nil || got.MainAgent != saved.MainAgent || got.AgentCommands != saved.AgentCommands || got.Revision != saved.Revision {
+		t.Fatal("entry commands did not survive restart", got, err)
+	}
+	got.AgentCommands.Codex = `celai "codex`
+	if _, err := s.SaveSettings(got); err == nil {
+		t.Fatal("saved an invalid entry command")
+	}
+}
 
 func TestSettingsRequireExplicitSavedConnections(t *testing.T) {
 	s, err := Open(t.TempDir())

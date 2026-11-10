@@ -8,6 +8,8 @@ Run these commands from a checkout of the Plous repository. The playground scrip
 
 For Argo and Flux Monitor examples, use the separate [Argo and Flux playground](../gitops/playground.md). Its setup and cleanup do not use this script.
 
+For a guided first exercise, follow [Investigate a restarting Pod](../../guides/investigate-restarting-pod.md). This page is the full setup and scenario reference.
+
 ## Before starting
 
 You need Python 3.9+, Helm 3.13+ or Helm 4, kubectl, and a running disposable Kubernetes Cluster with a default StorageClass, or a specific class supplied with `--storage-class NAME`. The fixture chart requires Kubernetes 1.26+. Minikube's normal storage provisioner is suitable. Images and upstream charts require registry access.

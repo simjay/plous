@@ -7,13 +7,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/pelletier/go-toml/v2"
+
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/pelletier/go-toml/v2"
 	"github.com/simjay/plous/internal/ai/agent"
 )
 
@@ -84,7 +85,8 @@ func prepareTerminal(ctx context.Context, path, configDir string, o TerminalOpti
 		// is started by this short-lived setup process.
 		setup, cancel := context.WithTimeout(ctx, 15*time.Second)
 		defer cancel()
-		child, err := startProcess(setup, path, o.Directory, []string{"app-server", "--listen", "stdio://"}, nil)
+		args := append(append([]string(nil), o.Args...), "app-server", "--listen", "stdio://")
+		child, err := startProcess(setup, path, o.Directory, args, nil)
 		if err != nil {
 			return terminalLaunch{}, err
 		}
@@ -108,7 +110,7 @@ func prepareTerminal(ctx context.Context, path, configDir string, o TerminalOpti
 		for inherited[name] != nil {
 			name += "_"
 		}
-		args := []string{"--no-daemon", "--sandbox", "read-only", "--ask-for-approval", "never", "-c", "sqlite_home=" + strconv.Quote(o.StateDirectory)}
+		args = []string{"--no-daemon", "--sandbox", "read-only", "--ask-for-approval", "never", "-c", "sqlite_home=" + strconv.Quote(o.StateDirectory)}
 		for _, f := range []string{"shell_tool", "unified_exec", "apply_patch_freeform", "multi_agent", "multi_agent_v2", "apps", "plugins", "remote_plugin", "hooks", "memories", "memory_tool", "js_repl", "code_mode_host", "code_mode_only", "sleep_tool", "view_image", "image_generation", "computer_use", "browser_use", "goals", "shell_snapshot", "shell_snapshot_v2", "workspace_dependencies", "request_permissions_tool"} {
 			args = append(args, "-c", "features."+f+"=false")
 		}

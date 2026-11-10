@@ -10,18 +10,21 @@ import (
 )
 
 func Executable(kind agent.Kind) (string, error) {
-	name := ""
-	switch kind {
-	case agent.ClaudeCode:
-		name = "claude"
-	case agent.Codex:
-		name = "codex"
-	default:
-		return "", errors.New("unknown external agent")
+	path, _, err := ResolveCommand(kind, (agent.Commands{}).For(kind))
+	return path, err
+}
+
+func ResolveCommand(kind agent.Kind, command string) (string, []string, error) {
+	if kind != agent.ClaudeCode && kind != agent.Codex {
+		return "", nil, errors.New("unknown external agent")
 	}
-	path, err := exec.LookPath(name)
+	args, err := agent.CommandArgs(command)
 	if err != nil {
-		return "", fmt.Errorf("%s is unavailable: install %s and make it available on PATH", kind.Label(), name)
+		return "", nil, fmt.Errorf("%s entry command: %w", kind.Label(), err)
 	}
-	return path, nil
+	path, err := exec.LookPath(args[0])
+	if err != nil {
+		return "", nil, fmt.Errorf("%s is unavailable: make %s available on PATH or update its Entry command in Settings", kind.Label(), args[0])
+	}
+	return path, args[1:], nil
 }

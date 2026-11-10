@@ -24,9 +24,6 @@ type ViewRequest struct {
 	Container       string `json:"container,omitempty"`
 	Previous        bool   `json:"previous,omitempty"`
 	Highlight       string `json:"highlight,omitempty"`
-	Path            string `json:"path,omitempty"`
-	Line            int    `json:"line,omitempty"`
-	Identity        string `json:"identity,omitempty"`
 	Revision        int    `json:"revision,omitempty"`
 	CompareRevision int    `json:"compare_revision,omitempty"`
 	Ref             string `json:"ref,omitempty"`

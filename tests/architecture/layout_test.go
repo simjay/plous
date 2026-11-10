@@ -76,6 +76,9 @@ func ownershipViolations(root string) ([]string, error) {
 				return err
 			}
 			dependency := strings.TrimPrefix(imported, module)
+			if violation := applicationBoundaryViolation(rel, dependency); violation != "" {
+				violations = append(violations, violation)
+			}
 			if strings.HasPrefix(rel, "internal/ai/cli/") && strings.Contains(strings.Split(imported, "/")[0], ".") && !slices.Contains([]string{module + "internal/ai/agent", "github.com/creack/pty", "github.com/pelletier/go-toml/v2"}, imported) {
 				violations = append(violations, fmt.Sprintf("%s imports %s outside the native process and shared agent boundary", rel, imported))
 			}
@@ -95,12 +98,11 @@ func ownershipViolations(root string) ([]string, error) {
 				owner     string
 				forbidden []string
 			}{
-				{"internal/integrations/observation/", []string{"internal/ai", "internal/app", "internal/source", "internal/workspace", "internal/integrations/kubernetes", "internal/integrations/helm"}},
-				{"internal/ui/", []string{"internal/app", "internal/source", "internal/integrations", "internal/workspace", "internal/ai"}},
-				{"internal/integrations/", []string{"internal/app", "internal/ui", "internal/source", "internal/ai", "internal/workspace"}},
-				{"internal/source/", []string{"internal/app", "internal/ui", "internal/ai"}},
+				{"internal/integrations/observation/", []string{"internal/ai", "internal/app", "internal/workspace", "internal/integrations/kubernetes", "internal/integrations/helm"}},
+				{"internal/ui/", []string{"internal/app", "internal/integrations", "internal/workspace", "internal/ai"}},
+				{"internal/integrations/", []string{"internal/app", "internal/ui", "internal/ai", "internal/workspace"}},
 				{"internal/ai/model/", []string{"internal/app", "internal/ai/history", "internal/workspace"}},
-				{"internal/ai/history/", []string{"internal/app", "internal/workspace", "internal/source", "internal/integrations"}},
+				{"internal/ai/history/", []string{"internal/app", "internal/workspace", "internal/integrations"}},
 			} {
 				if !strings.HasPrefix(rel, rule.owner) {
 					continue
@@ -136,9 +138,53 @@ func integrationSurface(path string) string {
 	return ""
 }
 
+func applicationBoundaryViolation(owner, dependency string) string {
+	if !strings.HasPrefix(owner, "internal/app/") {
+		return ""
+	}
+	entry := filepath.ToSlash(filepath.Dir(owner)) == "internal/app"
+	interactive := strings.HasPrefix(owner, "internal/app/tui/")
+	if !entry && !interactive && dependency == "internal/app/tui" {
+		return fmt.Sprintf("%s imports the interactive host from %s", owner, dependency)
+	}
+	if entry {
+		for _, prefix := range []string{"charm.land/", "internal/ui", "internal/app/terminal", "internal/ai/history", "internal/workspace"} {
+			if dependency == prefix || strings.HasPrefix(dependency, prefix+"/") || strings.HasSuffix(prefix, "/") && strings.HasPrefix(dependency, prefix) {
+				return fmt.Sprintf("%s owns interactive lifecycle dependency %s outside tui", owner, dependency)
+			}
+		}
+	}
+	return ""
+}
+
+func TestApplicationEntryAndInteractiveHostBoundaries(t *testing.T) {
+	for _, test := range []struct {
+		owner, dependency string
+		allowed           bool
+	}{
+		{"app.go", "internal/app/tui", true},
+		{"app.go", "internal/app/debugging", true},
+		{"app.go", "charm.land/bubbletea/v2", false},
+		{"app.go", "internal/ai/history", false},
+		{"app.go", "internal/workspace", false},
+		{"app.go", "internal/app/terminal", false},
+		{"tui/runtime.go", "internal/app/terminal", true},
+		{"tui/model.go", "internal/app/chat", true},
+		{"chat/controller.go", "internal/app/tui", false},
+		{"navigation/load.go", "internal/app/tui", false},
+		{"debugging/command.go", "internal/app/tui", false},
+		{"terminal/output_unix.go", "internal/app/tui", false},
+	} {
+		owner := "internal/app/" + test.owner
+		if allowed := applicationBoundaryViolation(owner, test.dependency) == ""; allowed != test.allowed {
+			t.Errorf("%s -> %s: allowed=%v", owner, test.dependency, allowed)
+		}
+	}
+}
+
 func toolBoundaryViolation(owner, dependency string) string {
 	surface, target := integrationSurface(owner), integrationSurface(dependency)
-	if surface == "code" || surface == "common" || strings.HasPrefix(owner, "internal/source/") || strings.HasPrefix(owner, "internal/app/code/") {
+	if surface == "common" {
 		for _, client := range []string{"rest", "dynamic", "kubernetes", "discovery", "plugin", "tools/remotecommand", "tools/portforward"} {
 			prefix := "k8s.io/client-go/" + client
 			if dependency == prefix || strings.HasPrefix(dependency, prefix+"/") {
@@ -146,11 +192,7 @@ func toolBoundaryViolation(owner, dependency string) string {
 			}
 		}
 	}
-	forbidden := surface == "code" && target == "monitor" ||
-		surface == "monitor" && target == "code" ||
-		surface == "common" && (target == "monitor" || target == "code") ||
-		(strings.HasPrefix(owner, "internal/source/") || strings.HasPrefix(owner, "internal/app/code/")) && target == "monitor" ||
-		strings.HasPrefix(owner, "internal/app/monitor/") && target == "code"
+	forbidden := surface == "common" && target == "monitor"
 	if forbidden {
 		return fmt.Sprintf("%s crosses tool interface boundary into %s", owner, dependency)
 	}
@@ -162,23 +204,14 @@ func TestToolInterfaceBoundaries(t *testing.T) {
 		owner, dependency string
 		allowed           bool
 	}{
-		{"helm/code/render.go", "helm/monitor", false},
-		{"kustomize/code/native.go", "helm/monitor", false},
-		{"argo/monitor/parse.go", "argo/code", false},
 		{"flux/common/declarations.go", "flux/monitor", false},
-		{"kubernetes/common/resource.go", "kubernetes/code", false},
-		{"helm/code/render.go", "helm/common", true},
 		{"argo/monitor/client.go", "gitops/monitor", true},
-		{"kustomize/code/native.go", "helm/common", true},
 	} {
 		owner := "internal/integrations/" + test.owner
 		dependency := "internal/integrations/" + test.dependency
 		if allowed := toolBoundaryViolation(owner, dependency) == ""; allowed != test.allowed {
 			t.Errorf("%s -> %s: allowed=%v", owner, dependency, allowed)
 		}
-	}
-	if toolBoundaryViolation("internal/source/render.go", "internal/integrations/helm/monitor") == "" {
-		t.Fatal("source rendering must not depend on a live Monitor client")
 	}
 	for _, client := range []string{"k8s.io/client-go/rest", "k8s.io/client-go/plugin/pkg/client/auth"} {
 		if toolBoundaryViolation("internal/integrations/kubernetes/common/resource.go", client) == "" {
@@ -188,13 +221,13 @@ func TestToolInterfaceBoundaries(t *testing.T) {
 }
 
 func TestToolSurfaceLayout(t *testing.T) {
-	for _, tool := range []string{"kubernetes", "helm", "kustomize", "argo", "flux"} {
+	for _, tool := range []string{"kubernetes", "helm", "argo", "flux"} {
 		root := filepath.Join("..", "..", "internal", "integrations", tool)
 		flat, err := filepath.Glob(filepath.Join(root, "*.go"))
 		if err != nil || len(flat) != 0 {
 			t.Errorf("%s has implementation outside its interfaces: %v, %v", tool, flat, err)
 		}
-		for _, surface := range []string{"monitor", "code", "common"} {
+		for _, surface := range []string{"monitor", "common"} {
 			files, err := filepath.Glob(filepath.Join(root, surface, "*.go"))
 			if err != nil || len(files) == 0 {
 				t.Errorf("%s/%s interface is missing: %v", tool, surface, err)
@@ -230,7 +263,7 @@ func TestOwnershipRejectsTestOnlyImports(t *testing.T) {
 
 func TestProductLayout(t *testing.T) {
 	root := filepath.Join("..", "..")
-	owners := map[string]bool{"ai": true, "app": true, "integrations": true, "source": true, "ui": true, "workspace": true}
+	owners := map[string]bool{"ai": true, "app": true, "integrations": true, "ui": true, "workspace": true}
 	entries, err := os.ReadDir(filepath.Join(root, "internal"))
 	if err != nil {
 		t.Fatal(err)

@@ -12,10 +12,9 @@ import (
 
 // Fixture contains public input data only. Expected results live in tools.json.
 type Fixture struct {
-	NextRoutes []Route           `json:"next_routes,omitempty"`
-	Scope      string            `json:"scope"`
-	Routes     []Route           `json:"routes,omitempty"`
-	Files      map[string]string `json:"files,omitempty"`
+	NextRoutes []Route `json:"next_routes,omitempty"`
+	Scope      string  `json:"scope"`
+	Routes     []Route `json:"routes,omitempty"`
 }
 
 type Route struct {
@@ -45,13 +44,8 @@ func LoadFixture(path string) (Fixture, error) {
 	if err := readJSON(path, &f); err != nil {
 		return f, err
 	}
-	if f.Scope != "cluster" && f.Scope != "source" && f.Scope != "general" {
+	if f.Scope != "cluster" && f.Scope != "general" {
 		return f, fmt.Errorf("unknown fixture scope %q", f.Scope)
-	}
-	for path := range f.Files {
-		if !filepath.IsLocal(path) {
-			return f, fmt.Errorf("fixture path escapes its root: %s", path)
-		}
 	}
 	for _, r := range append(append([]Route{}, f.Routes...), f.NextRoutes...) {
 		if r.Path == "" || r.Text == nil && !json.Valid(r.Body) || r.Status != 0 && (r.Status < 200 || r.Status > 599) {

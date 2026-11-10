@@ -21,15 +21,19 @@ import (
 // Bridge serves one already-authorized tool session over loopback MCP.
 // The caller owns its lifetime; this does not create tool authority.
 type Bridge struct {
-	URL, token string
-	server     *http.Server
-	ctx        context.Context
-	tools      agent.Tools
-	id         string
-	cancel     context.CancelCauseFunc
-	mu         sync.Mutex
-	seen       map[string]bool
-	calls      int
+	URL, token   string
+	server       *http.Server
+	ctx          context.Context
+	tools        agent.Tools
+	id           string
+	cancel       context.CancelCauseFunc
+	mu           sync.Mutex
+	seen         map[string]bool
+	calls        int
+	active       map[string]context.CancelFunc
+	cancelled    map[string]bool
+	Instructions string
+	Version      string
 }
 
 // OpenBridge starts the same session-bound transport used by native terminals.
@@ -84,26 +88,33 @@ func (b *Bridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(req.ID) == 0 {
 		if req.Method == "notifications/initialized" || req.Method == "notifications/cancelled" {
+			if req.Method == "notifications/cancelled" {
+				var p struct {
+					RequestID json.RawMessage `json:"requestId"`
+				}
+				if json.Unmarshal(req.Params, &p) == nil {
+					identity := canonicalID(p.RequestID)
+					b.mu.Lock()
+					cancel := b.active[identity]
+					if identity != "" && cancel == nil {
+						if b.cancelled == nil {
+							b.cancelled = map[string]bool{}
+						}
+						b.cancelled[identity] = true
+					}
+					b.mu.Unlock()
+					if cancel != nil {
+						cancel()
+					}
+				}
+			}
 			w.WriteHeader(http.StatusAccepted)
 		} else {
 			http.Error(w, "request identity required", http.StatusBadRequest)
 		}
 		return
 	}
-	var identity any
-	idDecoder := json.NewDecoder(bytes.NewReader(req.ID))
-	idDecoder.UseNumber()
-	_ = idDecoder.Decode(&identity)
-	var callID string
-	switch id := identity.(type) {
-	case string:
-		callID = "string:" + id
-	case json.Number:
-		n, err := strconv.ParseInt(string(id), 10, 64)
-		if err == nil {
-			callID = "number:" + strconv.FormatInt(n, 10)
-		}
-	}
+	callID := canonicalID(req.ID)
 	if callID == "" {
 		http.Error(w, "request identity must be a string or integer", http.StatusBadRequest)
 		return
@@ -112,13 +123,17 @@ func (b *Bridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var rpcErr any
 	switch req.Method {
 	case "initialize":
-		result = map[string]any{"protocolVersion": "2025-03-26", "capabilities": map[string]any{"tools": map[string]any{}}, "serverInfo": map[string]string{"name": "plous", "version": "1"}}
+		version := b.Version
+		if version == "" {
+			version = "1"
+		}
+		result = map[string]any{"protocolVersion": "2025-03-26", "capabilities": map[string]any{"tools": map[string]any{}}, "serverInfo": map[string]string{"name": "plous", "version": version}, "instructions": b.Instructions}
 	case "ping":
 		result = map[string]any{}
 	case "tools/list":
 		list := []any{}
 		for _, t := range b.tools.Definitions() {
-			list = append(list, map[string]any{"name": t.Name, "description": t.Description, "inputSchema": t.Parameters, "annotations": map[string]bool{"readOnlyHint": true, "destructiveHint": false}})
+			list = append(list, map[string]any{"name": t.Name, "description": t.Description, "inputSchema": t.Parameters, "annotations": map[string]bool{"readOnlyHint": !t.Mutating, "destructiveHint": t.Mutating}})
 		}
 		result = map[string]any{"tools": list}
 	case "tools/call":
@@ -141,16 +156,34 @@ func (b *Bridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		n := b.calls
 		b.mu.Unlock()
 		ctx, cancel := context.WithCancel(r.Context())
+		b.mu.Lock()
+		if b.active == nil {
+			b.active = map[string]context.CancelFunc{}
+		}
+		b.active[callID] = cancel
+		cancelled := b.cancelled[callID]
+		delete(b.cancelled, callID)
+		b.mu.Unlock()
+		if cancelled {
+			cancel()
+		}
 		stop := context.AfterFunc(b.ctx, cancel)
-		body, err := b.tools.Call(ctx, agent.ToolCall{ID: fmt.Sprintf("%s/cli-tool-%d", b.id, n), Name: p.Name, Args: p.Arguments}, 65536)
+		var body json.RawMessage
+		err := ctx.Err()
+		if err == nil {
+			body, err = b.tools.Call(ctx, agent.ToolCall{ID: fmt.Sprintf("%s/cli-tool-%d", b.id, n), Name: p.Name, Args: p.Arguments}, 65536)
+		}
 		stop()
 		cancel()
+		b.mu.Lock()
+		delete(b.active, callID)
+		b.mu.Unlock()
 		if err == nil {
 			err = b.ctx.Err()
 		}
 		if err != nil {
 			b.cancel(err)
-			rpcErr = map[string]any{"code": -32000, "message": "Plous tool access stopped after a tool failure. The terminal is still running. Close and reopen the native session to reconnect tools."}
+			rpcErr = map[string]any{"code": -32000, "message": "Plous tool access stopped after a tool failure. Reconnect the MCP client, or close and reopen the hosted session. Do not automatically retry active diagnostics; their remote outcome may be unknown."}
 			break
 		}
 		result = map[string]any{"content": []any{map[string]string{"type": "text", "text": string(body)}}, "isError": false}
@@ -165,4 +198,22 @@ func (b *Bridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		response["result"] = result
 	}
 	_ = json.NewEncoder(w).Encode(response)
+}
+
+func canonicalID(raw json.RawMessage) string {
+	var identity any
+	d := json.NewDecoder(bytes.NewReader(raw))
+	d.UseNumber()
+	if d.Decode(&identity) != nil {
+		return ""
+	}
+	switch id := identity.(type) {
+	case string:
+		return "string:" + id
+	case json.Number:
+		if n, err := strconv.ParseInt(string(id), 10, 64); err == nil {
+			return "number:" + strconv.FormatInt(n, 10)
+		}
+	}
+	return ""
 }

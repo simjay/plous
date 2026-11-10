@@ -59,8 +59,6 @@ func TestCapabilityCatalogHasOneOwnerPerOperation(t *testing.T) {
 			"kubernetes_logs_read":      {"label_selector", "field_selector", "continue"},
 			"kubernetes_usage_read":     {"container", "tail_lines", "continue"},
 			"helm_releases_read":        {"compare_revision"}, "helm_configuration_read": {"compare_revision"},
-			"source_files_read":    {"target", "result", "field", "other"},
-			"source_analysis_read": {"path", "query", "regex", "max_bytes"},
 		}[d.Name] {
 			if _, exists := properties[field]; exists {
 				t.Fatalf("%s exposes unrelated argument %s", d.Name, field)
@@ -74,7 +72,7 @@ func TestCapabilityCatalogHasOneOwnerPerOperation(t *testing.T) {
 		names = append(names, d.Name)
 	}
 	sort.Strings(names)
-	want := []string{"argo_resources_read", "flux_resources_read", "helm_diff_read", "helm_configuration_read", "helm_releases_read", "history_read", "kubernetes_logs_read", "kubernetes_resources_read", "kubernetes_usage_read", "source_analysis_read", "source_files_read", "ui_read", "kubernetes_show", "helm_show", "source_show", "history_show", "workspace_read"}
+	want := []string{"argo_resources_read", "flux_resources_read", "helm_diff_read", "helm_configuration_read", "helm_releases_read", "history_read", "kubernetes_logs_read", "kubernetes_resources_read", "kubernetes_usage_read", "ui_read", "kubernetes_show", "helm_show", "history_show", "workspace_read"}
 	sort.Strings(want)
 	if !reflect.DeepEqual(names, want) {
 		t.Fatal(names)
@@ -91,7 +89,6 @@ func TestCapabilityBoundaryRejectsBeforeAcquisition(t *testing.T) {
 		{"kubernetes_resources_read", "logs"}, {"kubernetes_resources_read", "usage"},
 		{"kubernetes_logs_read", "get"}, {"kubernetes_usage_read", "logs"},
 		{"helm_releases_read", "values"}, {"helm_configuration_read", "compare"}, {"helm_diff_read", "status"},
-		{"source_files_read", "fields"}, {"source_analysis_read", "read"},
 		{"kubernetes_read", "get"}, {"helm_read", "status"}, {"source_read", "read"}, {"argo_read", "get"}, {"flux_read", "get"},
 		{"kubernetes_resources", "get"}, {"kubernetes_logs", "logs"}, {"kubernetes_usage", "usage"},
 		{"helm_releases", "list"}, {"helm_configuration", "values"}, {"helm_compare", "compare"},
@@ -243,13 +240,6 @@ func TestAdvertisedToolBoundsAndRequiredArguments(t *testing.T) {
 		{"kubernetes_logs_read", `{"resource":"pods","name":"app","container":"app","tail_lines":501}`, false},
 		{"kubernetes_usage_read", `{"resource":"pods","name":"app","tail_lines":0}`, false},
 		{"kubernetes_resources_read", `{"operation":"describe","resource":"pods"}`, false},
-		{"source_files_read", `{"operation":"read"}`, false},
-		{"source_files_read", `{"operation":"search","query":""}`, false},
-		{"source_files_read", `{"operation":"search","query":"app","limit":101}`, false},
-		{"source_files_read", `{"operation":"read","path":"README.md","max_bytes":0}`, true},
-		{"source_files_read", `{"operation":"read","path":"README.md","max_bytes":16385}`, false},
-		{"source_analysis_read", `{"operation":"fields","target":"one"}`, false},
-		{"source_analysis_read", `{"operation":"compare","target":"one"}`, false},
 		{"helm_diff_read", `{"name":"app","revision":3,"compare_revision":1}`, true},
 		{"helm_diff_read", `{"operation":"compare","name":"app","revision":3,"compare_revision":1}`, false},
 		{"helm_diff_read", `{"name":"app","compare_revision":1}`, false},

@@ -5,23 +5,15 @@ import (
 	"github.com/cloudwego/eino/schema"
 	journal "github.com/simjay/plous/internal/ai/history"
 	aimodel "github.com/simjay/plous/internal/ai/model"
-	"os"
-	"path/filepath"
+
 	"strings"
 	"testing"
 )
 
-func TestProjectedSourceSurvivesFollowupAndSources(t *testing.T) {
+func TestProjectedWorkspaceSurvivesFollowupAndSources(t *testing.T) {
 	o, h := workspaceFixture(t)
-	root, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "facts.txt"), []byte("release approved for staging"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	o.Connections = []Connection{{ConnectionID: "src", Tool: "source", Path: root}}
-	m := &scriptedModel{steps: []*schema.Message{call("source_files_read", `{"purpose":"read release decision","connection_id":"src","operation":"read","path":"facts.txt"}`), answer("The release is approved for staging.")}}
+	m := &scriptedModel{steps: []*schema.Message{call("workspace_read", `{"purpose":"read workspace","operation":"workspace"}`), answer("The workspace is Commerce.")}}
+
 	o.Model = m
 	nativeOptions(t, &o)
 	result, err := Run(t.Context(), o)
@@ -35,7 +27,7 @@ func TestProjectedSourceSurvivesFollowupAndSources(t *testing.T) {
 	if err != nil || len(sources) != 1 || sources[0].Projection == nil {
 		t.Fatal(sources, err)
 	}
-	if !strings.Contains(sources[0].Content, "release approved for staging") {
+	if !strings.Contains(sources[0].Content, "Commerce") {
 		t.Fatal(sources)
 	}
 	bounds, err := h.RecordBoundaries(o.WorkspaceID, o.ConversationID)
@@ -52,18 +44,18 @@ func TestProjectedSourceSurvivesFollowupAndSources(t *testing.T) {
 			t.Fatal("non-observation reasoning", string(row.Data), err)
 		}
 	}
-	turn, err := h.StartTurn(o.WorkspaceID, o.ConversationID, journal.Request{Agent: o.Config, Prompt: "Which environment?"})
+	turn, err := h.StartTurn(o.WorkspaceID, o.ConversationID, journal.Request{Agent: o.Config, Prompt: "Which workspace?"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	o.Prompt, o.TurnID = "Which environment?", turn.Request.ID
-	m = &scriptedModel{steps: []*schema.Message{answer("Staging.")}}
+	o.Prompt, o.TurnID = "Which workspace?", turn.Request.ID
+	m = &scriptedModel{steps: []*schema.Message{answer("Commerce.")}}
 	o.Model = m
 	if _, err = Run(t.Context(), o); err != nil {
 		t.Fatal(err)
 	}
 	input := string(marshal(m.inputs[0]))
-	if !strings.Contains(input, "release approved for staging") || !strings.Contains(input, "tool_call_id") || strings.Contains(input, "active.md") {
+	if !strings.Contains(input, "Commerce") || !strings.Contains(input, "tool_call_id") || strings.Contains(input, "active.md") {
 		t.Fatal(input)
 	}
 }
@@ -107,16 +99,17 @@ func TestProviderContinuationCheckpoint(t *testing.T) {
 
 func TestProjectedToolEvidenceRedactsCapturedCredentials(t *testing.T) {
 	o, h := workspaceFixture(t)
-	root, err := filepath.EvalSymlinks(t.TempDir())
+	o.Key = "quoted-\"test-key"
+	workspaces, err := o.Store.List()
 	if err != nil {
 		t.Fatal(err)
 	}
-	o.Key = "quoted-\"test-key"
-	if err = os.WriteFile(filepath.Join(root, "notes.txt"), []byte(o.Key), 0600); err != nil {
+	workspaces[0].Name = o.Key
+	if _, err = o.Store.Save(workspaces[0], "test"); err != nil {
 		t.Fatal(err)
 	}
-	o.Connections = []Connection{{ConnectionID: "src", Tool: "source", Path: root}}
-	m := &scriptedModel{steps: []*schema.Message{call("source_files_read", string(marshal(map[string]string{"purpose": "Read " + o.Key, "connection_id": "src", "operation": "read", "path": "notes.txt"}))), answer("Read.")}}
+	m := &scriptedModel{steps: []*schema.Message{call("workspace_read", string(marshal(map[string]string{"purpose": "Read " + o.Key, "operation": "workspace"}))), answer("Read.")}}
+
 	o.Model = m
 	nativeOptions(t, &o)
 	if _, err = Run(t.Context(), o); err != nil {

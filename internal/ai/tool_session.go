@@ -80,10 +80,6 @@ func (s *toolSession) Close() {
 	s.cancel()
 	s.gate <- struct{}{}
 	defer func() { <-s.gate }()
-	for key, session := range s.op.sourceReads {
-		session.Close()
-		delete(s.op.sourceReads, key)
-	}
 }
 
 func (op *operation) toolResult(ctx context.Context, call aimodel.ToolCall) (body string, err error) {
@@ -92,6 +88,9 @@ func (op *operation) toolResult(ctx context.Context, call aimodel.ToolCall) (bod
 		err = errors.Join(err, op.observe(Observation{Phase: "tool", Component: call.Name, CallID: call.ID, TurnID: op.o.TurnID, Input: string(marshal(map[string]any{"arguments": call.Args, "result": body, "ref": receipt})), Failed: err != nil}))
 	}()
 	allowed := false
+	if op.hasTool("kubernetes") && op.debugEnabled(call.Name) {
+		allowed = true
+	}
 	for _, d := range op.definitions() {
 		if d.Name == call.Name {
 			allowed = true
@@ -137,6 +136,13 @@ func (op *operation) toolResult(ctx context.Context, call aimodel.ToolCall) (bod
 		if readErr != nil && !errors.Is(readErr, errReadDenied) {
 			return "", readErr
 		}
+	} else if op.debugEnabled(call.Name) {
+		// Record intent before an operation that can affect the cluster. A failed
+		// durable record prevents execution; failed delivery must never cause retry.
+		if err := op.o.History.SaveToolIntent(op.o.WorkspaceID, op.o.ConversationID, op.o.TurnID, call); err != nil {
+			return "", err
+		}
+		r, readErr = op.debugTool(ctx, call.Name, string(marshal(args)))
 	} else {
 		value, err := op.externalRead(ctx, call.Name, string(marshal(args)))
 		readErr = err

@@ -1,5 +1,5 @@
 package settings
 
-var ToolTypes = []string{"kubernetes", "code"}
+var ToolTypes = []string{"kubernetes"}
 
-var ToolNames = map[string]string{"kubernetes": "Kubernetes", "helm": "Helm", "kustomize": "Kustomize", "terraform": "Terraform", "argo": "Argo", "argocd": "Argo", "flux": "Flux", "kargo": "Kargo", "code": "Code Source", "files": "Files", "manifests": "Sources", "tfcode": "Sources", "monitor": "Monitor"}
+var ToolNames = map[string]string{"kubernetes": "Kubernetes", "helm": "Helm", "argo": "Argo", "argocd": "Argo", "flux": "Flux", "monitor": "Monitor"}

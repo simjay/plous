@@ -36,7 +36,7 @@ Kubernetes covers core objects, workloads, networking, storage, configuration, s
 
 Relationships distinguish ownership from selectors and references. A Service selector alone does not prove a Pod is its owner. Readiness is distinct from Pod phase or a controller's desired replica count. Usage graphs show observed samples and gaps; unavailable metrics are not zeros.
 
-The assistant has bounded read-only resource, describe, usage and log tools with projected facts. User actions below are separate and require explicit intent. Bulk creation, node drain, Job/CronJob execution, volume resize/snapshot creation, attach and port forwarding are unavailable.
+The assistant has bounded resource, describe, usage, and log reads with projected facts. Optional [active diagnostics](../../agent-skills/plous-debug.md#enable-active-debugging) can enable container commands or temporary test Jobs. The user-operated actions below have their own explicit intent and confirmation. Bulk creation, node drain, running existing Jobs/CronJobs, volume resize/snapshot creation, attach, and port forwarding are unavailable.
 
 ## Usage and charts
 

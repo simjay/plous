@@ -601,81 +601,6 @@
       ]
     },
     {
-      "id": "source-text",
-      "fixture": "source",
-      "steps": [
-        {
-          "id": "read",
-          "tool": "source_files_read",
-          "args": {
-            "purpose": "PlousBench read",
-            "connection_id": "source",
-            "operation": "read",
-            "path": "notes.txt"
-          },
-          "checks": [
-            {
-              "path": "/observation/facts/excerpt/text",
-              "equals": "Release approved for staging. \u03a9\n"
-            }
-          ],
-          "max_reads": 0
-        }
-      ]
-    },
-    {
-      "id": "source-field",
-      "fixture": "source",
-      "steps": [
-        {
-          "id": "field",
-          "tool": "source_analysis_read",
-          "args": {
-            "purpose": "PlousBench field",
-            "connection_id": "source",
-            "operation": "fields",
-            "target": "plain:deployment.yaml",
-            "resource": "$resource",
-            "field": "/spec/replicas"
-          },
-          "checks": [
-            {
-              "path": "/observation/rows/0/facts/value/number",
-              "equals": 3
-            },
-            {
-              "path": "/observation/rows/0/facts/line/number",
-              "equals": 4
-            }
-          ],
-          "max_reads": 0
-        }
-      ]
-    },
-    {
-      "id": "source-scope-denial",
-      "fixture": "source",
-      "steps": [
-        {
-          "id": "escape",
-          "tool": "source_files_read",
-          "args": {
-            "purpose": "PlousBench escape",
-            "connection_id": "source",
-            "operation": "read",
-            "path": "../outside.txt"
-          },
-          "checks": [
-            {
-              "path": "/observation/outcome",
-              "equals": "denied"
-            }
-          ],
-          "max_reads": 0
-        }
-      ]
-    },
-    {
       "id": "workspace-scope",
       "fixture": "cluster",
       "steps": [
@@ -920,49 +845,6 @@
       ]
     },
     {
-      "id": "saved-source-without-files",
-      "fixture": "source",
-      "steps": [
-        {
-          "id": "read",
-          "tool": "source_files_read",
-          "args": {
-            "purpose": "PlousBench read",
-            "connection_id": "source",
-            "operation": "read",
-            "path": "notes.txt"
-          },
-          "checks": [
-            {
-              "path": "/observation/facts/excerpt/text",
-              "equals": "Release approved for staging. \u03a9\n"
-            }
-          ],
-          "capture": {
-            "source": "/ref"
-          },
-          "max_reads": 0
-        },
-        {
-          "id": "saved",
-          "tool": "history_read",
-          "args": {
-            "purpose": "PlousBench saved",
-            "operation": "read",
-            "ref": "$source"
-          },
-          "checks": [
-            {
-              "path": "/evidence/0/observation/facts/excerpt/text",
-              "equals": "Release approved for staging. \u03a9\n"
-            }
-          ],
-          "before": "remove-source",
-          "max_reads": 0
-        }
-      ]
-    },
-    {
       "id": "ui-resource",
       "fixture": "cluster",
       "steps": [
@@ -1119,53 +1001,6 @@
             {
               "path": "/view/highlight",
               "equals": "connection refused"
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "id": "ui-source",
-      "fixture": "source",
-      "steps": [
-        {
-          "id": "show",
-          "tool": "source_show",
-          "args": {
-            "purpose": "PlousBench UI presentation",
-            "connection_id": "source",
-            "path": "deployment.yaml",
-            "line": 4
-          },
-          "checks": [
-            {
-              "path": "/status",
-              "equals": "opened"
-            },
-            {
-              "path": "/focus",
-              "equals": "assistant"
-            },
-            {
-              "path": "/visible",
-              "equals": true
-            }
-          ]
-        },
-        {
-          "id": "screen",
-          "tool": "ui_read",
-          "args": {
-            "purpose": "PlousBench UI presentation"
-          },
-          "checks": [
-            {
-              "path": "/view/path",
-              "equals": "deployment.yaml"
-            },
-            {
-              "path": "/view/line",
-              "equals": 4
             }
           ]
         }
@@ -1637,75 +1472,6 @@
       ]
     },
     {
-      "id": "ui-source-escape",
-      "fixture": "source",
-      "steps": [
-        {
-          "id": "deny",
-          "tool": "source_show",
-          "args": {
-            "purpose": "PlousBench UI presentation",
-            "connection_id": "source",
-            "path": "../outside.yaml"
-          },
-          "checks": [
-            {
-              "path": "/status",
-              "equals": "failed"
-            }
-          ]
-        },
-        {
-          "id": "screen",
-          "tool": "ui_read",
-          "args": {
-            "purpose": "PlousBench UI presentation"
-          },
-          "checks": [
-            {
-              "path": "/view/view",
-              "equals": "overview"
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "id": "ui-source-line",
-      "fixture": "source",
-      "steps": [
-        {
-          "id": "deny",
-          "tool": "source_show",
-          "args": {
-            "purpose": "PlousBench UI presentation",
-            "connection_id": "source",
-            "path": "deployment.yaml",
-            "line": 999999
-          },
-          "checks": [
-            {
-              "path": "/status",
-              "equals": "failed"
-            }
-          ]
-        },
-        {
-          "id": "screen",
-          "tool": "ui_read",
-          "args": {
-            "purpose": "PlousBench UI presentation"
-          },
-          "checks": [
-            {
-              "path": "/view/view",
-              "equals": "overview"
-            }
-          ]
-        }
-      ]
-    },
-    {
       "id": "ui-evidence-scope",
       "fixture": "cluster",
       "steps": [
@@ -2090,45 +1856,6 @@
             "connection_id": "cluster/helm",
             "name": "web",
             "operation": "status"
-          },
-          "checks": [
-            {
-              "path": "/observation/outcome",
-              "equals": "denied"
-            }
-          ],
-          "max_reads": 0
-        }
-      ]
-    },
-    {
-      "id": "source-tool-boundaries",
-      "fixture": "source",
-      "steps": [
-        {
-          "id": "0",
-          "tool": "source_files_read",
-          "args": {
-            "purpose": "PlousBench capability check",
-            "connection_id": "source",
-            "operation": "catalog"
-          },
-          "checks": [
-            {
-              "path": "/observation/outcome",
-              "equals": "denied"
-            }
-          ],
-          "max_reads": 0
-        },
-        {
-          "id": "1",
-          "tool": "source_analysis_read",
-          "args": {
-            "purpose": "PlousBench capability check",
-            "connection_id": "source",
-            "operation": "read",
-            "path": "deployment.yaml"
           },
           "checks": [
             {

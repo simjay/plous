@@ -24,11 +24,7 @@ func (u *fixtureUI) Show(ctx context.Context, q agent.ViewRequest) (agent.UIResu
 	if u.blocked {
 		return agent.UIResult{Status: "blocked", Reason: "unfinished editor", Focus: "assistant"}, nil
 	}
-	profile, err := u.fixture.options.Store.DataRoot()
-	if err != nil {
-		return agent.UIResult{}, err
-	}
-	p, err := navigation.Load(ctx, q, u.fixture.options.Connections, profile)
+	p, err := navigation.Load(ctx, q, u.fixture.options.Connections)
 	if err != nil {
 		return agent.UIResult{Status: "failed", Reason: err.Error()}, nil
 	}

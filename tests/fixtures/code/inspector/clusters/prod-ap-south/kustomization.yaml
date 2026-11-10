@@ -1,7 +1,0 @@
-resources: [../../envs/prod]
-patches:
-  - patch: |-
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata: {name: api-v1}
-      spec: {replicas: 9}

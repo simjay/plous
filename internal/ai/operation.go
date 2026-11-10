@@ -16,11 +16,11 @@ import (
 	aimodel "github.com/simjay/plous/internal/ai/model"
 	helmtool "github.com/simjay/plous/internal/integrations/helm/monitor"
 	kubernetes "github.com/simjay/plous/internal/integrations/kubernetes/monitor"
-	"github.com/simjay/plous/internal/source"
 	"github.com/simjay/plous/internal/workspace"
 )
 
 type Options struct {
+	Debug                               kubernetes.DebugPolicy
 	Agent                               agent.Kind
 	UI                                  agent.UI
 	Store                               *workspace.Store
@@ -52,7 +52,6 @@ type operation struct {
 	capacity               int
 	calls, spent, reserved int
 	historyAccess          *journal.Access
-	sourceReads            map[string]*source.ReadSession
 	deliveryBytes          int
 	keys                   []string
 }

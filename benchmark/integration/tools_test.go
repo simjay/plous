@@ -123,9 +123,9 @@ func TestPlousBenchTools(t *testing.T) {
 				failParity(call.ID + ": direct and MCP presentation results differ")
 			}
 		}
-		// Fixed cluster fixtures permit complete result comparisons. Source and
-		// history identifiers differ across isolated profiles and have explicit checks.
-		if c.Fixture == "source" || c.Fixture == "general" || c.ID == "workspace-scope" {
+		// Fixed cluster fixtures permit complete result comparisons. History identifiers
+		// differ across isolated profiles and have explicit checks.
+		if c.Fixture == "general" || c.ID == "workspace-scope" {
 			continue
 		}
 		for i := range pair[0].Calls {

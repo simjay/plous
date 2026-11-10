@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
+
 	"path/filepath"
 	"strings"
 	"testing"
@@ -15,25 +15,25 @@ import (
 	"github.com/simjay/plous/internal/ai/agent"
 	"github.com/simjay/plous/internal/ai/history"
 	"github.com/simjay/plous/internal/integrations/observation"
-	"github.com/simjay/plous/internal/source"
+
 	"github.com/simjay/plous/internal/workspace"
 )
 
 type evidenceTurn struct{ conversation, turn string }
 type fixture struct {
-	ui                          *fixtureUI
-	nextRoutes                  []bench.Route
-	root, sourceRoot, transport string
-	options                     ai.Options
-	session                     *ai.ExternalTools
-	mcp                         *mcpTools
-	engine                      *bench.Engine
-	tools                       agent.Tools
-	variables                   map[string]any
-	turns                       []evidenceTurn
-	saved                       map[string]string
-	cancel                      context.CancelFunc
-	closeServer                 func()
+	ui              *fixtureUI
+	nextRoutes      []bench.Route
+	root, transport string
+	options         ai.Options
+	session         *ai.ExternalTools
+	mcp             *mcpTools
+	engine          *bench.Engine
+	tools           agent.Tools
+	variables       map[string]any
+	turns           []evidenceTurn
+	saved           map[string]string
+	cancel          context.CancelFunc
+	closeServer     func()
 }
 
 func prepare(t testing.TB, c bench.Scenario, transport string) *fixture {
@@ -71,36 +71,6 @@ func prepare(t testing.TB, c bench.Scenario, transport string) *fixture {
 			f.engine, f.closeServer = engine, server.Close
 			connection.Settings["path"] = kubeconfig
 			f.options.Connections = ai.ClusterConnections(ai.Connection{ConnectionID: "cluster", Tool: "kubernetes", Context: "fixture", Namespace: "apps", Path: kubeconfig})
-		} else {
-			f.sourceRoot = filepath.Join(f.root, "source")
-			if err = os.MkdirAll(f.sourceRoot, 0700); err != nil {
-				t.Fatal(err)
-			}
-			f.sourceRoot, err = filepath.EvalSymlinks(f.sourceRoot)
-			if err != nil {
-				t.Fatal(err)
-			}
-			for path, text := range data.Files {
-				full := filepath.Join(f.sourceRoot, path)
-				if err = os.MkdirAll(filepath.Dir(full), 0700); err != nil {
-					t.Fatal(err)
-				}
-				if err = os.WriteFile(full, []byte(text), 0600); err != nil {
-					t.Fatal(err)
-				}
-			}
-			snapshot, err := source.Load(t.Context(), source.Config{Path: f.sourceRoot})
-			if err != nil {
-				t.Fatal(err)
-			}
-			inventory := source.Discover(snapshot)
-			rendered, err := (source.Renderer{}).Render(t.Context(), inventory, "plain:deployment.yaml", source.Inputs{})
-			if err != nil {
-				t.Fatal(err)
-			}
-			f.variables["resource"] = rendered.Resources[0].Key()
-			connection = workspace.Connection{ID: "source", Tool: "code", Name: "Fixture source", Settings: map[string]string{"path": f.sourceRoot}}
-			f.options.Connections = []ai.Connection{{ConnectionID: "source", Tool: "source", Path: f.sourceRoot, SourceView: source.CaptureReadView(inventory, map[string]*source.Result{"plain:deployment.yaml": rendered}, nil, nil)}}
 		}
 		w, err := store.Save(workspace.Workspace{Name: "PlousBench", Connections: []workspace.Connection{connection}}, "fixture")
 		if err != nil {
@@ -345,14 +315,6 @@ func (f *fixture) before(ctx context.Context, step bench.Step) error {
 		}
 		f.engine.Advance(f.nextRoutes)
 		return nil
-	case "remove-source":
-		if f.sourceRoot == "" {
-			return errors.New("fixture has no source root")
-		}
-		if err := os.RemoveAll(f.sourceRoot); err != nil {
-			return err
-		}
-		return f.restart(ctx)
 	case "close":
 		return f.session.Close()
 	case "cancel":

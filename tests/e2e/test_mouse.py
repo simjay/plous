@@ -27,6 +27,13 @@ class MouseTests(unittest.TestCase):
         app.expect("AI assistant")
         return app
 
+    def visible_point(self, app, text):
+        for y, row in enumerate(app.screen()["rows"]):
+            x = row.find(text)
+            if x >= 0:
+                return x, y
+        self.fail("Missing visible text: " + text)
+
     def test_sgr_release_and_exit_cleanup(self):
         app = self.start()
         self.assertIn(b"\x1b[?1002h", app.output)
@@ -148,6 +155,56 @@ class MouseTests(unittest.TestCase):
         app.assert_exit()
         session = json.loads((self.state / "session.json").read_text())
         self.assertEqual(session["mode"], 1)
+
+    def test_screen_selection_keeps_settings_mouse_controls(self):
+        app = self.start()
+        app.send("ss")
+        app.expect_screen("Mouse support: On")
+
+        text = "Mouse support: On"
+        x, y = self.visible_point(app, text)
+        app.mouse_press(x, y)
+        app.mouse_drag(x + len(text) - 1, y)
+        app.mouse_release(x + len(text) - 1, y)
+        app.expect_screen("Copy selection")
+        clear_x, clear_y = self.visible_point(app, "Esc Clear selection")
+        app.mouse_click(clear_x, clear_y)
+        app.expect_screen("Mouse support: On")
+        self.assertNotIn("Copy selection", "\n".join(app.screen()["rows"]))
+        app.mouse_press(x, y)
+        app.mouse_drag(x + len(text) - 1, y)
+        app.mouse_release(x + len(text) - 1, y)
+        app.expect_screen("Copy selection")
+        x, y = self.visible_point(app, "Copy selection")
+        app.mouse_click(x, y)
+        encoded = base64.b64encode(text.encode())
+        self.assertIn(b"\x1b]52;c;" + encoded, app.output)
+        self.assertIn("Mouse support: On", "\n".join(app.screen()["rows"]))
+        app.send("\x1b")
+        x, y = self.visible_point(app, "Mouse support: On")
+        app.mouse_click(x, y)
+        app.expect_screen("Mouse support: Off")
+        app.send("\x03")
+        app.assert_exit()
+
+    def test_screen_selection_copies_footer_error(self):
+        app = self.start()
+        app.send(":unknown\r")
+        text = "Unknown command."
+        app.expect_screen(text)
+        x, y = self.visible_point(app, text)
+        app.mouse_press(x, y)
+        app.mouse_drag(x + len(text) - 1, y)
+        app.mouse_release(x + len(text) - 1, y)
+        app.expect_screen("Copy selection")
+        self.assertIn(text, app.screen()["rows"][-1])
+        x, y = self.visible_point(app, "Copy selection")
+        self.assertEqual(y, 0)
+        app.mouse_click(x, y)
+        encoded = base64.b64encode(text.encode())
+        self.assertIn(b"\x1b]52;c;" + encoded, app.output)
+        app.send("\x03")
+        app.assert_exit()
 
     @unittest.skipUnless(shutil.which("tmux"), "tmux is not installed")
     def test_mouse_through_isolated_tmux(self):

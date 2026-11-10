@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en" data-page="__PAGE__" data-site-root="__SITE_ROOT__" data-version="__VERSION__" data-base="__BASE__" data-runtime="static" data-section="__SECTION__" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>__TITLE__</title>
+  <meta name="description" content="__DESCRIPTION__" />
+  <link rel="canonical" href="__CANONICAL__" />
+  <link rel="icon" href="__BASE__assets/icon.svg" />
+  <style>
+    @font-face{font-family:Geist;src:url('__BASE__assets/geist.ttf');font-weight:100 900;font-display:swap}
+    @font-face{font-family:'Geist Mono';src:url('__BASE__assets/geist-mono.ttf');font-weight:100 900;font-display:swap}
+    :root{--rune-sans:Geist,system-ui,sans-serif;--rune-mono:'Geist Mono',monospace;--rune-selection:#dbeafe;--rune-focus:#326ce5;--bg:#fff;--surface:#f6f8fc;--ink:#172033;--muted:#56657a;--line:#e2e8f0;--blue:#326ce5;--wash:#edf3ff;--green:#206a43;--violet:#7045ba;--amber:#905500;--red:#b63e50}
+    :root[data-theme=dark]{--bg:#101722;--surface:#182232;--ink:#e5edf8;--muted:#a7b5c9;--line:#2b3a50;--blue:#8db4ff;--wash:#203454;--green:#94d7af;--violet:#cfadff;--amber:#e7bc83;--red:#f3a5af;color-scheme:dark}
+    html{background:var(--bg);color:var(--ink);font:400 16px/1.7 Geist,system-ui,sans-serif;text-size-adjust:100%;scroll-padding-top:24px}
+    body{margin:0;-webkit-font-smoothing:antialiased}
+    :is([data-rune-static],[data-rune-menu]) .t *{display:inline;position:static}
+    :is([data-rune-static],[data-rune-menu]) button{font:inherit;cursor:pointer;color:inherit}
+    :focus-visible{outline:3px solid var(--blue)!important;outline-offset:4px}
+    ::selection{background:var(--wash)}
+    .skip{position:fixed;left:16px;top:-60px;z-index:100;padding:8px 16px;background:var(--bg);color:var(--blue)}
+    .skip:focus{top:12px}
+    dialog{width:min(680px,calc(100vw - 32px));max-height:85vh;box-sizing:border-box;overflow:auto;padding:24px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);box-shadow:0 20px 80px #10172230}
+    dialog::backdrop{background:#10172266;backdrop-filter:blur(4px)}
+    .dialog-head{display:flex;justify-content:space-between;align-items:center;gap:20px;margin-bottom:20px}
+    .dialog-head h2{margin:0;font:600 20px/28px Geist,sans-serif}
+    .dialog-head button{padding:7px 12px;border:1px solid var(--line);background:var(--surface);border-radius:6px;font:inherit;color:inherit;cursor:pointer}
+    dialog a{color:var(--blue)}
+    dialog input{display:block;width:100%;box-sizing:border-box;padding:14px;border:1px solid var(--line);border-radius:7px;background:var(--surface);font:16px Geist,sans-serif;color:inherit}
+    #search-results{padding:0;list-style:none;max-height:50vh;overflow:auto}
+    #search-results li{padding:15px 0;border-bottom:1px solid var(--line)}
+    #search-results a{color:var(--blue);font-weight:500;text-underline-offset:4px}
+    #search-results p{font-size:14px;color:var(--muted);margin:8px 0 0}
+    #version-list{list-style:none;padding:0;margin:16px 0 0}
+    #version-list a{display:block;padding:12px 16px;border-radius:6px;text-decoration:none}
+    #version-list a:hover,#version-list a[aria-current]{background:var(--wash)}
+    #version-status{font-size:14px;color:var(--muted)}
+    #search-status{font-size:13px;color:var(--muted)}
+    #mobile-menu nav{width:100%!important;height:auto!important;overflow:visible!important;padding:0!important}
+    #mobile-menu [data-rune-menu]{width:100%;height:auto}
+    mark{background:var(--wash);color:inherit}
+    @media(min-width:1000px){[data-rune-static] [data-control=menu]{display:none!important}}
+    @media(max-width:999px){[data-rune-static] #sidebar,[data-rune-static] #nav-docs,[data-rune-static] #nav-developers{display:none!important}}
+    @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important}}
+  </style>
+  <script>try{document.documentElement.dataset.theme=localStorage.getItem('plous-docs-theme')==='dark'?'dark':'light'}catch{}</script>
+  <!-- rune:css -->
+</head>
+<body>
+  <a class="skip" href="#top">Skip to content</a>
+  <!-- rune:body -->
+  <dialog id="doc-search" aria-labelledby="search-heading">
+    <div class="dialog-head"><h2 id="search-heading">Search Plous docs</h2><button id="close-search" type="button">Close</button></div>
+    <input id="search-input" type="search" aria-label="Search documentation" placeholder="Search guides, commands, and tools" />
+    <p id="search-status" role="status">Search the documentation.</p>
+    <ul id="search-results"></ul>
+  </dialog>
+  <dialog id="mobile-menu" aria-labelledby="menu-heading"><div class="dialog-head"><h2 id="menu-heading">Documentation</h2><button id="close-menu" type="button">Close</button></div>__MENU__</dialog>
+  <dialog id="doc-versions" aria-labelledby="versions-heading"><div class="dialog-head"><h2 id="versions-heading">Documentation versions</h2><button id="close-versions" type="button">Close</button></div><p id="version-status" role="status"></p><ul id="version-list"></ul></dialog>
+  <script id="page-code" type="application/json">__CODE__</script>
+  <script id="page-aliases" type="application/json">__ALIASES__</script>
+  <script type="module" src="__BASE__assets/client.mjs"></script>
+</body>
+</html>

@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strings"
+
 	"time"
 
 	"github.com/simjay/plous/internal/ai"
@@ -15,7 +15,7 @@ import (
 	kubecommon "github.com/simjay/plous/internal/integrations/kubernetes/common"
 	kubernetes "github.com/simjay/plous/internal/integrations/kubernetes/monitor"
 	manifest "github.com/simjay/plous/internal/integrations/manifest"
-	"github.com/simjay/plous/internal/source"
+
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 )
@@ -36,7 +36,7 @@ type Prepared struct {
 }
 
 // Load has no renderer, write, connection selection, or process-execution API.
-func Load(ctx context.Context, q agent.ViewRequest, connections []ai.Connection, profile string) (*Prepared, error) {
+func Load(ctx context.Context, q agent.ViewRequest, connections []ai.Connection) (*Prepared, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	p := &Prepared{Request: q, Origin: "live"}
@@ -51,9 +51,6 @@ func Load(ctx context.Context, q agent.ViewRequest, connections []ai.Connection,
 		return p, nil
 	}
 	kind := "kubernetes"
-	if q.View == "source" {
-		kind = "source"
-	}
 	if q.View == "compare" {
 		kind = "helm"
 	}
@@ -64,13 +61,6 @@ func Load(ctx context.Context, q agent.ViewRequest, connections []ai.Connection,
 	c := connections[index]
 	var err error
 	switch q.View {
-	case "source":
-		p.Text, p.Request.Identity, err = source.DisplayFile(ctx, source.ReadScope{Root: c.Path, View: c.SourceView, ProfileRoot: profile, ConnectionID: c.ConnectionID}, q.Path, q.Identity)
-		if err == nil && (q.Line < 0 || q.Line > strings.Count(p.Text, "\n")+1) {
-			err = errors.New("requested line does not exist")
-		}
-		p.Request.Line = max(1, q.Line)
-		p.Origin = "source"
 	case "compare":
 		p.Origin = "recorded"
 		p.Helm, err = helm.New(helm.Config{Target: c.Target, TargetCaptured: c.TargetCaptured, Kubeconfig: c.Path, Context: c.Context, Namespace: q.Namespace, Driver: c.Driver})

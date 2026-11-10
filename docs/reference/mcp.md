@@ -1,26 +1,32 @@
-# MCP reference
+# MCP tools and permissions
 
-[Documentation](../README.md) · [MCP setup and examples](../guides/plous-mcp.md) · [AI implementation](../contributing/ai-assistant.md)
+[Documentation](../README.md) · [MCP server](../mcp/README.md) · [Client setup](../mcp/setup.md) · [AI implementation](../contributing/ai-assistant.md)
 
-This page describes the MCP bridge implemented by this Plous build. For connecting an installed agent and asking a first question, start with the [MCP guide](../guides/plous-mcp.md).
+This page describes the tools and transports implemented by this Plous build. Start with [MCP client setup](../mcp/setup.md) for direct tool access, [plous-debug](../agent-skills/plous-debug.md) for a guided skill, or the [assistant panel](../guides/plous-mcp.md) inside the TUI.
+
+| Mode | Transport | Setup | Plous view tools |
+| --- | --- | --- | --- |
+| Claude Code or Codex inside Plous | Private loopback HTTP | Automatic when the native session opens | Available |
+| Independent coding agent | Stdio subprocess | `plous setup codex` or `plous setup claude` | Omitted |
 
 ## Available tools
 
-The temporary MCP server normally uses the name `plous`; Codex adds a suffix if that name is already present in your settings. These are the tool names it can advertise; the actual list depends on the captured connection. The built-in agent uses these same schemas and implementations.
+Standalone setup registers `plous_debug`. The TUI MCP server normally uses the name `plous`; Codex adds a suffix if that name is already present in your settings. These are the tool names it can advertise; the actual list depends on the captured connection. The built-in agent uses these same schemas and implementations.
 
 | Type | Tools | Coverage |
 | --- | --- | --- |
 | Object inspection | `kubernetes_resources_read`, `helm_releases_read`, `argo_resources_read`, `flux_resources_read` | Resource state, release inventory and controller status within each technology |
-| Configuration and files | `helm_configuration_read`, `source_files_read` | Masked release values/manifests/hooks; source file lists, contents and search |
+| Release configuration | `helm_configuration_read` | Masked release values/manifests/hooks |
 | Logs | `kubernetes_logs_read` | Bounded Pod or owned-workload log excerpts |
+| Active diagnostics | `kubernetes_exec_run`, `kubernetes_diagnostic_run` | Explicitly enabled commands in existing containers, or temporary HTTP/DNS/TCP tests |
 | Usage | `kubernetes_usage_read` | Current Pod, Node or workload measurements and budgets |
-| Analysis and comparison | `helm_diff_read`, `source_analysis_read` | Retained release differences; captured Code resources, fields, provenance, findings and comparisons |
+| Analysis and comparison | `helm_diff_read` | Retained release differences |
 | App records | `workspace_read`, `history_read` | Saved workspace/Activity metadata; scoped saved messages and observations |
-| Presentation | `ui_read`, `kubernetes_show`, `helm_show`, `source_show`, `history_show` | Inspect the current view; show Kubernetes resources/lists/logs, Helm revision comparisons, source locations or saved evidence |
+| Presentation | `ui_read`, `kubernetes_show`, `helm_show`, `history_show` | Inspect the current view; show Kubernetes resources/lists/logs, Helm revision comparisons or saved evidence |
 
-Tool names end in `_read` for information returned to the agent or `_show` for a view presented to the user. Reads retain their projected facts, calculations, coverage and bounded pages. Shows return presentation receipts. `kubernetes_logs_read`, `kubernetes_usage_read` and `helm_diff_read` take no `operation` argument. `kubernetes_show` selects `view=resource`, `list` or `logs`; the other show tools have one destination and take no `view` argument. `helm_show` currently opens revision comparisons, not release lists. For both Helm comparison tools, `revision` is the after state and `compare_revision` is the before state.
+Diagnostic tool names end in `_run` and may change cluster or application state. Other tool names end in `_read` for information returned to the agent or `_show` for a view presented to the user. Reads retain their projected facts, calculations, coverage and bounded pages. Shows return presentation receipts. `kubernetes_logs_read`, `kubernetes_usage_read` and `helm_diff_read` take no `operation` argument. `kubernetes_show` selects `view=resource`, `list` or `logs`; the other show tools have one destination and take no `view` argument. `helm_show` currently opens revision comparisons, not release lists. For both Helm comparison tools, `revision` is the after state and `compare_revision` is the before state.
 
-The captured connection and page hint arrive with the session instructions; there is no separate `plous_context` tool. History is called directly, with no RLM or recursive recall service.
+The captured connection and page hint arrive with the session instructions, and connection schemas enumerate their captured identities. History is called directly through `history_read`.
 
 Integration-owned Go definitions supply accepted arguments, required fields and bounds to the advertised schemas and validators. Execution checks those definitions directly without reading generated schemas. Unknown or inappropriate arguments are rejected before acquisition. Calls include a purpose. Connection reads name the captured connection identity; supplying another identity cannot grant access. Exact schemas belong to the [tool registry](../../internal/ai/tools.go) and its integration-owned definitions. History operations and continuation rules are documented in [History tools](../contributing/ai-assistant.md#history-tools).
 
@@ -36,17 +42,24 @@ Kubernetes, Helm, Argo and Flux use the same captured cluster. Their evidence ha
 
 `helm_diff_read` uses `revision` for the after revision and optional `compare_revision` for the before revision. An explicit pair requires two distinct positive retained revisions. Without a pair, it compares the selected or latest revision to its predecessor; revision 1 uses an empty baseline.
 
-Missing permissions, partial lists, stale metrics and unknown fields remain explicit. Bounded log excerpts may omit relevant lines. Use [Kubernetes](../integrations/kubernetes/README.md), [Helm](../integrations/helm/README.md) and [Argo and Flux](../integrations/gitops/README.md) for each integration's coverage.
+Missing permissions, partial lists, stale metrics and unknown fields remain explicit. Bounded log excerpts may omit relevant lines. Use [Kubernetes](../integrations/kubernetes/README.md), [Helm](../integrations/helm/README.md) and [Argo CD](../integrations/argo/README.md) and [Flux](../integrations/flux/README.md) for each integration's coverage.
 
-### Code and historical evidence
-
-Source file reads use current saved local bytes or an already acquired Git revision. Unsaved editor buffers are excluded. Catalogs, rendered resources and field provenance use captured Code results. These tools do not start rendering, fetch another revision or acquire another repository; open or render the relevant configuration in Code before asking about its analysis.
+### Historical evidence
 
 History contains evidence that was saved, not a continuous archive of everything you browsed. A fresh read observes the present and cannot recover an unrecorded past value. Search finds candidate records; search-hit totals are not resource counts. Typed counts and comparisons report completeness and unknowns. The tool can read its own newly saved observations during the same session.
 
+## Active diagnostics
+
+Both built-in and external agents use the same diagnostic tools when explicitly enabled. They require `purpose`, the captured Kubernetes `connection_id`, and its concrete default `namespace`. `timeout_seconds` defaults to 30 and accepts 1-120. Active tests cannot select another namespace or connection.
+
+- `kubernetes_exec_run`: enabled with `--allow-exec`. Requires Pod `name`, exact `uid`, `container`, and `command` as an argument array. There is no inserted shell, stdin, or TTY. Combined stdout/stderr is bounded to 64 KiB. Exit code, timeout, output limits, and unknown remote outcomes are recorded.
+- `kubernetes_diagnostic_run`: enabled with `--diagnostic-image IMAGE`. Requires `test=http|dns|tcp` and `target`; TCP also requires `port`. HTTP uses a complete http(s) URL without embedded credentials and performs one GET without redirects or retries. The host chooses the image and fixed Job configuration. The result includes runner identity, exit status, output, and cleanup. A temporary runner's network access does not establish application access.
+
+Active intents are saved in execution records before dispatch. Results use projected observations and the same persistence-before-delivery path as reads. Transport or storage failures must not cause automatic retries of state-changing tests. See [setup, permissions, cleanup, and examples](../mcp/active-diagnostics.md).
+
 ## Scope and delivery
 
-The selected cluster or source is captured when the native session opens. The current namespace and page are hints, not extra permission boundaries. All cluster reads use that connection's Kubernetes credentials; a request may name another permitted namespace but cannot select another connection. General chat and history-only views have no live connection tools.
+The selected cluster is captured when the native session or standalone process opens. For reads, the current namespace and page are hints, not extra permission boundaries: requests may name another namespace allowed by the captured Kubernetes credentials. Active diagnostics stay restricted to the captured default namespace. Neither kind of tool can select another connection. General chat and history-only views have no live connection tools.
 
 The host serializes calls, validates arguments and scope, and saves projected observations before returning them. Saved observations include identity, timestamps and coverage; raw API bodies are transient. Correctable argument errors return feedback. Fatal tool, scope or history-integrity failures revoke tool access. The native terminal remains open so its draft and conversation remain available.
 
@@ -54,7 +67,9 @@ Read results and individual operations are bounded. Native sessions have no Plou
 
 ## MCP connection details
 
-Plous creates a temporary `http://127.0.0.1:<port>/mcp` endpoint protected by a per-session bearer token and configures the installed agent to use it. You do not copy an endpoint or token into global CLI settings. Access ends with the session; the bridge is not a remote workspace service.
+`plous mcp serve --context NAME` serves standalone clients over newline-delimited stdio without opening a port. It captures the explicit context and uses a separate durable profile per process. See [client setup](../mcp/setup.md) and [scope and lifecycle](../mcp/scope.md). UI tools are omitted.
+
+For the assistant panel, Plous creates a temporary `http://127.0.0.1:<port>/mcp` endpoint protected by a per-session bearer token and configures the installed agent to use it. You do not copy an endpoint or token into global CLI settings. Access ends with the session.
 
 The supported requests, protocol version and response rules are listed under [Protocol behavior](#protocol-behavior). Installed-client checks use the versions listed in [agent setup](../guides/ai-chat.md#choose-an-agent).
 
@@ -68,14 +83,14 @@ UI tools are available while Plous hosts the agent. They reuse the application v
 
 | Property | Implemented behavior |
 | --- | --- |
-| Transport | JSON-RPC 2.0 over HTTP POST on loopback; one request per body |
-| Authentication | A fresh per-session bearer token; requests with an Origin header are rejected |
+| Transport | JSON-RPC 2.0 over TUI loopback HTTP POST or standalone newline-delimited stdio; one request per message |
+| Authentication | TUI HTTP uses a fresh per-session bearer token and rejects Origin headers. Stdio uses its subprocess pipes, with no listener or bearer credential. |
 | Initialization | `initialize` returns protocol version `2025-03-26` and the tools capability |
 | Requests | `initialize`, `ping`, `tools/list`, `tools/call` |
-| Notifications | `notifications/initialized` and `notifications/cancelled` are accepted without a response body |
-| Discovery | Tool names, descriptions, input schemas and read-only annotations |
+| Notifications | `notifications/initialized` is accepted; `notifications/cancelled` cancels a matching active tool request without a response body |
+| Discovery | Tool names, descriptions, input schemas, and annotations that distinguish reads from active diagnostics |
 | Results | Tool output returned as text content; presentation results are receipts |
-| Other MCP features | No resources, prompt templates, public registration or standalone server |
+| Other MCP features | No resources or prompt templates |
 
 Each request ID must be a string or integer. A tool-call ID cannot be reused within the bridge session. Invalid arguments and denied reads can appear in a tool result, so callers must inspect the content rather than treating transport success as successful acquisition. Unsupported methods return a JSON-RPC error. After a fatal tool failure, later authenticated requests receive a closed-session response.
 

@@ -15,9 +15,19 @@ jobs:
   checks:
     uses: ./.github/workflows/ci.yml
 
+  documentation:
+    name: Build release documentation
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/docs.yml
+    with:
+      snapshot_tag: ${{ github.ref_name }}
+
   release:
     name: Publish verified archives
-    needs: checks
+    needs: [checks, documentation]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -41,6 +51,15 @@ jobs:
       - name: Verify downloaded archives
         working-directory: dist
         run: shasum -a 256 -c checksums.txt
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-documentation
+          path: dist
+      - name: Verify documentation snapshot
+        working-directory: dist
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: sha256sum -c "documentation-$RELEASE_TAG.sha256"
       - name: Upload assets, then publish the release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -69,3 +88,16 @@ jobs:
       tag: ${{ github.ref_name }}
     secrets:
       HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+  pages:
+    name: Queue versioned documentation publication
+    needs: release
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: write
+    steps:
+      - name: Publish through the main Pages workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh workflow run docs.yml --ref main

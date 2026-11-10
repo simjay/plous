@@ -49,9 +49,7 @@ func (e *ExploreState) StopTerminal() {
 
 func (e *ExploreState) StopNamespacePicker() {
 	if e != nil && e.Namespaces != nil {
-		if e.Namespaces.Run != nil {
-			e.Namespaces.Run.Cancel()
-		}
+		e.Namespaces.Cancel()
 		e.Namespaces = nil
 	}
 }
