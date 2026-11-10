@@ -13,7 +13,7 @@
 
 <p align="center">
   <a href="#getting-started">Getting started</a> ·
-  <a href="docs/README.md">Documentation</a> ·
+  <a href="https://simjay.github.io/plous/docs/">Documentation</a> ·
   <a href="#mcp">MCP</a> ·
   <a href="#contributing">Contributing</a>
 </p>

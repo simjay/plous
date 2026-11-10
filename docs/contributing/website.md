@@ -49,7 +49,7 @@ Keep Get started and the current section expanded by default. Keep other section
 
 The repository owner must enable **Settings → Pages → Build and deployment → Source → GitHub Actions**. Allow the `github-pages` environment to deploy from `main` and permit the workflow's declared Pages permissions. No personal access token is required.
 
-The default build targets `https://simjay.github.io/plous/`. That is the intended location, not a claim that it is already published. Keep the README's working Markdown links until hosted publication succeeds.
+The website is published at [simjay.github.io/plous](https://simjay.github.io/plous/). The default build uses that origin and base path. The Markdown index remains available for source readers and offline archives.
 
 For a custom domain, configure the domain and its DNS in GitHub Pages, then set these repository Actions variables:
 
