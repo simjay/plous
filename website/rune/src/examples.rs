@@ -1,6 +1,6 @@
-use rune::{Cx, El, Span, TextStyle, Transition, col, row};
+use rune::{Cx, El, TextStyle, Transition, col, row};
 
-use super::{Paint, State, symbol, txt};
+use super::{Icon, LABEL, Paint, State, symbol, txt};
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen::prelude::wasm_bindgen]
@@ -21,21 +21,21 @@ const COPY: TextStyle = TextStyle::new(14.0, 400.0).lh(22.0);
 const TITLE: TextStyle = TextStyle::new(16.0, 600.0).lh(24.0);
 
 fn panel(key: &str, title: &str, p: Paint) -> El {
-    col().key(key).role("region").label(title).w_full().gap(16.0).padding(16.0)
-        .fill(p.surface).border(1.0, p.line).radius(12.0)
-        .child(txt(&format!("{key}-title"), title, TITLE, p.ink))
+    col().key(key).role("region").label(title).w_full().gap(12.0)
+        .border_sides([0.0, 0.0, 1.0, 0.0], p.line).pb(12.0)
 }
 
 fn controls(s: &State, cx: &Cx<State>, labels: &[&str], p: Paint) -> El {
     let reduced = cx.system_reduced_motion();
-    row().key("example-controls").w_full().gap(4.0).flex_wrap()
+    row().key("example-controls").w_full()
         .children(labels.iter().enumerate().map(|(step, &label)| {
             let selected = s.example == step;
             let control = row().key(format!("example-step-{step}")).role("button")
                 .expanded(selected).focusable(true).focus_ring(2.0, 2.0, p.blue)
-                .min_h(40.0).px(8.0).center_y().radius(6.0).border(1.0, if selected {p.blue} else {p.line})
-                .fill(if selected {p.wash} else {p.bg}).hover(p.wash)
-                .child(txt(&format!("example-control-label-{step}"), label, MONO, p.ink))
+                .w(0.0).grow(1.0).min_h(44.0).px(4.0).center()
+                .border_sides([0.0, 0.0, 2.0, 0.0], if selected {p.blue} else {p.line})
+                .fill(p.bg).hover(p.surface)
+                .child(txt(&format!("example-control-label-{step}"), label, LABEL, p.ink))
                 .on_press_tx(move |s: &mut State, tx| {
                     s.example = step;
                     if reduced { tx.instant(); }
@@ -71,26 +71,14 @@ fn frames(s: &State, frames: impl IntoIterator<Item = El>) -> El {
 pub(super) fn panels(s: &State, cx: &Cx<State>, p: Paint) -> El {
     let names = ["Sidebar", "Main", "Assistant"];
     let descriptions = [
-        "Sidebar has focus. Select a workspace or resource type.",
-        "Main has focus. Browse resources or open a detail view.",
-        "Assistant has focus. Work with the selected agent.",
+        "Choose a workspace or resource type.",
+        "Browse resources and open details.",
+        "Chat with the selected agent.",
     ];
-    let views = descriptions.iter().enumerate().map(|(active, description)| {
-        let strip = row().w_full().gap(4.0).children(names.iter().enumerate().map(|(i, name)| {
-            col().w(0.0).grow(1.0).min_h(48.0).px(4.0).center()
-                .border(1.0, if i == active {p.blue} else {p.line})
-                .radius(6.0).fill(if i == active {p.wash} else {p.bg})
-                .child(txt(&format!("panel-name-{i}"), *name, MONO, p.ink))
-        })).a11y_hidden();
-        col().gap(8.0).child(strip)
-            .child(txt("panel-description", *description, COPY, p.ink).w_full())
+    let views = descriptions.into_iter().map(|description| {
+        col().child(txt("panel-description", description, COPY, p.ink).w_full())
     });
-    let help = "In Plous, Alt+Right moves to the next visible panel. Alt+Left moves back.";
-    let keycaps = ["Alt+Right", "Alt+Left"].into_iter().filter_map(|key| {
-        help.find(key).map(|at| Span::new(at, at + key.len()).mono().color(p.ink).bg(p.bg, 2.0))
-    }).collect::<Vec<_>>();
     panel("panel-example", "Panel focus diagram", p)
-        .child(txt("panel-help", help, COPY, p.muted).spans(keycaps).w_full())
         .child(controls(s, cx, &names, p))
         .child(frames(s, views))
 }
@@ -99,7 +87,7 @@ pub(super) fn target(s: &State, cx: &Cx<State>, p: Paint) -> El {
     let path = row().w_full().center_y().gap(4.0).flex_wrap();
     let path = ["Coding agent", "Plous MCP", "Kubernetes context"].iter().enumerate()
         .fold(path, |path, (i, name)| {
-            let path = if i == 0 {path} else {path.child(symbol(3, 14.0, p.muted))};
+            let path = if i == 0 {path} else {path.child(symbol(Icon::Arrow, 16.0, p.muted))};
             path.child(row().px(8.0).py(4.0).radius(4.0).fill(p.bg)
                 .child(txt(&format!("target-step-{i}"), *name, MONO, p.ink)))
         });
@@ -110,6 +98,7 @@ pub(super) fn target(s: &State, cx: &Cx<State>, p: Paint) -> El {
         .child(txt("target-values", "Context: minikube    Default namespace: shop", MONO, p.ink).w_full())
         .child(txt("target-note", "Check both values before asking your coding agent to inspect workloads.", COPY, p.muted).w_full());
     panel("target-example", "Where an MCP request goes", p)
+        .child(txt("target-example-title", "Where an MCP request goes", TITLE, p.ink))
         .child(controls(s, cx, &["Request path", "Example target"], p))
         .child(frames(s, [request, example]))
 }

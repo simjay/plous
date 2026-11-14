@@ -46,7 +46,8 @@ export async function prepareContent() {
     const raw = await readFile(source,'utf8');
     const title = raw.match(/^# (.+)$/m)?.[1];
     if (!title) throw new Error(`Missing page title: ${relative}`);
-    let body = rewriteMarkdown(raw.replace(/^# .+\n\n(?:\[[^\n]+\n\n)?/,''),source);
+    const examples = new Set();
+    let body = rewriteMarkdown(raw.replace(/^# .+\n\n(?:\[[^\n]+\n\n)?/,''),source,examples);
     // Rune lays out the introduction and link lists separately from the name note.
     if (relative === 'README.md') body = '## Why Plous?\n' + nameSection;
     body = body.replace(/^(?:<span id="[^"]+"><\/span>|<a name="[^"]+"><\/a>)\n/gm,'').trimStart();
@@ -59,11 +60,14 @@ export async function prepareContent() {
     }
     if (relative === 'reference/keymap.md') aliases.keymap = 'top';
     if (relative === 'mcp/setup.md') aliases['register-a-standalone-server'] = 'configure-your-client';
-    if (relative === 'getting-started/README.md') aliases['build-and-launch'] = 'install-and-launch';
+    if (relative === 'getting-started/README.md') {
+      aliases['build-and-launch'] = 'install-and-launch';
+      aliases['before-you-begin'] = 'install-and-launch';
+    }
     if (relative === 'guides/plous-mcp.md') aliases['use-plous-mcp'] = 'use-the-assistant-panel';
     const route = routeFor(relative);
     const group = navigation.find((group) => group.items.some((item) => item.href.split('#')[0] === href(route)));
-    pages.push({route,href:href(route),title,body,headings:sections,aliases,section:group?.label ?? 'Documentation',developers:relative.startsWith('contributing/'),edit:`https://github.com/simjay/plous/${sourceRef === 'main' ? 'edit' : 'blob'}/${sourceRef}/docs/${relative}`});
+    pages.push({route,href:href(route),title,body,examples:[...examples],headings:sections,aliases,section:group?.label ?? 'Documentation',developers:relative.startsWith('contributing/'),edit:`https://github.com/simjay/plous/${sourceRef === 'main' ? 'edit' : 'blob'}/${sourceRef}/docs/${relative}`});
   }
   pages.push({route:'404/',href:href('404.html'),title:'Page not found',body:'The page may have moved. [Open the documentation]('+href('docs/')+') or use Search to find a guide.',headings:[],aliases:{_top:'top'},section:'Documentation',developers:false,edit:'https://github.com/simjay/plous/tree/main/docs'});
   const routes = new Set(pages.map((page) => page.href));

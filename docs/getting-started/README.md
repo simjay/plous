@@ -1,21 +1,19 @@
 # Quickstart
 
-[Documentation](../README.md) · [Installation](installation.md)
-
-Open Plous and read a Pod's logs. You do not need to configure an AI provider.
-
-## Before you begin
-
-You need macOS or Linux, Homebrew, and a working kubeconfig. Use a terminal at least 80 columns wide and 16 rows tall.
+Open Plous, find a Pod, and read its logs from your terminal.
 
 ## Install and launch
+
+<a name="before-you-begin"></a>
+
+Use Homebrew on macOS or Linux with a working kubeconfig. See [Installation and updates](installation.md) for other install methods.
 
 ```sh
 brew install simjay/tap/plous
 plous
 ```
 
-Already installed? Run `plous`. For other installation methods, see [Installation and updates](installation.md).
+Use a terminal at least 80 columns wide and 16 rows tall.
 
 ## Start with Current Workspace
 
@@ -34,12 +32,17 @@ If Plous cannot connect, open **Settings → Choose Kubeconfig** or follow [conn
 5. Press `l` to open its logs. Press `o` to choose another container.
 6. Press Esc to return to the Pod.
 
+<!-- plous-example: terminal-replay -->
+
 ## Learn the basic controls
+
+Use `Alt+Right` to move to the next visible panel and `Alt+Left` to move back.
+
+<!-- plous-example: panel-focus -->
 
 | Key | Action |
 | --- | --- |
 | Up / Down, Enter | Select and open an item |
-| Alt+Left / Alt+Right | Move between panels |
 | `/` | Search the current panel |
 | Esc | Close the current search, input, or detail view |
 | `hh` | Open Help while navigating |

@@ -40,7 +40,7 @@ class Page(HTMLParser):
             self.ids.add(attrs["id"])
         self.titles += tag == "title"
         self.h1 += tag == "h1"
-        for attribute in ("href", "src"):
+        for attribute in ("href", "src", "poster"):
             if attrs.get(attribute):
                 self.links.append(attrs[attribute])
         if tag == "img" and "alt" not in attrs:
@@ -128,6 +128,19 @@ def main():
             elif 'data-rune-static' not in target.read_text():
                 failures.append(f"Documentation page was not exported by Rune: {root}: {name}")
     if not manifest.exists():
+        quickstart = DIST / "docs/getting-started/index.html"
+        if quickstart in pages:
+            guide = quickstart.read_text()
+            markers = (
+                'id="install-and-launch"', 'data-control="copy-0"', 'id="inspect-your-first-workload"',
+                'data-control="quickstart"', 'id="learn-the-basic-controls"',
+                'aria-label="Panel focus diagram"', 'id="leave-and-return"',
+            )
+            positions = [guide.find(marker) for marker in markers]
+            if -1 in positions or positions != sorted(positions):
+                failures.append("Quickstart installation and interactive examples must follow their guide sections")
+            if guide.count('data-control="example-step-') != 3 or "plous-example:" in guide:
+                failures.append("Quickstart must export one three-panel diagram and hide its source markers")
         examples = {
             "docs/getting-started/index.html": [("code-block-0", 1)],
             "docs/mcp/setup/index.html": [("code-block-0", 2), ("code-block-1", 2)],

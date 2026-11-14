@@ -20,9 +20,6 @@ window.plousSetDark=(dark)=>{
   try{localStorage.setItem('plous-docs-theme',root.dataset.theme)}catch{}
 };
 syncWordmark();
-for(const button of document.querySelectorAll('button[data-control="theme"]')){
-  const label=button.querySelector('.t');if(label)label.textContent=window.plousRuneDark()?'Light':'Dark';
-}
 for(const button of document.querySelectorAll('button[data-control^="group-"]')){
   const label=button.getAttribute('aria-label');
   if(label!=='Get started'&&label!==root.dataset.section&&label!=='Developers'){
@@ -51,6 +48,16 @@ window.plousOpenVersions=async()=>{
 };
 document.querySelector('#close-versions').addEventListener('click',()=>versions.close());
 window.plousOpenMenu=()=>{if(!menu.open)menu.showModal()};
+const quickstart=document.querySelector('#quickstart-replay');
+if(quickstart){
+  const video=quickstart.querySelector('video');
+  quickstart.querySelector('button').addEventListener('click',()=>quickstart.close());
+  quickstart.addEventListener('close',()=>video.pause());
+  window.plousOpenQuickstart=()=>{
+    if(!quickstart.open)quickstart.showModal();
+    video.play().catch(()=>{});
+  };
+}
 // Rune's link bridge treats absolute HTTP URLs as browser navigation.
 window.plousRuneMarkdown=(source)=>{
   let fence='';
@@ -74,6 +81,7 @@ document.addEventListener('click',async event=>{
     if(control==='versions')window.plousOpenVersions();
     if(control==='search')window.plousOpenSearch();
     if(control==='menu')window.plousOpenMenu();
+    if(control==='quickstart')window.plousOpenQuickstart();
     if(control.startsWith('example-step-')){
       exampleStep=Number(control.slice('example-step-'.length));
       for(const step of button.parentElement.querySelectorAll('[data-control^="example-step-"]')){
@@ -86,7 +94,6 @@ document.addEventListener('click',async event=>{
     }
     if(control==='theme'){
       window.plousSetDark(!window.plousRuneDark());
-      const label=button.querySelector('.t');if(label)label.textContent=window.plousRuneDark()?'Light':'Dark';
     }
     if(control.startsWith('copy-')){
       try{await navigator.clipboard.writeText(codes[Number(control.slice(5))]??'');button.setAttribute('aria-label','Copied code')}catch{button.setAttribute('aria-label','Select the code to copy')}

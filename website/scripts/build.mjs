@@ -32,6 +32,7 @@ await rm(dist,{recursive:true,force:true});
 const assets=path.join(dist,'assets');await mkdir(assets,{recursive:true});
 for(const name of ['lockup.svg','lockup-dark.svg','icon.svg']) await cp(path.join(website,'../assets/logo',name),path.join(assets,name));
 await cp(path.join(website,'../docs/assets/plous-overview.png'),path.join(assets,'plous-overview.png'));
+for(const name of ['plous-quickstart-poster.png','plous-quickstart-replay.mp4']) await cp(path.join(website,'../docs/assets',name),path.join(assets,name));
 for(const name of ['geist.ttf','geist-mono.ttf','geist-OFL.txt']) await cp(path.join(upstream,'www/public/fonts',name),path.join(assets,name));
 for(const name of ['Inter-Regular.ttf','Inter-SemiBold.ttf','Inter-LICENSE.txt']) await cp(path.join(upstream,'crates/rune/assets',name),path.join(assets,name));
 await cp(path.join(upstream,'LICENSE'),path.join(assets,'Rune-LICENSE.txt'));
@@ -55,10 +56,10 @@ function controls(html) {
       return tag.replace(`aria-label="${label}"`,`id="${label}"${frame[1]==='0'?'':' hidden'}`);
     }
     const example=label.match(/^example-step-(\d+)$/);
-    const button=example||/\brole="button"/.test(tag)||['Search documentation','Change color theme','Open navigation','Choose documentation version','On this page'].includes(label)||content.navigation.some(g=>escape(g.label)===label)||/^Copy code block \d+$/.test(label);
+    const button=example||/\brole="button"/.test(tag)||['Search documentation','Change color theme','Open navigation','Choose documentation version','On this page','Play terminal recording'].includes(label)||content.navigation.some(g=>escape(g.label)===label)||/^Copy code block \d+$/.test(label);
     stack.push(button);
     if(!button)return tag;
-    let control=({'Search documentation':'search','Change color theme':'theme','Open navigation':'menu','Choose documentation version':'versions','On this page':'contents'})[label];
+    let control=({'Search documentation':'search','Change color theme':'theme','Open navigation':'menu','Choose documentation version':'versions','On this page':'contents','Play terminal recording':'quickstart'})[label];
     const group=content.navigation.findIndex(group=>escape(group.label)===label);
     if(group>=0)control='group-'+group;
     const code=label.match(/^Copy code block (\d+)$/);
@@ -84,6 +85,7 @@ for(const page of pages) {
   const templateFile=path.join(rune,'.generated/template.html');await writeFile(templateFile,frame);
   await run(path.join(metadata.target_directory,'debug/plous-docs-rune'),['--html',output,'--html-widths','360,700,1000,1280,1440','--html-template',templateFile],{cwd:dist,env:{...process.env,PLOUS_SITE_PAGE:page.route}});
   let html=controls(await readFile(output,'utf8'));
+  if(page.examples?.includes('terminal-replay')) html=html.replace('</body>',`<dialog id="quickstart-replay" aria-labelledby="quickstart-replay-heading"><div class="dialog-head"><h2 id="quickstart-replay-heading">Inspect a Pod in Plous</h2><button type="button" autofocus>Close</button></div><video controls playsinline preload="none" poster="${href('assets/plous-quickstart-poster.png')}" src="${href('assets/plous-quickstart-replay.mp4')}" aria-label="Terminal recording of opening a Pod and its logs"></video></dialog></body>`);
   if(page.route==='docs/') html=html.replace(/<a\b(?=[^>]*\bid="sidebar-root")/, '$& aria-current="page"');
   html=html.replace(/(<(?:nav|a|section)\b[^>]*id="(?:sidebar|nav-docs|nav-developers|contents)"[^>]*)\saria-hidden="true"/g,'$1');
   html=html.replaceAll('src="assets/',`src="${content.base}assets/`);
