@@ -35,7 +35,7 @@ test('headings ignore fenced content and retain numeric and repeated anchor alia
   const tutorial=content.pages.find(p=>p.route==='docs/guides/investigate-restarting-pod/');
   assert.equal(tutorial.aliases['1-create-the-example'],'section-1-create-the-example');
 });
-test('workflow cards use the three approved entry points',()=>{
+test('workflow links use the three approved entry points',()=>{
   assert.deepEqual(content.paths.map(p=>p.href),[href('docs/getting-started/'),href('docs/mcp/setup/'),href('docs/agent-skills/plous-debug/')]);
   assert.deepEqual(content.navigation.filter(g=>g.label!=='Developers').map(g=>g.label),['Get started','Terminal UI','MCP server','Agent skills','Tutorials','Integrations','Reference']);
 });

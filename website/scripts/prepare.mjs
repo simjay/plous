@@ -31,12 +31,15 @@ export function headings(body) {
 export async function prepareContent() {
   const navigation = groups.map((group) => ({ label:group.label, items:group.items.map(([title, route]) => ({ title, href:href('docs/' + route.replace(/\/?(#|$)/, '/$1')) })) }));
   const index = rewriteMarkdown(await readFile(path.join(docs,'README.md'),'utf8'), path.join(docs,'README.md'));
-  const [, workflowSection = '', quickLinksSection = ''] = index.split(/^## Choose your workflow\n|^## Quick links\n/m);
+  const [intro = '', workflowSection = '', quickLinksSection = '', nameSection = ''] = index.split(/^## (?:Choose your workflow|Quick links|Why Plous\?)\n/m);
+  const indexIntro = intro.split('\n').find(line => line && !line.startsWith('#') && !line.startsWith('<'));
   const paths = [...workflowSection.matchAll(/^- \[([^\]]+)\]\(([^)]+)\)\. (.+)$/gm)]
     .map(([, title, href, description]) => ({ href, title, description }));
   const quickLinks = [...quickLinksSection.matchAll(/^- \[([^\]]+)\]\(([^)]+)\)$/gm)]
     .map(([, title, href]) => ({ href, title }));
-  if (paths.length !== 3 || !quickLinks.length) throw new Error('The docs index must include the three approved workflows and quick links.');
+  if (!indexIntro || paths.length !== 3 || !quickLinks.length || !nameSection.trim()) {
+    throw new Error('The docs index must include its introduction, three workflows, quick links, and name origin.');
+  }
   const pages = [];
   for (const source of await markdownFiles(docs)) {
     const relative = path.relative(docs,source).split(path.sep).join('/');
@@ -44,14 +47,14 @@ export async function prepareContent() {
     const title = raw.match(/^# (.+)$/m)?.[1];
     if (!title) throw new Error(`Missing page title: ${relative}`);
     let body = rewriteMarkdown(raw.replace(/^# .+\n\n(?:\[[^\n]+\n\n)?/,''),source);
-    // Rune lays out the index links directly from the source lists.
-    if (relative === 'README.md') body = '## Quick links\n' + quickLinksSection;
+    // Rune lays out the introduction and link lists separately from the name note.
+    if (relative === 'README.md') body = '## Why Plous?\n' + nameSection;
     body = body.replace(/^(?:<span id="[^"]+"><\/span>|<a name="[^"]+"><\/a>)\n/gm,'').trimStart();
     const sections = headings(body);
     const aliases = Object.fromEntries(sections.filter((h) => h.anchor !== h.id).map((h) => [h.anchor,h.id]));
     aliases._top = 'top';
     if (relative === 'README.md') {
-      for (const anchor of ['choose-your-workflow', 'terminal-ui', 'mcp-server', 'agent-skills']) aliases[anchor] = 'top';
+      for (const anchor of ['terminal-ui', 'mcp-server', 'agent-skills']) aliases[anchor] = 'choose-your-workflow';
       for (const anchor of ['get-started', 'keep-these-nearby', 'tutorials', 'integrations', 'develop-plous']) aliases[anchor] = 'quick-links';
     }
     if (relative === 'reference/keymap.md') aliases.keymap = 'top';
@@ -67,7 +70,7 @@ export async function prepareContent() {
   for (const group of navigation) for (const item of group.items) {
     if (!routes.has(item.href.split('#')[0])) throw new Error(`Navigation points to missing guide: ${item.href}`);
   }
-  const content = {version:versionLabel,siteRoot,base,root:href(),navigation,paths,quickLinks,pages};
+  const content = {version:versionLabel,siteRoot,base,root:href(),navigation,indexIntro,paths,quickLinks,pages};
   await mkdir(path.join(website,'rune/.generated'),{recursive:true});
   const destination = path.join(website,'rune/.generated/content.json');
   const serialized = JSON.stringify(content,null,2)+'\n';

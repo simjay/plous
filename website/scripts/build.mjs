@@ -33,6 +33,7 @@ const assets=path.join(dist,'assets');await mkdir(assets,{recursive:true});
 for(const name of ['lockup.svg','lockup-dark.svg','icon.svg']) await cp(path.join(website,'../assets/logo',name),path.join(assets,name));
 await cp(path.join(website,'../docs/assets/plous-overview.png'),path.join(assets,'plous-overview.png'));
 for(const name of ['geist.ttf','geist-mono.ttf','geist-OFL.txt']) await cp(path.join(upstream,'www/public/fonts',name),path.join(assets,name));
+for(const name of ['Inter-Regular.ttf','Inter-SemiBold.ttf','Inter-LICENSE.txt']) await cp(path.join(upstream,'crates/rune/assets',name),path.join(assets,name));
 await cp(path.join(upstream,'LICENSE'),path.join(assets,'Rune-LICENSE.txt'));
 await cp(path.join(website,'scripts/client.mjs'),path.join(assets,'client.mjs'));
 await run('cargo',['build','--locked','--target','wasm32-unknown-unknown','--release','--lib']);
@@ -44,7 +45,17 @@ function controls(html) {
   return html.replace(/<\/?div\b[^>]*>/g,tag=>{
     if(tag.startsWith('</')) return stack.pop() ? '</button>' : tag;
     const label=tag.match(/aria-label="([^"]+)"/)?.[1]??'';
-    const button=/\brole="button"/.test(tag)||['Search documentation','Change color theme','Open navigation','Choose documentation version','On this page'].includes(label)||content.navigation.some(g=>escape(g.label)===label)||/^Copy code block \d+$/.test(label);
+    if(label==='example-frames'){
+      stack.push(false);
+      return tag.replace('aria-label="example-frames"','id="example-frames" role="status"');
+    }
+    const frame=label.match(/^example-frame-(\d+)$/);
+    if(frame){
+      stack.push(false);
+      return tag.replace(`aria-label="${label}"`,`id="${label}"${frame[1]==='0'?'':' hidden'}`);
+    }
+    const example=label.match(/^example-step-(\d+)$/);
+    const button=example||/\brole="button"/.test(tag)||['Search documentation','Change color theme','Open navigation','Choose documentation version','On this page'].includes(label)||content.navigation.some(g=>escape(g.label)===label)||/^Copy code block \d+$/.test(label);
     stack.push(button);
     if(!button)return tag;
     let control=({'Search documentation':'search','Change color theme':'theme','Open navigation':'menu','Choose documentation version':'versions','On this page':'contents'})[label];
@@ -52,9 +63,13 @@ function controls(html) {
     if(group>=0)control='group-'+group;
     const code=label.match(/^Copy code block (\d+)$/);
     if(code)control='copy-'+(Number(code[1])-1);
+    if(example){
+      control=label;
+      tag=tag.replace(` aria-label="${label}"`,'');
+    }
     const expanded = group >= 0 || control === 'contents';
     if (expanded) tag = tag.replace(/\saria-expanded="[^"]*"/, '');
-    return tag.replace('<div',`<button type="button"${control?` data-control="${control}"`:''}${expanded?` aria-expanded="${group >= 0}"`:''}${control==='contents'?' aria-controls="contents-inline-links"':''}`);
+    return tag.replace('<div',`<button type="button"${control?` data-control="${control}"`:''}${expanded?` aria-expanded="${group >= 0}"`:''}${control==='contents'?' aria-controls="contents-inline-links"':''}${example?` aria-expanded="${example[1]==='0'}" aria-controls="example-frame-${example[1]}"`:''}`);
   });
 }
 const template=await readFile(path.join(website,'scripts/template.html'),'utf8');
@@ -63,10 +78,13 @@ for(const page of pages) {
   const output=page.route==='404/'?path.join(dist,'404.html'):path.join(dist,page.route,'index.html');
   await mkdir(path.dirname(output),{recursive:true});
   const canonical=new URL(href(page.route==='404/'?'404.html':page.route),process.env.PLOUS_SITE_URL??'https://simjay.github.io').href;
-  let frame=template.replaceAll('__BASE__',content.base).replaceAll('__SITE_ROOT__',content.siteRoot).replaceAll('__VERSION__',escape(content.version)).replaceAll('__PAGE__',escape(page.route)).replaceAll('__SECTION__',escape(page.section??'')).replaceAll('__TITLE__',escape(page.title+' · Plous')).replaceAll('__DESCRIPTION__',escape(page.body.replace(/[#*`\[\]]/g,'').split('\n').find(line=>line.length>30)?.slice(0,160)??page.title)).replaceAll('__CANONICAL__',escape(canonical));
+  const description=page.route==='docs/'?content.indexIntro:page.body.replace(/[#*`\[\]]/g,'').split('\n').find(line=>line.length>30)?.slice(0,160)??page.title;
+  const title=page.route==='docs/'?page.title:`${page.title} · Plous`;
+  let frame=template.replaceAll('__BASE__',content.base).replaceAll('__SITE_ROOT__',content.siteRoot).replaceAll('__VERSION__',escape(content.version)).replaceAll('__PAGE__',escape(page.route)).replaceAll('__SECTION__',escape(page.section??'')).replaceAll('__TITLE__',escape(title)).replaceAll('__DESCRIPTION__',escape(description)).replaceAll('__CANONICAL__',escape(canonical));
   const templateFile=path.join(rune,'.generated/template.html');await writeFile(templateFile,frame);
   await run(path.join(metadata.target_directory,'debug/plous-docs-rune'),['--html',output,'--html-widths','360,700,1000,1280,1440','--html-template',templateFile],{cwd:dist,env:{...process.env,PLOUS_SITE_PAGE:page.route}});
   let html=controls(await readFile(output,'utf8'));
+  if(page.route==='docs/') html=html.replace(/<a\b(?=[^>]*\bid="sidebar-root")/, '$& aria-current="page"');
   html=html.replace(/(<(?:nav|a|section)\b[^>]*id="(?:sidebar|nav-docs|nav-developers|contents)"[^>]*)\saria-hidden="true"/g,'$1');
   html=html.replaceAll('src="assets/',`src="${content.base}assets/`);
   html=html.replace(/<img\b[^>]*src="[^"]*\/lockup(?:-dark)?\.svg"[^>]*>/g,tag=>tag.replace('<img','<img data-wordmark'));

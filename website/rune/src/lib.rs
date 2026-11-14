@@ -1,9 +1,11 @@
 use std::collections::BTreeSet;
 use std::sync::OnceLock;
-use rune::{AppSpec, Color, Cx, El, ImageCache, SurfaceFit, TextStyle, col, el, row, text};
+use rune::{AppSpec, Color, Cx, El, ImageCache, Span, SurfaceFit, TextStyle, col, el, row, text};
 use rune_kit::{Markdown, MarkdownStyle};
 use rune_kit::syntax::Syntax;
 use serde::Deserialize;
+
+mod examples;
 
 #[derive(Deserialize)]
 struct Link { title: String, href: String, #[serde(default)] description: String }
@@ -23,6 +25,8 @@ struct Content {
     base: String,
     root: String,
     navigation: Vec<Group>,
+    #[serde(rename = "indexIntro")]
+    index_intro: String,
     paths: Vec<Link>,
     #[serde(rename = "quickLinks")]
     quick_links: Vec<Link>,
@@ -67,7 +71,7 @@ fn symbol(kind: usize,size: f32,color: Color) -> El {
     canvas(shape).size(size,size).a11y_hidden()
 }
 
-struct State { page: Option<usize>, dark: bool, open: BTreeSet<usize>, contents_open: bool, images: Option<ImageCache> }
+struct State { page: Option<usize>, dark: bool, open: BTreeSet<usize>, contents_open: bool, images: Option<ImageCache>, example: usize }
 #[cfg(target_arch="wasm32")]
 #[wasm_bindgen::prelude::wasm_bindgen]
 extern "C" {
@@ -98,7 +102,7 @@ impl State {
             let selected = { let _=g; true };
             if selected { open.insert(i); }
         }
-        Self { page,dark,open,contents_open:false,images:None }
+        Self { page,dark,open,contents_open:false,images:None,example:examples::initial_step() }
     }
 }
 fn txt(key: &str,value: impl Into<String>,font: TextStyle,color: Color) -> El { text(value).key(key).font(font).color(color).wrap().selectable(true) }
@@ -129,18 +133,18 @@ fn picture(s: &State,cx: &Cx<State>,key: &str,name: &str,width: f32,alt: &str) -
 fn header(s: &State,cx: &Cx<State>,phone: bool,p: Paint) -> El {
     let brand=row().key("brand").href(&content().root).label("Plous home").gap(10.0).center_y()
         .child(picture(s,cx,"brand-wordmark",if s.dark {"lockup-dark.svg"} else {"lockup.svg"},104.0,"Plous").size(104.0,104.0*124.0/375.0));
-    let mut nav=row().key("primary").role("navigation").label("Primary").center_y().gap(if phone {6.0} else {24.0});
-    let docs=link("nav-docs","Documentation",&format!("{}docs/",content().base),p);
+    let mut nav=row().key("primary").role("navigation").label("Primary").center_y().gap(if phone {4.0} else {24.0});
+    let docs=link("nav-docs","Docs",&format!("{}docs/",content().base),p);
     let developers=link("nav-developers","Developers",&format!("{}docs/contributing/",content().base),p);
-    nav=nav.child(if phone {docs.w(0.0).h(0.0).clip_rounded(0.0).a11y_hidden()} else {docs})
-        .child(if phone {developers.w(0.0).h(0.0).clip_rounded(0.0).a11y_hidden()} else {developers});
+    nav=nav.child(if phone {docs.absolute(0.0,0.0).w(0.0).h(0.0).clip_rounded(0.0).a11y_hidden()} else {docs})
+        .child(if phone {developers.absolute(0.0,0.0).w(0.0).h(0.0).clip_rounded(0.0).a11y_hidden()} else {developers});
     nav=nav.child(button("search","Search",p).px(if phone {8.0} else {12.0}).label("Search documentation").on_press(|_: &mut State| { #[cfg(target_arch="wasm32")] open_search(); }));
     nav=nav.child(button("theme",if s.dark {"Light"} else {"Dark"},p).px(if phone {8.0} else {12.0}).label("Change color theme").on_press(|s: &mut State| {
         s.dark=!s.dark;
         #[cfg(target_arch="wasm32")] set_browser_dark(s.dark);
     }));
     let menu=button("menu","Menu",p).px(8.0).label("Open navigation").on_press(|_: &mut State| { #[cfg(target_arch="wasm32")] open_menu(); });
-    nav=nav.child(if phone {menu} else {menu.w(0.0).h(0.0).px(0.0).clip_rounded(0.0).a11y_hidden()});
+    nav=nav.child(if phone {menu} else {menu.absolute(0.0,0.0).w(0.0).h(0.0).px(0.0).clip_rounded(0.0).a11y_hidden()});
     row().key("header").role("banner").w_full().h(76.0).justify_between().center_y().child(brand).child(nav)
 }
 fn workflows(p: Paint,phone: bool) -> El {
@@ -151,21 +155,49 @@ fn workflows(p: Paint,phone: bool) -> El {
             .child(row().justify_between().center_y()
                 .child(row().size(36.0,36.0).center().fill(p.wash).radius(7.0).child(symbol(i,22.0,p.blue)))
                 .child(symbol(3,18.0,p.blue)))
-            .child(txt(&format!("workflow-title-{i}"),&path.title,TextStyle::new(18.0,600.0).lh(25.0),p.ink).w_full().group_color(p.blue))
+            .child(workflow_title(i,&path.title,p))
             .child(txt(&format!("workflow-description-{i}"),&path.description,TextStyle::new(14.0,400.0).lh(22.0),p.muted).w_full());
         cards=cards.child(if phone {card.w_full()} else {card.w(0.0).grow(1.0)});
     }
     cards
 }
+fn workflow_title(i: usize, title: &str, p: Paint) -> El {
+    let mut plain = String::new();
+    let mut spans = Vec::new();
+    for (index, part) in title.split('`').enumerate() {
+        if index % 2 == 1 { spans.push(Span::new(plain.len(), plain.len() + part.len()).mono()); }
+        plain.push_str(part);
+    }
+    txt(&format!("workflow-title-{i}"),plain,TextStyle::new(18.0,600.0).lh(24.0),p.ink)
+        .spans(spans).w_full().group_color(p.blue)
+}
+fn workflow_rows(p: Paint) -> El {
+    let rows = content().paths.iter().enumerate().map(|(i, path)| {
+        row().key(format!("workflow-{i}")).href(&path.href).focusable(true).focus_ring(2.0,2.0,p.blue)
+            .w_full().center_y().gap(12.0).py(12.0).px(12.0)
+            .border_sides([0.0,0.0,1.0,0.0],p.line).hover(p.surface).hover_group()
+            .child(el().w(2.0).h(28.0).fill(if i == 0 {p.blue} else {Color::TRANSPARENT}).a11y_hidden())
+            .child(col().w(0.0).grow(1.0).gap(4.0)
+                .child(workflow_title(i,&path.title,p))
+                .child(txt(&format!("workflow-description-{i}"),&path.description,TextStyle::new(14.0,400.0).lh(20.0),p.muted).w_full()))
+            .child(symbol(3,16.0,p.muted))
+    });
+    col().key("workflow-section").w_full().gap(8.0)
+        .child(txt("choose-your-workflow","Choose your workflow",TextStyle::new(24.0,600.0).lh(32.0),p.ink).role("heading").level(2))
+        .child(col().key("workflows").w_full().child(rule("workflow-rule",p)).children(rows))
+}
 fn index_links(p: Paint, narrow: bool) -> El {
     let links = content().quick_links.iter().enumerate().map(|(i, item)| {
-        link(&format!("quick-link-{i}"), &item.title, &item.href, p)
-            .w_full().py(11.0).border_sides([0.0, 0.0, 1.0, 0.0], p.line)
+        let item = link(&format!("quick-link-{i}"), &item.title, &item.href, p)
+            .w_full().min_h(44.0).center_y().py(8.0).border_sides([0.0, 0.0, 1.0, 0.0], p.line);
+        col().w_frac(if narrow {1.0} else {0.5})
+            .pl(if !narrow && i % 2 == 1 {12.0} else {0.0})
+            .pr(if !narrow && i % 2 == 0 {12.0} else {0.0})
+            .child(item)
     });
-    col().key("index-links").w_full().gap(8.0).mt(8.0)
-        .child(txt("quick-links", "Quick links", SECTION, p.ink).role("heading").level(2))
-        .child(col().key("quick-link-grid").w_full().equal_columns(if narrow { 1 } else { 2 })
-            .gaps(0.0, 24.0).children(links))
+    col().key("index-links").w_full().gap(8.0)
+        .child(txt("quick-links", "Quick links", TextStyle::new(24.0,600.0).lh(32.0), p.ink).role("heading").level(2))
+        .child(row().key("quick-link-grid").w_full().flex_wrap().children(links))
 }
 fn home(s: &State,cx: &Cx<State>,phone: bool,p: Paint) -> El {
     let size=if phone {40.0} else {64.0};
@@ -175,7 +207,7 @@ fn home(s: &State,cx: &Cx<State>,phone: bool,p: Paint) -> El {
         .child(txt("home-intro","Browse resources, read logs, and debug failures from one terminal.",TextStyle::new(19.0,400.0).lh(31.0),p.muted).max_w(650.0));
     let product=col().key("product").w_full().gap(16.0).py(48.0)
         .child(row().href(format!("{}assets/plous-overview.png",content().base)).label("Open full size Plous workspace screenshot").w_full()
-            .child(picture(s,cx,"product-image","plous-overview.png",1200.0,"Plous workspace overview with cluster health and the Codex assistant.").w_full().aspect_ratio(3024.0/1964.0).radius(10.0).border(1.0,p.line)))
+            .child(picture(s,cx,"product-image","plous-overview.png",1200.0,"Plous workspace overview with cluster health and the Codex assistant.").w_full().aspect_ratio(3024.0/1898.0).radius(10.0).border(1.0,p.line)))
         .child(row().w_full().justify_between().center_y().child(txt("product-caption","The Plous workspace",SMALL,p.muted)).child(link("product-full","View full size",&format!("{}assets/plous-overview.png",content().base),p)));
     let mut integrations=(if phone {col()} else {row().justify_between().center_y()}).w_full().gap(20.0).py(28.0).child(txt("integrations-label","Explore the integrations",LABEL,p.muted));
     for (name,path) in [("Kubernetes","kubernetes"),("Helm","helm"),("Argo CD","argo"),("Flux","flux")] {
@@ -193,27 +225,36 @@ fn version_button(p: Paint) -> El {
     })
 }
 fn sidebar(s: &State,page: &Page,phone: bool,p: Paint) -> El {
+    let index = page.route == "docs/";
     let mut nav=col().key("sidebar").role("navigation").label("Documentation navigation")
-        .w(228.0).gap(6.0).padding(14.0).mt(28.0).fill(p.surface).border(1.0,p.line).radius(10.0);
+        .w(228.0).mt(28.0);
+    nav = if index { nav.w(208.0).gap(4.0) }
+        else { nav.gap(6.0).padding(14.0).fill(p.surface).border(1.0,p.line).radius(10.0) };
     nav=nav.child(version_button(p));
-    nav=nav.child(link("sidebar-root",if page.developers {"User documentation"} else {"Documentation"},&format!("{}docs/",content().base),p));
+    let root = link("sidebar-root",if page.developers {"User docs"} else {"Docs"},&format!("{}docs/",content().base),p);
+    nav=nav.child(if index { root.label("Docs, current page").px(12.0).py(8.0)
+        .border_sides([0.0,0.0,0.0,2.0],p.blue).fill(p.surface) } else { root });
     for (i,group) in content().navigation.iter().enumerate().filter(|(_,g)| (g.label=="Developers")==page.developers) {
         let opened=s.open.contains(&i);
-        let title=button(&format!("group-toggle-{i}"),&group.label,p).w_full().mt(6.0)
+        let title=button(&format!("group-toggle-{i}"),&group.label,p).w_full().mt(if index {0.0} else {6.0})
+            .fill(if index {p.bg} else {p.surface})
             .justify_between().child(symbol(if opened {5} else {4}, 16.0, p.muted)).expanded(opened)
             .on_press(move |s: &mut State| { if !s.open.remove(&i) {s.open.insert(i);} });
         let mut items=col().key(format!("group-items-{i}")).w_full().gap(2.0).pt(4.0);
         for (j,item) in group.items.iter().enumerate() {
             let selected=item.href.split('#').next()==Some(page.href.as_str()) && !item.href.contains('#');
             items=items.child(row().key(format!("nav-link-{i}-{j}")).href(&item.href).w_full().py(7.0).px(12.0)
-                .radius(5.0).fill(if selected {p.wash} else {p.surface}).hover(p.wash)
+                .radius(5.0).fill(if selected {p.wash} else if index {p.bg} else {p.surface}).hover(p.wash)
                 .border_sides([0.0,0.0,0.0,if selected {3.0} else {0.0}],p.blue)
                 .child(txt(&format!("nav-label-{i}-{j}"),&item.title,TextStyle::new(14.0,if selected {600.0} else {400.0}).lh(21.0),if selected {p.blue} else {p.muted}).w(0.0).grow(1.0)));
         }
-        if !opened {items=items.h(0.0).clip_rounded(0.0).a11y_hidden();}
+        if !opened {
+            items=items.h(0.0).clip_rounded(0.0).a11y_hidden();
+            if index { items=items.absolute(0.0,0.0); }
+        }
         nav=nav.child(title).child(items);
     }
-    if phone {nav.w(0.0).h(0.0).padding(0.0).mt(0.0).clip_rounded(0.0).a11y_hidden()} else {nav}
+    if phone {nav.absolute(0.0,0.0).w(0.0).h(0.0).padding(0.0).mt(0.0).clip_rounded(0.0).a11y_hidden()} else {nav}
 }
 fn markdown(s: &State,page: &Page,width: f32,p: Paint) -> El {
     #[cfg(target_arch="wasm32")]
@@ -274,27 +315,41 @@ fn markdown(s: &State,page: &Page,width: f32,p: Paint) -> El {
         });
     md.render(&style)
 }
+fn docs_index(s: &State, page: &Page, width: f32, stack: bool, p: Paint) -> El {
+    let title = TextStyle::new(if stack {40.0} else {56.0},600.0)
+        .lh(if stack {44.0} else {60.0}).tracking(-1.6);
+    let intro = col().gap(12.0)
+        .child(txt("top",&page.title,title,p.ink).role("heading").level(1).w_full())
+        .child(txt("index-intro",&content().index_intro,TextStyle::new(18.0,400.0).lh(28.0),p.muted)
+            .w_full().max_w(560.0));
+    col().key("article").w_full().max_w(760.0).gap(32.0).py(32.0)
+        .child(intro)
+        .child(workflow_rows(p))
+        .child(index_links(p, stack))
+        .child(col().w_full().gap(16.0).child(rule("name-rule",p))
+            .child(markdown(s,page,width.min(640.0),p)))
+        .child(col().w_full().gap(8.0).child(rule("edit-rule",p)).child(edit_link(page,p)))
+}
+fn edit_link(page: &Page, p: Paint) -> El {
+    link("edit-source",if content().version=="Development" {"Edit this page on GitHub"} else {"View source"},&page.edit,p)
+}
 fn article(s: &State,cx: &Cx<State>,page: &Page,narrow: bool,wide: bool,p: Paint) -> El {
     let width = cx.layout_size("article").map_or(if narrow {350.0} else {700.0}, |v| v[0]);
-    let index = page.route == "docs/";
     let mut header = col().w_full().gap(8.0);
     if page.section != page.title {
         header = header.child(txt("section-name",&page.section,LABEL,p.muted));
     }
     header = header.child(txt("top",&page.title,TextStyle::new(if narrow {32.0} else {42.0},650.0)
         .lh(if narrow {40.0} else {50.0}).tracking(-0.9),p.ink).role("heading").level(1));
-    let header = if !index && page.headings.iter().any(|heading| heading.level == 2) {
+    let header = if page.headings.iter().any(|heading| heading.level == 2) {
         header.child(inline_contents(s,page,wide,p))
     } else { header };
-    let body = col().key("article").w_full().max_w(760.0).gap(24.0)
+    let mut body = col().key("article").w_full().max_w(760.0).gap(24.0)
         .py(if narrow {28.0} else {42.0}).child(header);
-    let body = if index {
-        body.child(txt("index-intro","Choose your workflow",SECTION,p.ink).role("heading").level(2))
-            .child(workflows(p,width < 660.0)).child(index_links(p,width < 540.0))
-    } else {
-        body.child(markdown(s,page,width,p))
-    };
-    body.child(rule("edit-rule",p)).child(link("edit-source",if content().version=="Development" {"Edit this page on GitHub"} else {"View source"},&page.edit,p))
+    if page.route == "docs/getting-started/" { body = body.child(examples::panels(s,cx,p)); }
+    if page.route == "docs/mcp/setup/" { body = body.child(examples::target(s,cx,p)); }
+    body.child(markdown(s,page,width,p))
+        .child(rule("edit-rule",p)).child(edit_link(page,p))
 }
 fn contents_links(page: &Page, key: &str, p: Paint) -> El {
     col().key(key).role("navigation").label("On this page").w_full()
@@ -334,7 +389,10 @@ fn view(s: &State,cx: &mut Cx<State>) -> El {
         let columns=(if phone {col()} else {row().items_start()}).w_full().gap(if phone {0.0} else {40.0});
         let has_contents = page.route != "docs/" && page.headings.iter().any(|heading| heading.level == 2);
         let wide = measured >= 1280.0 && has_contents;
-        let document = article(s,cx,page,narrow,wide,p);
+        let document = if page.route == "docs/" {
+            let width = measured.min(1480.0) - 2.0 * gutter - if phone {0.0} else {248.0};
+            docs_index(s,page,width,narrow,p)
+        } else { article(s,cx,page,narrow,wide,p) };
         let content_columns = row().items_start().gap(if wide {32.0} else {0.0})
             .child(document.w(0.0).grow(1.0));
         let content_columns = if has_contents { content_columns.child(toc(page,wide,p)) } else { content_columns };
@@ -354,5 +412,9 @@ pub fn start() {
     let initial=State::new();
     let title=initial.page.map_or("Plous documentation",|i|content().pages[i].title.as_str());
     let spec=AppSpec { families:("Geist","Geist Mono"),setup:Some(|s: &mut State,w|s.images=Some(ImageCache::new(w))),..AppSpec::new(title,(1440.0,1000.0),State::new,view) };
-    rune::App::new(spec).web_document().font_url(&asset("geist.ttf")).font_url(&asset("geist-mono.ttf")).run();
+    let app = rune::App::new(spec).web_document().font_url(&asset("geist.ttf")).font_url(&asset("geist-mono.ttf"));
+    let app = if initial.page.is_some_and(|i| content().pages[i].route == "docs/") {
+        app.font_url(&asset("Inter-Regular.ttf")).font_url(&asset("Inter-SemiBold.ttf"))
+    } else { app };
+    app.run();
 }

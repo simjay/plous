@@ -7,8 +7,10 @@ const results=document.querySelector('#search-results');
 const status=document.querySelector('#search-status');
 const aliases=JSON.parse(document.querySelector('#page-aliases').textContent);
 const codes=JSON.parse(document.querySelector('#page-code').textContent);
+let exampleStep=0;
 window.plousRunePage=()=>root.dataset.page;
 window.plousRuneDark=()=>root.dataset.theme==='dark';
+window.plousExampleStep=()=>exampleStep;
 function syncWordmark(){
   for(const image of document.querySelectorAll('img[data-wordmark]')) image.src=base+'assets/'+(window.plousRuneDark()?'lockup-dark.svg':'lockup.svg');
 }
@@ -72,6 +74,16 @@ document.addEventListener('click',async event=>{
     if(control==='versions')window.plousOpenVersions();
     if(control==='search')window.plousOpenSearch();
     if(control==='menu')window.plousOpenMenu();
+    if(control.startsWith('example-step-')){
+      exampleStep=Number(control.slice('example-step-'.length));
+      for(const step of button.parentElement.querySelectorAll('[data-control^="example-step-"]')){
+        step.setAttribute('aria-expanded',String(step===button));
+      }
+      for(const frame of document.getElementById('example-frames').children){
+        frame.hidden=frame.id!==`example-frame-${exampleStep}`;
+        frame.toggleAttribute('data-enter',!frame.hidden);
+      }
+    }
     if(control==='theme'){
       window.plousSetDark(!window.plousRuneDark());
       const label=button.querySelector('.t');if(label)label.textContent=window.plousRuneDark()?'Light':'Dark';
