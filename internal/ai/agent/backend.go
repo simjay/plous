@@ -2,39 +2,6 @@ package agent
 
 import "context"
 
-type Kind string
-
-const (
-	Plous      Kind = "plous"
-	ClaudeCode Kind = "claude-code"
-	Codex      Kind = "codex"
-)
-
-func (k Kind) Effective() Kind {
-	if k == "" {
-		return Plous
-	}
-	return k
-}
-func (k Kind) Valid() bool {
-	switch k.Effective() {
-	case Plous, ClaudeCode, Codex:
-		return true
-	}
-	return false
-}
-func (k Kind) Label() string {
-	switch k.Effective() {
-	case Plous:
-		return "Plous"
-	case ClaudeCode:
-		return "Claude Code"
-	case Codex:
-		return "Codex"
-	}
-	return string(k)
-}
-
 type Message struct {
 	Role string `json:"role"`
 	Text string `json:"text"`

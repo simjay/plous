@@ -15,7 +15,7 @@ func Executable(kind agent.Kind) (string, error) {
 }
 
 func ResolveCommand(kind agent.Kind, command string) (string, []string, error) {
-	if kind != agent.ClaudeCode && kind != agent.Codex {
+	if !kind.SupportsPanel() || kind.Effective() == agent.Plous {
 		return "", nil, errors.New("unknown external agent")
 	}
 	args, err := agent.CommandArgs(command)

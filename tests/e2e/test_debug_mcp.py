@@ -3,9 +3,11 @@
 import json
 import os
 import select
+import shutil
 import subprocess
 import tempfile
 import threading
+import tomllib
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -159,6 +161,81 @@ current-context: staging
         result = self.rpc(process, self.next_id, "tools/call", {"name": name, "arguments": arguments})
         self.next_id += 1
         return json.loads(result["content"][0]["text"])
+
+    def test_setup_registrations_launch_the_shared_stdio_server(self):
+        for client, config_path, server_keys in (
+            ("opencode", ".config/opencode/opencode.json", ("mcp", "plous_debug")),
+            ("grok", ".grok/config.toml", ("mcp_servers", "plous_debug")),
+            ("agy", ".gemini/config/mcp_config.json", ("mcpServers", "plous_debug")),
+            ("cursor", ".cursor/mcp.json", ("mcpServers", "plous_debug")),
+            ("gemini", ".gemini/settings.json", ("mcpServers", "plous_debug")),
+        ):
+            with self.subTest(client=client):
+                home = self.root / client
+                subprocess.run([
+                    str(BINARY), "setup", client, "--home", str(home),
+                    "--kubeconfig", str(self.kubeconfig), "--context", "dev",
+                    "--data-dir", str(self.root / "evidence"),
+                ], check=True, capture_output=True, text=True)
+                path = home / config_path
+                config = path.read_text()
+                server = tomllib.loads(config) if path.suffix == ".toml" else json.loads(config)
+                for key in server_keys:
+                    server = server[key]
+                command = server["command"]
+                if isinstance(command, str):
+                    command = [command, *server["args"]]
+                process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                           stderr=subprocess.PIPE, text=True)
+                self.processes.append(process)
+                initialized = self.rpc(process, 1, "initialize")
+                self.assertIn("## Verify", initialized["instructions"])
+                target = self.tool(process, "kubernetes_context_read", {})
+                self.assertEqual((target["context"], target["default_namespace"]), ("dev", "apps"))
+                evidence = self.tool(process, "kubernetes_resources_read", {
+                    "purpose": "inspect checkout", "connection_id": target["connections"][0]["connection_id"],
+                    "operation": "get", "resource": "pods",
+                })
+                self.assertIn("record:", evidence["ref"])
+                self.assertIn("checkout", json.dumps(evidence))
+                process.stdin.close()
+                self.assertEqual(process.wait(timeout=15), 0, process.stderr.read())
+        backends = set()
+        for path in (self.root / "evidence").rglob("execution/*.jsonl"):
+            for line in path.read_text().splitlines():
+                entry = json.loads(line)
+                if entry.get("request", {}).get("role") == "external-tools":
+                    backends.add(entry["request"]["backend"])
+        self.assertEqual(backends, {"opencode", "grok", "agy", "cursor", "gemini"})
+
+    def test_setup_keeps_the_executable_path_across_upgrades(self):
+        stable = self.root / "bin" / "plous"
+        first = self.root / "Cellar" / "1" / "bin" / "plous"
+        second = self.root / "Cellar" / "2" / "bin" / "plous"
+        for binary in (stable, first, second):
+            binary.parent.mkdir(parents=True)
+        shutil.copy2(BINARY, first)
+        stable.symlink_to(first)
+        home = self.root / "agent"
+        home.mkdir()
+        env = dict(os.environ, PATH=str(stable.parent) + os.pathsep + os.environ.get("PATH", ""))
+        config = home / ".gemini" / "settings.json"
+
+        for executable in (stable, first):
+            with self.subTest(executable=executable):
+                subprocess.run([
+                    str(executable), "setup", "gemini", "--home", str(home),
+                    "--data-dir", str(self.root / "evidence"),
+                ], check=True, capture_output=True, text=True, env=env)
+                command = json.loads(config.read_text())["mcpServers"]["plous_debug"]["command"]
+                self.assertTrue(Path(command).is_symlink(), command)
+                self.assertTrue(Path(command).samefile(stable))
+
+        first.rename(second)
+        stable.unlink()
+        stable.symlink_to(second)
+        command = json.loads(config.read_text())["mcpServers"]["plous_debug"]["command"]
+        subprocess.run([command, "--version"], check=True, capture_output=True, text=True, env=env)
 
     def test_live_context_switch_and_pinned_override(self):
         config = self.kubeconfig.read_text()

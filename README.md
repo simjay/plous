@@ -48,15 +48,15 @@ Choose your [workflow](docs/getting-started/workflows.md), read [installation re
 
 ## MCP
 
-Standalone MCP and plous-debug are included starting with v0.0.3. See [Installation](docs/getting-started/installation.md) to install or update.
+See [Installation](docs/getting-started/installation.md) to install or update Plous.
 
-Plous connects cluster tools to Claude Code or Codex through **Model Context Protocol (MCP)**. Choose where you want to work:
+Plous connects cluster tools to coding agents through **Model Context Protocol (MCP)**.
 
 | Workflow | Setup |
 | --- | --- |
 | Inside the Plous assistant panel | Select your installed agent in **Settings → Application → Agent**. Plous configures the connection automatically. |
 | Direct MCP integration | Configure your client to launch `plous mcp serve`. It follows kubeconfig’s current context by default. Use `--context` to pin it. |
-| Guided debugging in your coding-agent session | Run `plous setup codex` or `plous setup claude` to install **plous-debug** and register a local stdio MCP server. |
+| Guided debugging in your coding-agent session | Run `plous setup` to list clients, or follow the [plous-debug guide](docs/agent-skills/plous-debug.md#install). |
 
 Entry commands default to `claude` and `codex`. Configure each agent's **Entry command** in the same settings to use a wrapper such as `celai codex`.
 

@@ -22,36 +22,42 @@ type configuration struct {
 	policy                                   kubernetes.DebugPolicy
 }
 
+func (c *configuration) bindServeFlags(flags *flag.FlagSet) {
+	flags.StringVar(&c.paths, "kubeconfig", c.paths, "Kubeconfig path or path list (default terminal kubeconfig)")
+	flags.StringVar(&c.context, "context", c.context, "Pin a Kubernetes context (default follows kubeconfig current-context)")
+	flags.StringVar(&c.namespace, "namespace", c.namespace, "Default namespace; active tests are restricted to it")
+	flags.StringVar(&c.dataDir, "data-dir", c.dataDir, "Standalone evidence root (default ~/.plous/mcp)")
+	flags.BoolVar(&c.policy.Exec, "allow-exec", c.policy.Exec, "Allow noninteractive commands in existing containers")
+	flags.StringVar(&c.policy.Image, "diagnostic-image", c.policy.Image, "Enable temporary tests using this diagnostic image")
+}
+
+func Usage() string {
+	return "       " + setupUsage() + "\n       plous mcp serve [options]"
+}
+
+func setupUsage() string { return "plous setup " + setupClientNames() + " [options]" }
+
 func Run(ctx context.Context, args []string, input io.ReadCloser, output, diagnostics io.Writer, version, dataDir string, policy kubernetes.DebugPolicy) int {
 	setup := len(args) > 0 && args[0] == "setup"
+	if setup && (len(args) == 1 || len(args) == 2 && (args[1] == "-h" || args[1] == "--help")) {
+		fmt.Fprintln(output, "Usage: "+setupUsage())
+		return 0
+	}
 	if len(args) < 2 || !setup && (args[0] != "mcp" || args[1] != "serve") {
-		fmt.Fprintln(diagnostics, "Usage: plous setup codex|claude [options]\n       plous mcp serve [options]")
+		fmt.Fprintln(diagnostics, "Usage: plous mcp serve [options]")
 		return 2
 	}
-	c := configuration{dataDir: dataDir, policy: policy, kind: agent.Codex}
+	c := configuration{dataDir: dataDir, policy: policy}
 	flags := flag.NewFlagSet("plous "+strings.Join(args[:2], " "), flag.ContinueOnError)
 	flags.SetOutput(diagnostics)
-	flags.StringVar(&c.paths, "kubeconfig", "", "Kubeconfig path or path list (default terminal kubeconfig)")
-	flags.StringVar(&c.context, "context", "", "Pin a Kubernetes context (default follows kubeconfig current-context)")
-	flags.StringVar(&c.namespace, "namespace", "", "Default namespace; active tests are restricted to it")
-	flags.StringVar(&c.dataDir, "data-dir", dataDir, "Standalone evidence root (default ~/.plous/mcp)")
-	flags.BoolVar(&c.policy.Exec, "allow-exec", policy.Exec, "Allow noninteractive commands in existing containers")
-	flags.StringVar(&c.policy.Image, "diagnostic-image", policy.Image, "Enable temporary tests using this diagnostic image")
-	var kind string
+	c.bindServeFlags(flags)
+	name := "codex"
 	if setup {
-		switch args[1] {
-		case "codex":
-			c.kind = agent.Codex
-		case "claude", "claude-code":
-			c.kind = agent.ClaudeCode
-		default:
-			fmt.Fprintln(diagnostics, "Choose codex or claude for setup")
-			return 2
-		}
+		name = args[1]
 		flags.StringVar(&c.home, "home", "", "Installation home (default user home)")
 		flags.Bool("skip-check", false, "Accepted for compatibility. Setup does not contact Kubernetes.")
 	} else {
-		flags.StringVar(&kind, "agent", "codex", "Client identity: codex or claude")
+		flags.StringVar(&name, "agent", name, "Client identity ("+setupClientNames()+")")
 	}
 	if err := flags.Parse(args[2:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -63,16 +69,10 @@ func Run(ctx context.Context, args []string, input io.ReadCloser, output, diagno
 		fmt.Fprintln(diagnostics, "Unexpected positional arguments")
 		return 2
 	}
-	if !setup {
-		switch kind {
-		case "codex":
-			c.kind = agent.Codex
-		case "claude", "claude-code":
-			c.kind = agent.ClaudeCode
-		default:
-			fmt.Fprintln(diagnostics, "agent must be codex or claude")
-			return 2
-		}
+	client, ok := findSetupClient(name)
+	if !ok {
+		fmt.Fprintln(diagnostics, "Choose an MCP client from "+setupClientNames())
+		return 2
 	}
 	if c.namespace == "*" {
 		fmt.Fprintln(diagnostics, "Choose a concrete default namespace")
@@ -100,8 +100,9 @@ func Run(ctx context.Context, args []string, input io.ReadCloser, output, diagno
 		return 1
 	}
 	if setup {
-		err = install(c, output)
+		err = client.install(c, output)
 	} else {
+		c.kind = client.kind
 		err = serve(ctx, c, input, output, diagnostics, version)
 	}
 	if err != nil {

@@ -2,11 +2,11 @@
 
 [MCP server](README.md) · [Tools and permissions](../reference/mcp.md)
 
-Connect Codex or Claude Code to Plous and verify which Kubernetes context it can read.
+Connect your coding agent to Plous and verify which Kubernetes context it can read.
 
 Install [Plous](../getting-started/installation.md) and make sure your client can find `plous` on PATH. You need a working kubeconfig and access to the cluster you want to inspect.
 
-Jump to [Codex](#codex) or [Claude Code](#claude-code).
+For automatic configuration with the debug workflow, use [plous-debug setup](../agent-skills/plous-debug.md#install). To register only the MCP server, use the examples below.
 
 ## Configure your client
 
@@ -48,6 +48,12 @@ Add `plous_debug` to `mcpServers` in `~/.claude.json`. Keep your other entries.
 
 Use an absolute executable path only if the client cannot find `plous`. The command field does not expand shell aliases or `~`.
 
+### Other supported clients
+
+Register a local stdio server named `plous_debug` with command `plous` and arguments `mcp`, `serve`, `--agent`, followed by your client name. The client names are `opencode`, `grok`, `agy`, `cursor`, and `gemini`. Use the client’s MCP settings or the [configuration file listed for that client](../agent-skills/plous-debug.md#installed-files). OpenCode takes the executable and its arguments in one `command` array.
+
+In Cursor, set the server's `env.KUBECONFIG` to `${KUBECONFIG:-}` to forward the shell's value and allow Plous to use the standard kubeconfig when it is unset.
+
 ## Check the connection
 
 1. Restart or reconnect the client.
@@ -75,5 +81,3 @@ To enable container commands or temporary tests, follow [Active diagnostics](act
 ## Use MCP inside the TUI
 
 Choose Claude Code or Codex in **Settings → Application → Agent** and save. Plous configures MCP for that session automatically. See [Claude Code and Codex inside Plous](../guides/plous-mcp.md).
-
-For automatic MCP configuration with the debugging skill, use [plous-debug setup](../agent-skills/plous-debug.md#install).

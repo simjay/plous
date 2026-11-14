@@ -520,7 +520,7 @@ func (m *model) activateAgentRow(row appsettings.Row) {
 }
 
 func (m *model) saveMainAgent(kind agent.Kind) {
-	if !kind.Valid() {
+	if !kind.SupportsPanel() {
 		m.status = appsettings.AgentAvailability(kind, "")
 		return
 	}

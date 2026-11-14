@@ -1,15 +1,21 @@
 package settings
 
 import (
+	"strings"
+
 	"github.com/simjay/plous/internal/ai/agent"
 	"github.com/simjay/plous/internal/ai/cli"
 	ai "github.com/simjay/plous/internal/ai/model"
 	textview "github.com/simjay/plous/internal/ui/text"
-	"strings"
 )
 
 func AgentForm(selected agent.Kind, commands agent.Commands) *Form {
-	f := &Form{Kind: "mainagent", Title: "Agent", EntryCommands: commands, Fields: []Field{{Key: "agent", Label: "Selected agent", Required: true, Value: textview.NewField(selected.Effective().Label()), Options: []string{agent.Plous.Label(), agent.ClaudeCode.Label(), agent.Codex.Label()}}}}
+	kinds := agent.PanelKinds()
+	options := make([]string, len(kinds))
+	for i, kind := range kinds {
+		options[i] = kind.Label()
+	}
+	f := &Form{Kind: "mainagent", Title: "Agent", EntryCommands: commands, Fields: []Field{{Key: "agent", Label: "Selected agent", Required: true, Value: textview.NewField(selected.Effective().Label()), Options: options}}}
 	f.RefreshAgent(nil)
 	return f
 }
@@ -43,7 +49,7 @@ func (f *Form) RefreshAgent(configs []ai.Config) {
 	f.EntryCommands = f.AgentCommands()
 	if kind != f.commandAgent {
 		f.Fields = f.Fields[:1]
-		if kind == agent.ClaudeCode || kind == agent.Codex {
+		if kind.SupportsPanel() && kind.Effective() != agent.Plous {
 			f.Fields = append(f.Fields, Field{Key: "entry_command", Label: "Entry command", Value: textview.NewField(f.EntryCommands.For(kind))})
 		}
 		f.commandAgent = kind
@@ -79,7 +85,7 @@ func (f *Form) RefreshAgent(configs []ai.Config) {
 }
 
 func AgentKind(label string) agent.Kind {
-	for _, kind := range []agent.Kind{agent.Plous, agent.ClaudeCode, agent.Codex} {
+	for _, kind := range agent.PanelKinds() {
 		if label == kind.Label() {
 			return kind
 		}
@@ -87,7 +93,7 @@ func AgentKind(label string) agent.Kind {
 	return agent.Kind(label)
 }
 func AgentAvailability(kind agent.Kind, command string) string {
-	if !kind.Valid() {
+	if !kind.SupportsPanel() {
 		return kind.Label() + " is not supported."
 	}
 	if kind.Effective() == agent.Plous {

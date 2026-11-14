@@ -8,9 +8,9 @@ A skill gives your coding agent instructions for a task. Plous's **plous-debug**
 
 | Skill | Purpose | Agents |
 | --- | --- | --- |
-| [plous-debug](plous-debug.md) | Investigate failures, test causes, and check deployed fixes | Codex and Claude Code |
+| [plous-debug](plous-debug.md) | Investigate failures, test causes, and check deployed fixes | [Supported clients](plous-debug.md#install) |
 
-Run `plous setup` to install the skill and configure its MCP connection. The [plous-debug guide](plous-debug.md) covers installation, examples, and removal.
+Run `plous setup` to list clients. The [plous-debug guide](plous-debug.md) covers installation, examples, and removal.
 
 ## Skills and MCP
 

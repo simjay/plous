@@ -44,7 +44,10 @@ func (c Commands) With(kind Kind, command string) Commands {
 }
 
 func (c Commands) Validate() error {
-	for _, kind := range []Kind{ClaudeCode, Codex} {
+	for _, kind := range panelKinds {
+		if kind == Plous {
+			continue
+		}
 		if _, err := CommandArgs(c.For(kind)); err != nil {
 			return fmt.Errorf("%s entry command: %w", kind.Label(), err)
 		}

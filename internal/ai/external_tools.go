@@ -10,7 +10,7 @@ import (
 	"github.com/simjay/plous/internal/workspace"
 )
 
-// ExternalTools binds a native terminal session to one evidence journal and scope.
+// ExternalTools binds an external agent tool session to one evidence journal and scope.
 // Native terminal output is never interpreted as conversation or tool protocol.
 type ExternalTools struct {
 	agent.Tools
@@ -24,7 +24,7 @@ func (s *ExternalTools) Finish(cause error) error { return s.close(cause) }
 
 func OpenExternalTools(ctx context.Context, o Options) (*ExternalTools, error) {
 	if o.Store == nil || o.History == nil || o.Agent.Effective() == agent.Plous || !o.Agent.Valid() {
-		return nil, errors.New("external tool session requires storage and an installed agent")
+		return nil, errors.New("external tool session requires storage and a supported client identity")
 	}
 	o.Connections = append([]Connection(nil), o.Connections...)
 	op := &operation{o: o}

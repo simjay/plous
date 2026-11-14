@@ -59,7 +59,7 @@ Example requests:
 
 ## Enable diagnostics with managed skill setup
 
-Add the same options to `plous setup codex` or `plous setup claude`, then reconnect. See [plous-debug](../agent-skills/plous-debug.md).
+Add the same options to your client's [plous-debug setup command](../agent-skills/plous-debug.md#install), then reconnect.
 
 For the assistant panel inside Plous, launch with `plous --allow-exec` or `plous --diagnostic-image IMAGE`. These options apply only to that launch and are not saved preferences.
 

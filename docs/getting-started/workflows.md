@@ -18,7 +18,7 @@ Give an agent access to Plous's cluster tools without opening the terminal UI. Y
 
 ## Agent skills
 
-Add **plous-debug** to an existing Codex or Claude Code session. The skill guides debugging, and MCP supplies the cluster tools. Your agent keeps its repository tools.
+Add **plous-debug** to your coding agent. The skill guides debugging, and MCP supplies the cluster tools. Your agent keeps its repository tools.
 
 [Install plous-debug](../agent-skills/plous-debug.md).
 

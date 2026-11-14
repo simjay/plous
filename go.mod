@@ -20,8 +20,9 @@ require (
 	github.com/go-logr/logr v1.4.4
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/meguminnnnnnnnn/go-openai v0.1.2
-	github.com/pelletier/go-toml/v2 v2.0.9
+	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
+	github.com/tailscale/hujson v0.0.0-20260727124030-b80ff77dac4f
 	github.com/yuin/goldmark v1.7.8
 	go.etcd.io/bbolt v1.5.0
 	go.yaml.in/yaml/v3 v3.0.5

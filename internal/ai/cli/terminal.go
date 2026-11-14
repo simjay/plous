@@ -43,6 +43,9 @@ type Terminal struct {
 
 // StartTerminal launches the installed interactive UI. It never parses replies.
 func StartTerminal(ctx context.Context, o TerminalOptions) (*Terminal, error) {
+	if !o.Kind.SupportsPanel() || o.Kind.Effective() == agent.Plous {
+		return nil, errors.New("unknown external agent")
+	}
 	if o.Tools == nil || o.Input == nil || o.Output == nil {
 		return nil, errors.New("native agent requires a terminal and Plous tools")
 	}

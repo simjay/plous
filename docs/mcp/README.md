@@ -2,7 +2,7 @@
 
 [Documentation](../README.md)
 
-Give Codex or Claude Code access to Plous's cluster tools through Model Context Protocol (MCP). Agents can read Kubernetes, Helm, Argo CD, and Flux data and revisit saved tool results.
+Give your coding agent access to Plous's cluster tools through Model Context Protocol (MCP). Agents can read Kubernetes, Helm, Argo CD, and Flux data and revisit saved tool results.
 
 Reads work by default. Container commands and temporary tests require [explicit setup](active-diagnostics.md).
 

@@ -33,8 +33,8 @@ func (s Settings) Configs() []ai.Config {
 }
 
 func (s Settings) validate() error {
-	if !s.MainAgent.Valid() {
-		return errors.New("unknown main agent")
+	if !s.MainAgent.SupportsPanel() {
+		return errors.New("unsupported assistant panel agent")
 	}
 	if err := s.AgentCommands.Validate(); err != nil {
 		return err
