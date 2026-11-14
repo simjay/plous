@@ -14,12 +14,17 @@ func TestDocumentedToolsMatchRegisteredCapabilities(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	section, _, ok := strings.Cut(string(content), "### Monitor evidence")
+	_, section, ok := strings.Cut(string(content), "## Available tools\n")
 	if !ok {
 		t.Fatal("MCP reference is missing the tool inventory section")
 	}
+	_, inventory, ok := strings.Cut(section, "| Task | Tools | Results |\n")
+	if !ok {
+		t.Fatal("MCP reference is missing the tool inventory table")
+	}
+	inventory, _, _ = strings.Cut(inventory, "\n\n")
 	documented := map[string]bool{}
-	for _, match := range regexp.MustCompile("`([a-z]+(?:_[a-z]+)*_(?:read|show|run))`").FindAllStringSubmatch(section, -1) {
+	for _, match := range regexp.MustCompile("`([a-z]+(?:_[a-z]+)*_(?:read|show|run))`").FindAllStringSubmatch(inventory, -1) {
 		documented[match[1]] = true
 	}
 	registered := map[string]bool{}

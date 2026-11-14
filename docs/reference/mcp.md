@@ -6,7 +6,7 @@ This reference lists Plous's agent tools. For a guided setup, use [plous-debug](
 
 ## Available tools
 
-Standalone setup names its server `plous_debug`. The panel normally uses `plous`, with a suffix in Codex if needed. The built-in agent uses the same tool implementations.
+Standalone setup names its server `plous_debug`. The panel normally uses `plous`, with a suffix in Codex if needed. The built-in agent uses the same tool implementations. See [Standalone target discovery](#standalone-target-discovery) for the standalone server's context lookup.
 
 | Task | Tools | Results |
 | --- | --- | --- |
@@ -28,7 +28,7 @@ Argument rules:
 - Other show tools take no `view` argument. `helm_show` opens revision comparisons, not release lists.
 - For Helm comparisons, `revision` is the after revision and `compare_revision` is the before revision.
 
-Calls include a purpose and use the session's connection identity. Supplying another identity does not grant access. Integration-owned schemas validate arguments before execution. See the [tool registry](../../internal/ai/tools.go) and [history implementation](../contributing/ai-assistant.md#history-tools).
+Resource and history calls include a purpose. Cluster calls use the captured connection identity. Supplying another identity does not grant access. Integration-owned schemas validate arguments before execution. See the [tool registry](../../internal/ai/tools.go) and [history implementation](../contributing/ai-assistant.md#history-tools).
 
 ### Monitor evidence
 
@@ -57,7 +57,7 @@ Enable these through [diagnostic setup](../mcp/active-diagnostics.md). Both requ
 | Tool | Required inputs | Behavior |
 | --- | --- | --- |
 | `kubernetes_exec_run` | Pod `name`, exact `uid`, `container`, and `command` argument array | One command in an existing container. No added shell, stdin, or TTY. |
-| `kubernetes_diagnostic_run` | `test=http|dns|tcp`, `target`, and `port` for TCP | One temporary HTTP GET, DNS lookup, or TCP test using the configured image |
+| `kubernetes_diagnostic_run` | `test` (`http`, `dns`, or `tcp`), `target`, and `port` for TCP | One built-in probe in a temporary Job using the configured image. Plous builds the command. |
 
 `timeout_seconds` defaults to 30 and accepts 1–120. Output is limited to 64 KiB. Temporary cleanup can take another 10 seconds.
 
@@ -65,11 +65,15 @@ HTTP targets need a full HTTP(S) URL without embedded credentials. Tests do not 
 
 Plous records requests before running them and saves results before returning them. A transport or storage failure must not cause an automatic retry of an operation that may already have changed state.
 
+## Standalone target discovery
+
+A standalone server follows kubeconfig’s current context unless configured with `--context`. Call `kubernetes_context_read` with an empty argument object to get the current context, default namespace, and connection IDs.
+
 ## Scope and delivery
 
-A session keeps the cluster it started with. Reads may use any namespace allowed by those Kubernetes credentials. Diagnostic operations stay in the configured default namespace.
+Each standalone call captures a single target. Reads may use any namespace allowed by those Kubernetes credentials. Diagnostic operations stay in the captured default namespace.
 
-General chat and history-only views have no live cluster tools. To change a standalone target, reconnect. To change the panel's target, [close and reopen its session](../guides/plous-mcp.md#switch-connections-or-close-a-session).
+General chat and history-only views have no live cluster tools. To change a pinned standalone target, update its arguments and reconnect. To change the panel's target, [close and reopen its session](../guides/plous-mcp.md#switch-connections-or-close-a-session).
 
 Plous validates and serializes calls, then saves results before delivery. Fatal storage, history, or target errors disable further tool access. A native CLI remains open so you can inspect the error.
 

@@ -63,6 +63,54 @@ func TestClipboardCopiesFocusedUnicodeSelectionWithoutEditing(t *testing.T) {
 	}
 }
 
+func TestClipboardCopyButtonToleratesPointerMovement(t *testing.T) {
+	for _, surface := range []string{"screen", "field"} {
+		t.Run(surface, func(t *testing.T) {
+			m, _ := testModel(t)
+			m.width, m.height = 160, 36
+			if surface == "screen" {
+				selectScreenText(t, m, "Current Workspace")
+			} else {
+				m.focusChat(true)
+				*m.draft() = textview.Field{Text: "selected text", Cursor: 12, Selecting: true}
+			}
+			var copied string
+			m.clipboard.write = func(_ context.Context, text string) error { copied = text; return nil }
+			p := mousePoint(t, m, "footer", "clipboard/copy")
+			m.updateMouse(tea.MouseClickMsg{X: p.X + 3, Y: p.Y, Button: tea.MouseLeft})
+			m.View()
+			m.updateMouse(tea.MouseMotionMsg{X: p.X + 4, Y: p.Y, Button: tea.MouseLeft})
+			m.View()
+			cmd := m.updateMouse(tea.MouseReleaseMsg{X: p.X + 4, Y: p.Y, Button: tea.MouseLeft})
+			if cmd == nil {
+				t.Fatal("a one-cell pointer movement cancelled Copy")
+			}
+			m.Update(cmd())
+			want := "selected text"
+			if surface == "screen" {
+				want = "Current Workspace"
+			}
+			if copied != want {
+				t.Fatalf("copied %q, want %q", copied, want)
+			}
+		})
+	}
+}
+
+func TestClipboardCancelledCopyClickPreservesSelection(t *testing.T) {
+	m, _ := testModel(t)
+	selectScreenText(t, m, "Current Workspace")
+	p := mousePoint(t, m, "footer", "clipboard/copy")
+	m.updateMouse(tea.MouseClickMsg{X: p.X + 3, Y: p.Y, Button: tea.MouseLeft})
+	m.updateMouse(tea.MouseMotionMsg{X: p.X + 6, Y: p.Y, Button: tea.MouseLeft})
+	m.View()
+	cmd := m.updateMouse(tea.MouseReleaseMsg{X: p.X + 6, Y: p.Y, Button: tea.MouseLeft})
+	if cmd != nil || !m.screenSelectionActive() {
+		t.Fatal("a cancelled Copy click copied text or discarded the selection")
+	}
+	copyScreenButton(t, m, "Current Workspace")
+}
+
 func TestClipboardCopyButtonUsesLogSourceAndRespectsEviction(t *testing.T) {
 	m := exploreModel(t)
 	m.width, m.height = 200, 50

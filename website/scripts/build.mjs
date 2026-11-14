@@ -44,15 +44,17 @@ function controls(html) {
   return html.replace(/<\/?div\b[^>]*>/g,tag=>{
     if(tag.startsWith('</')) return stack.pop() ? '</button>' : tag;
     const label=tag.match(/aria-label="([^"]+)"/)?.[1]??'';
-    const button=/\brole="button"/.test(tag)||['Search documentation','Change color theme','Open navigation','Choose documentation version'].includes(label)||content.navigation.some(g=>escape(g.label)===label)||/^Copy code block \d+$/.test(label);
+    const button=/\brole="button"/.test(tag)||['Search documentation','Change color theme','Open navigation','Choose documentation version','On this page'].includes(label)||content.navigation.some(g=>escape(g.label)===label)||/^Copy code block \d+$/.test(label);
     stack.push(button);
     if(!button)return tag;
-    let control=({'Search documentation':'search','Change color theme':'theme','Open navigation':'menu','Choose documentation version':'versions'})[label];
+    let control=({'Search documentation':'search','Change color theme':'theme','Open navigation':'menu','Choose documentation version':'versions','On this page':'contents'})[label];
     const group=content.navigation.findIndex(group=>escape(group.label)===label);
     if(group>=0)control='group-'+group;
     const code=label.match(/^Copy code block (\d+)$/);
     if(code)control='copy-'+(Number(code[1])-1);
-    return tag.replace('<div',`<button type="button"${control?` data-control="${control}"`:''}${group>=0?' aria-expanded="true"':''}`);
+    const expanded = group >= 0 || control === 'contents';
+    if (expanded) tag = tag.replace(/\saria-expanded="[^"]*"/, '');
+    return tag.replace('<div',`<button type="button"${control?` data-control="${control}"`:''}${expanded?` aria-expanded="${group >= 0}"`:''}${control==='contents'?' aria-controls="contents-inline-links"':''}`);
   });
 }
 const template=await readFile(path.join(website,'scripts/template.html'),'utf8');
@@ -65,7 +67,7 @@ for(const page of pages) {
   const templateFile=path.join(rune,'.generated/template.html');await writeFile(templateFile,frame);
   await run(path.join(metadata.target_directory,'debug/plous-docs-rune'),['--html',output,'--html-widths','360,700,1000,1280,1440','--html-template',templateFile],{cwd:dist,env:{...process.env,PLOUS_SITE_PAGE:page.route}});
   let html=controls(await readFile(output,'utf8'));
-  html=html.replace(/(<(?:nav|a)\b[^>]*id="(?:sidebar|nav-docs|nav-developers)"[^>]*)\saria-hidden="true"/g,'$1');
+  html=html.replace(/(<(?:nav|a|section)\b[^>]*id="(?:sidebar|nav-docs|nav-developers|contents)"[^>]*)\saria-hidden="true"/g,'$1');
   html=html.replaceAll('src="assets/',`src="${content.base}assets/`);
   html=html.replace(/<img\b[^>]*src="[^"]*\/lockup(?:-dark)?\.svg"[^>]*>/g,tag=>tag.replace('<img','<img data-wordmark'));
   html=html.replace(/<style data-rune-static>([\s\S]*?)<\/style>/,(_,css)=>`<style data-rune-static>${css.replaceAll('[data-rune-static]',':is([data-rune-static],[data-rune-menu])').replace(/#[a-f\d]{6}\b/gi,color=>colors[color.toLowerCase()]?`var(--${colors[color.toLowerCase()]})`:color)}</style>`);

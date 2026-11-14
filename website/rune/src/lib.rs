@@ -18,7 +18,16 @@ struct Heading {
 #[derive(Deserialize)]
 struct Page { route: String, href: String, title: String, body: String, headings: Vec<Heading>, section: String, developers: bool, edit: String }
 #[derive(Deserialize)]
-struct Content { version: String, base: String, root: String, navigation: Vec<Group>, paths: Vec<Link>, pages: Vec<Page> }
+struct Content {
+    version: String,
+    base: String,
+    root: String,
+    navigation: Vec<Group>,
+    paths: Vec<Link>,
+    #[serde(rename = "quickLinks")]
+    quick_links: Vec<Link>,
+    pages: Vec<Page>,
+}
 fn content() -> &'static Content {
     static CONTENT: OnceLock<Content> = OnceLock::new();
     CONTENT.get_or_init(|| serde_json::from_str(include_str!("../.generated/content.json")).expect("prepared documentation"))
@@ -36,6 +45,7 @@ impl Paint {
 const BODY: TextStyle = TextStyle::new(16.0,400.0).lh(27.0);
 const LABEL: TextStyle = TextStyle::new(14.0,500.0).lh(21.0);
 const SMALL: TextStyle = TextStyle::new(13.0,400.0).lh(20.0);
+const SECTION: TextStyle = TextStyle::new(26.0,650.0).lh(38.0).tracking(-0.4);
 // Shape paths export as SVG and use the same geometry in the GPU view.
 fn symbol(kind: usize,size: f32,color: Color) -> El {
     use rune::{Path,Shape,LineCap,canvas};
@@ -48,14 +58,16 @@ fn symbol(kind: usize,size: f32,color: Color) -> El {
         0=>vec![path(&[[5.0,7.0],[10.0,12.0],[5.0,17.0]]),path(&[[13.0,17.0],[19.0,17.0]])],
         1=>vec![path(&[[9.0,7.0],[4.0,12.0],[9.0,17.0]]),path(&[[15.0,7.0],[20.0,12.0],[15.0,17.0]]),path(&[[13.0,4.0],[11.0,20.0]])],
         2=>vec![path(&[[12.0,3.0],[14.5,9.5],[21.0,12.0],[14.5,14.5],[12.0,21.0],[9.5,14.5],[3.0,12.0],[9.5,9.5],[12.0,3.0]])],
-        _=>vec![path(&[[5.0,12.0],[19.0,12.0]]),path(&[[13.0,6.0],[19.0,12.0],[13.0,18.0]])],
+        3=>vec![path(&[[5.0,12.0],[19.0,12.0]]),path(&[[13.0,6.0],[19.0,12.0],[13.0,18.0]])],
+        4=>vec![path(&[[10.0,7.0],[15.0,12.0],[10.0,17.0]])],
+        _=>vec![path(&[[7.0,10.0],[12.0,15.0],[17.0,10.0]])],
     };
     let mut shape=Shape::new().view_box(24.0,24.0);
     for path in paths {shape=shape.stroke_path(&path,1.7,LineCap::Round,color);}
     canvas(shape).size(size,size).a11y_hidden()
 }
 
-struct State { page: Option<usize>, dark: bool, open: BTreeSet<usize>, images: Option<ImageCache> }
+struct State { page: Option<usize>, dark: bool, open: BTreeSet<usize>, contents_open: bool, images: Option<ImageCache> }
 #[cfg(target_arch="wasm32")]
 #[wasm_bindgen::prelude::wasm_bindgen]
 extern "C" {
@@ -86,7 +98,7 @@ impl State {
             let selected = { let _=g; true };
             if selected { open.insert(i); }
         }
-        Self { page,dark,open,images:None }
+        Self { page,dark,open,contents_open:false,images:None }
     }
 }
 fn txt(key: &str,value: impl Into<String>,font: TextStyle,color: Color) -> El { text(value).key(key).font(font).color(color).wrap().selectable(true) }
@@ -134,15 +146,26 @@ fn header(s: &State,cx: &Cx<State>,phone: bool,p: Paint) -> El {
 fn workflows(p: Paint,phone: bool) -> El {
     let mut cards=(if phone {col()} else {row().items_stretch()}).key("workflows").w_full().gap(16.0);
     for (i,path) in content().paths.iter().enumerate() {
-        let card=col().key(format!("workflow-{i}")).href(&path.href).padding(24.0).gap(16.0).fill(p.bg).border(1.0,p.line).radius(10.0).hover_group()
-            .child(symbol(i,24.0,p.blue))
-            .child(row().w_full().center_y().gap(12.0)
-                .child(txt(&format!("workflow-title-{i}"),&path.title,TextStyle::new(19.0,600.0).lh(27.0),p.ink).w(0.0).grow(1.0).group_color(p.blue))
+        let card=col().key(format!("workflow-{i}")).href(&path.href).padding(18.0).gap(12.0)
+            .fill(p.surface).border(1.0,p.line).radius(10.0).hover(p.wash).hover_group()
+            .child(row().justify_between().center_y()
+                .child(row().size(36.0,36.0).center().fill(p.wash).radius(7.0).child(symbol(i,22.0,p.blue)))
                 .child(symbol(3,18.0,p.blue)))
-            .child(txt(&format!("workflow-description-{i}"),&path.description,BODY,p.muted));
+            .child(txt(&format!("workflow-title-{i}"),&path.title,TextStyle::new(18.0,600.0).lh(25.0),p.ink).w_full().group_color(p.blue))
+            .child(txt(&format!("workflow-description-{i}"),&path.description,TextStyle::new(14.0,400.0).lh(22.0),p.muted).w_full());
         cards=cards.child(if phone {card.w_full()} else {card.w(0.0).grow(1.0)});
     }
     cards
+}
+fn index_links(p: Paint, narrow: bool) -> El {
+    let links = content().quick_links.iter().enumerate().map(|(i, item)| {
+        link(&format!("quick-link-{i}"), &item.title, &item.href, p)
+            .w_full().py(11.0).border_sides([0.0, 0.0, 1.0, 0.0], p.line)
+    });
+    col().key("index-links").w_full().gap(8.0).mt(8.0)
+        .child(txt("quick-links", "Quick links", SECTION, p.ink).role("heading").level(2))
+        .child(col().key("quick-link-grid").w_full().equal_columns(if narrow { 1 } else { 2 })
+            .gaps(0.0, 24.0).children(links))
 }
 fn home(s: &State,cx: &Cx<State>,phone: bool,p: Paint) -> El {
     let size=if phone {40.0} else {64.0};
@@ -170,23 +193,27 @@ fn version_button(p: Paint) -> El {
     })
 }
 fn sidebar(s: &State,page: &Page,phone: bool,p: Paint) -> El {
-    let mut nav=col().key("sidebar").role("navigation").label("Documentation navigation").w(236.0).gap(6.0).pr(20.0).py(28.0);
+    let mut nav=col().key("sidebar").role("navigation").label("Documentation navigation")
+        .w(228.0).gap(6.0).padding(14.0).mt(28.0).fill(p.surface).border(1.0,p.line).radius(10.0);
     nav=nav.child(version_button(p));
     nav=nav.child(link("sidebar-root",if page.developers {"User documentation"} else {"Documentation"},&format!("{}docs/",content().base),p));
     for (i,group) in content().navigation.iter().enumerate().filter(|(_,g)| (g.label=="Developers")==page.developers) {
         let opened=s.open.contains(&i);
-        let title=button(&format!("group-toggle-{i}"),&group.label,p).w_full().fill(p.bg).mt(10.0)
+        let title=button(&format!("group-toggle-{i}"),&group.label,p).w_full().mt(6.0)
+            .justify_between().child(symbol(if opened {5} else {4}, 16.0, p.muted)).expanded(opened)
             .on_press(move |s: &mut State| { if !s.open.remove(&i) {s.open.insert(i);} });
         let mut items=col().key(format!("group-items-{i}")).w_full().gap(2.0).pt(4.0);
         for (j,item) in group.items.iter().enumerate() {
             let selected=item.href.split('#').next()==Some(page.href.as_str()) && !item.href.contains('#');
-            items=items.child(row().key(format!("nav-link-{i}-{j}")).href(&item.href).w_full().py(7.0).px(12.0).radius(5.0).fill(if selected {p.wash} else {p.bg}).hover(p.wash)
-                .child(txt(&format!("nav-label-{i}-{j}"),&item.title,TextStyle::new(14.0,if selected {600.0} else {400.0}).lh(21.0),if selected {p.blue} else {p.muted})));
+            items=items.child(row().key(format!("nav-link-{i}-{j}")).href(&item.href).w_full().py(7.0).px(12.0)
+                .radius(5.0).fill(if selected {p.wash} else {p.surface}).hover(p.wash)
+                .border_sides([0.0,0.0,0.0,if selected {3.0} else {0.0}],p.blue)
+                .child(txt(&format!("nav-label-{i}-{j}"),&item.title,TextStyle::new(14.0,if selected {600.0} else {400.0}).lh(21.0),if selected {p.blue} else {p.muted}).w(0.0).grow(1.0)));
         }
         if !opened {items=items.h(0.0).clip_rounded(0.0).a11y_hidden();}
         nav=nav.child(title).child(items);
     }
-    if phone {nav.w(0.0).h(0.0).pr(0.0).py(0.0).clip_rounded(0.0).a11y_hidden()} else {nav}
+    if phone {nav.w(0.0).h(0.0).padding(0.0).mt(0.0).clip_rounded(0.0).a11y_hidden()} else {nav}
 }
 fn markdown(s: &State,page: &Page,width: f32,p: Paint) -> El {
     #[cfg(target_arch="wasm32")]
@@ -194,12 +221,17 @@ fn markdown(s: &State,page: &Page,width: f32,p: Paint) -> El {
     #[cfg(not(target_arch="wasm32"))]
     let source=page.body.clone();
     let mut style=MarkdownStyle::neutral(s.dark).text(p.ink).muted(p.muted).link(p.blue).rule(p.line)
-        .body_font(BODY).heading_font(2,TextStyle::new(25.0,600.0).lh(34.0).tracking(-0.3))
-        .heading_font(3,TextStyle::new(19.0,600.0).lh(28.0))
-        .inline_code_bg(p.surface).code_block(p.surface,p.line)
-        .code_block_font(TextStyle::new(14.0,400.0).lh(24.0).mono()).code_block_padding(18.0,16.0)
+        .body_font(BODY).heading_font(2,SECTION)
+        .heading_font(3,TextStyle::new(19.0,600.0).lh(30.0))
+        .inline_code_bg(p.surface).code_block(Color::TRANSPARENT,Color::TRANSPARENT)
+        .code_block_font(TextStyle::new(14.0,400.0).lh(24.0).mono()).code_block_padding(16.0,12.0)
         .table_font(TextStyle::new(14.0,400.0).lh(23.0)).table_cell_padding(12.0,10.0)
-        .table_full_width(true).table_header_fill(p.surface).table_rules(p.line).text_width(width).wide_fade(0.0);
+        .table_full_width(true).table_header_fill(p.surface).table_header_text(p.ink)
+        .table_rules(p.line).text_width(width).wide_fade(0.0);
+    if page.route == "docs/reference/keymap/" {
+        style = style.inline_code_bg(p.wash).inline_code_pad(4.0).inline_code_font(0.92, 500.0)
+            .table_cell_padding(12.0, 13.0).table_header_weight(600.0);
+    }
     let code_blue=hex(if s.dark {"#8db4ff"} else {"#2458b8"});
     let green=hex(if s.dark {"#94d7af"} else {"#206a43"});
     let violet=hex(if s.dark {"#cfadff"} else {"#7045ba"});
@@ -218,29 +250,77 @@ fn markdown(s: &State,page: &Page,width: f32,p: Paint) -> El {
         }))
         .on_link_tx(|_: &mut State,url,tx| {let _=tx.open_url_same_tab(url);})
         .code_frame(move |card,code| {
-            let value=code.source.to_owned();
-            col().role("region").label(format!("{} code example",code.language.unwrap_or("text"))).w_full().gap(8.0).child(row().w_full().justify_between().center_y()
-                .child(txt(&format!("language-{}",code.index),code.language.unwrap_or("text"),SMALL,p.muted))
-                .child(button(&format!("copy-{}",code.index),"Copy",p).label(format!("Copy code block {}",code.index+1)).on_press_tx(move |_: &mut State,tx| tx.copy(value.clone()))))
+            let value = code.source.to_owned();
+            let language = code.language.unwrap_or("text");
+            let caption = match language {
+                "sh" | "bash" | "zsh" | "shell" => "Shell command",
+                "text" if code.language.is_some() => "Output",
+                "text" => "Plain text",
+                "toml" => "TOML",
+                "json" => "JSON",
+                "yaml" => "YAML",
+                _ => language,
+            };
+            let fill = if caption == "Output" { p.bg } else { p.surface };
+            col().role("region").label(format!("{language} code example")).w_full()
+                .fill(fill).border(1.0,p.line).radius(8.0)
+                .child(row().w_full().px(12.0).py(4.0).justify_between().center_y()
+                    .border_sides([0.0,0.0,1.0,0.0],p.line)
+                    .child(txt(&format!("language-{}",code.index),caption,TextStyle::new(12.0,500.0).lh(18.0).mono(),p.muted))
+                    .child(button(&format!("copy-{}",code.index),"Copy",p).h(28.0).fill(fill)
+                        .label(format!("Copy code block {}",code.index+1))
+                        .on_press_tx(move |_: &mut State,tx| tx.copy(value.clone()))))
                 .child(card)
         });
     md.render(&style)
 }
-fn article(s: &State,cx: &Cx<State>,page: &Page,phone: bool,p: Paint) -> El {
-    let width=cx.layout_size("article").map_or(if phone {350.0} else {700.0},|v|v[0]);
-    let mut body=col().key("article").w_full().max_w(760.0).gap(24.0).py(if phone {28.0} else {44.0})
-        .child(txt("section-name",&page.section,LABEL,p.blue))
-        .child(txt("top",&page.title,TextStyle::new(if phone {32.0} else {38.0},600.0).lh(if phone {40.0} else {48.0}).tracking(-0.6),p.ink).role("heading").level(1));
-    if page.route=="docs/" { body=body.child(txt("index-intro","Choose how you want to work with Plous.",BODY,p.muted)).child(workflows(p,true)); }
-    body.child(markdown(s,page,width,p)).child(rule("edit-rule",p)).child(link("edit-source",if content().version=="Development" {"Edit this page on GitHub"} else {"View source"},&page.edit,p))
-}
-fn toc(page: &Page,phone: bool,p: Paint) -> El {
-    let mut out=col().key("contents").role("navigation").label("On this page").w(180.0).gap(8.0).py(44.0)
-        .child(txt("toc-title","On this page",LABEL,p.ink).mb(8.0));
-    for (i,h) in page.headings.iter().enumerate().filter(|(_,h)|h.level==2) {
-        out=out.child(link(&format!("toc-{i}"),&h.title,&format!("#{}",h.id),p));
+fn article(s: &State,cx: &Cx<State>,page: &Page,narrow: bool,wide: bool,p: Paint) -> El {
+    let width = cx.layout_size("article").map_or(if narrow {350.0} else {700.0}, |v| v[0]);
+    let index = page.route == "docs/";
+    let mut header = col().w_full().gap(8.0);
+    if page.section != page.title {
+        header = header.child(txt("section-name",&page.section,LABEL,p.muted));
     }
-    if phone {out.w_full().pt(0.0)} else {out}
+    header = header.child(txt("top",&page.title,TextStyle::new(if narrow {32.0} else {42.0},650.0)
+        .lh(if narrow {40.0} else {50.0}).tracking(-0.9),p.ink).role("heading").level(1));
+    let header = if !index && page.headings.iter().any(|heading| heading.level == 2) {
+        header.child(inline_contents(s,page,wide,p))
+    } else { header };
+    let body = col().key("article").w_full().max_w(760.0).gap(24.0)
+        .py(if narrow {28.0} else {42.0}).child(header);
+    let body = if index {
+        body.child(txt("index-intro","Choose your workflow",SECTION,p.ink).role("heading").level(2))
+            .child(workflows(p,width < 660.0)).child(index_links(p,width < 540.0))
+    } else {
+        body.child(markdown(s,page,width,p))
+    };
+    body.child(rule("edit-rule",p)).child(link("edit-source",if content().version=="Development" {"Edit this page on GitHub"} else {"View source"},&page.edit,p))
+}
+fn contents_links(page: &Page, key: &str, p: Paint) -> El {
+    col().key(key).role("navigation").label("On this page").w_full()
+        .children(page.headings.iter().filter(|heading| heading.level == 2).map(|heading| {
+            let id = format!("{key}-{}", heading.id);
+            row().key(&id).href(format!("#{}",heading.id)).w_full().py(5.0).hover_group()
+                .child(txt(&format!("{id}-text"),&heading.title,LABEL,p.muted).w(0.0).grow(1.0).group_color(p.blue))
+        }))
+}
+fn inline_contents(s: &State, page: &Page, wide: bool, p: Paint) -> El {
+    let toggle = button("contents-toggle","On this page",p).w_full().justify_between()
+        .child(symbol(if s.contents_open {5} else {4}, 16.0, p.muted)).expanded(s.contents_open)
+        .on_press(|s: &mut State| s.contents_open = !s.contents_open);
+    let links = contents_links(page,"contents-inline-links",p).px(12.0).pb(8.0);
+    #[cfg(target_arch="wasm32")]
+    let links = if s.contents_open { links } else { links.h(0.0).padding(0.0).clip_rounded(0.0).a11y_hidden() };
+    let panel = col().key("contents-inline").role("region").w_full().fill(p.surface).border(1.0,p.line).radius(8.0)
+        .child(toggle).child(links);
+    if wide { panel.h(0.0).clip_rounded(0.0).a11y_hidden() } else { panel }
+}
+fn toc(page: &Page,wide: bool,p: Paint) -> El {
+    let panel = col().key("contents").role("region").w(172.0).mt(45.0).pl(16.0).gap(8.0)
+        .border_sides([0.0,0.0,0.0,1.0],p.line)
+        .child(txt("toc-title","On this page",LABEL,p.ink))
+        .child(contents_links(page,"contents-desktop-links",p));
+    if wide { panel } else { panel.w(0.0).h(0.0).mt(0.0).pl(0.0).clip_rounded(0.0).a11y_hidden() }
 }
 fn view(s: &State,cx: &mut Cx<State>) -> El {
     let measured=cx.layout_size("page").map_or(1440.0,|v|v[0]);
@@ -252,12 +332,12 @@ fn view(s: &State,cx: &mut Cx<State>) -> El {
     let main=if let Some(index)=s.page {
         let page=&content().pages[index];
         let columns=(if phone {col()} else {row().items_start()}).w_full().gap(if phone {0.0} else {40.0});
-        let document=article(s,cx,page,narrow,p);
-        let content_columns=if measured<1280.0 {
-            col().w_full().gap(0.0).child(document.w_full()).child(toc(page,true,p))
-        } else {
-            row().items_start().w(0.0).grow(1.0).gap(40.0).child(document.w(0.0).grow(1.0)).child(toc(page,false,p))
-        };
+        let has_contents = page.route != "docs/" && page.headings.iter().any(|heading| heading.level == 2);
+        let wide = measured >= 1280.0 && has_contents;
+        let document = article(s,cx,page,narrow,wide,p);
+        let content_columns = row().items_start().gap(if wide {32.0} else {0.0})
+            .child(document.w(0.0).grow(1.0));
+        let content_columns = if has_contents { content_columns.child(toc(page,wide,p)) } else { content_columns };
         let content_columns=if phone {content_columns.w_full()} else {content_columns.w(0.0).grow(1.0)};
         columns.child(sidebar(s,page,phone,p)).child(content_columns)
     } else {home(s,cx,narrow,p)};

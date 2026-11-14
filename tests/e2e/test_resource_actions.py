@@ -1,6 +1,7 @@
 """Resource operations use a disposable local API with explicit confirmations."""
 
 from copy import deepcopy
+import base64
 import json
 
 from test_explore import ExploreFixture
@@ -268,6 +269,35 @@ class ResourceActionTests(ExploreFixture):
         app.expect("checkout-deployment")
         app.send("a")
         app.expect("Restart rollout")
+        self.finish(app)
+
+    def test_workload_log_selection_copies_with_mouse(self):
+        app = self.open_resource("deployments")
+        self.detail(app)
+        self.action(app, "logs")
+        app.expect("All Pods")
+        app.send("\r")
+        text = "ERROR missing database setting"
+        app.expect_screen(text)
+
+        def point(text):
+            for y, row in enumerate(app.screen()["rows"]):
+                x = row.find(text)
+                if x >= 0:
+                    return x, y
+            self.fail("Missing visible text: " + text)
+
+        x, y = point(text)
+        app.mouse_press(x, y)
+        app.mouse_drag(x + len(text) - 1, y)
+        app.mouse_release(x + len(text) - 1, y)
+        app.expect_screen("Copy selection")
+        x, y = point("Copy selection")
+        before = len(app.output)
+        app.mouse_click(x + 3, y)
+        app.expect_screen("Sent to the terminal clipboard")
+        self.assertIn(b"\x1b]52;c;" + base64.b64encode(text.encode()), app.output[before:])
+        self.assertFalse(self.mutations)
         self.finish(app)
 
     def test_pod_logs_merge_application_containers_and_switch_back(self):

@@ -55,19 +55,21 @@ Plous connects cluster tools to Claude Code or Codex through **Model Context Pro
 | Workflow | Setup |
 | --- | --- |
 | Inside the Plous assistant panel | Select your installed agent in **Settings → Application → Agent**. Plous configures the connection automatically. |
-| Direct MCP integration | Configure your client to launch `plous mcp serve` with an explicit context. No TUI or skill installation is required. |
+| Direct MCP integration | Configure your client to launch `plous mcp serve`. It follows kubeconfig’s current context by default. Use `--context` to pin it. |
 | Guided debugging in your coding-agent session | Run `plous setup codex` or `plous setup claude` to install **plous-debug** and register a local stdio MCP server. |
 
 Entry commands default to `claude` and `codex`. Configure each agent's **Entry command** in the same settings to use a wrapper such as `celai codex`.
 
-All workflows use the same guarded cluster tools. The CLI keeps its own authentication and model settings. Agents inside Plous can also open views beside the conversation; independent coding agents keep their normal repository tools.
+All workflows use the same guarded cluster tools. The CLI keeps its own authentication and model settings. Agents inside Plous can also open views beside the conversation. Independent coding agents keep their normal repository tools.
+
+Enable [active diagnostics](docs/mcp/active-diagnostics.md) to run a specific command in an existing container or run an HTTP GET, DNS lookup, or TCP check from a temporary Job.
 
 [MCP server](docs/mcp/README.md) · [Agent skills](docs/agent-skills/README.md) · [plous-debug](docs/agent-skills/plous-debug.md) · [Assistant panel](docs/guides/plous-mcp.md)
 
 ## Documentation
 
 - [User guides](docs/README.md)
-- [Keymap](docs/reference/keymap.md) and [configuration](docs/reference/configuration.md)
+- [Keyboard shortcuts and commands](docs/reference/keymap.md) and [configuration](docs/reference/configuration.md)
 - [Data and privacy](docs/reference/data-and-privacy.md)
 - [Troubleshooting](docs/reference/troubleshooting.md)
 

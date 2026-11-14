@@ -3,10 +3,7 @@ package debugging
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -84,45 +81,36 @@ func TestSetupRefusesUnmanagedServersAndMalformedConfig(t *testing.T) {
 	}
 }
 
-func TestSetupInstallsOneSkillAndCapturedServerWithoutChangingKubeconfig(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/version" {
-			t.Errorf("unexpected setup acquisition %s", r.URL)
-		}
-		fmt.Fprint(w, `{"gitVersion":"fixture"}`)
-	}))
-	defer server.Close()
+func TestSetupInstallsWithoutKubeconfigOrPinnedContext(t *testing.T) {
 	root := t.TempDir()
-	path := filepath.Join(root, "config")
-	config := fmt.Sprintf("apiVersion: v1\nkind: Config\nclusters:\n- name: fixture\n  cluster:\n    server: %s\ncontexts:\n- name: staging\n  context:\n    cluster: fixture\n    namespace: shop\ncurrent-context: staging\n", server.URL)
-	if err := os.WriteFile(path, []byte(config), 0600); err != nil {
-		t.Fatal(err)
-	}
+	t.Setenv("KUBECONFIG", filepath.Join(root, "not-configured"))
 	for _, kind := range []string{"codex", "claude"} {
 		home := filepath.Join(root, kind)
 		var out, diagnostics bytes.Buffer
-		args := []string{"setup", kind, "--home", home, "--kubeconfig", path, "--context", "staging", "--data-dir", filepath.Join(root, "evidence"), "--allow-exec", "--diagnostic-image", "diagnostics@sha256:fixture"}
+		args := []string{"setup", kind, "--home", home, "--data-dir", filepath.Join(root, "evidence")}
 		for range 2 {
 			if code := Run(t.Context(), args, io.NopCloser(strings.NewReader("")), &out, &diagnostics, "0.0.1", "", kubernetes.DebugPolicy{}); code != 0 {
 				t.Fatalf("setup: %d %s", code, diagnostics.String())
 			}
 		}
 		skillPath := filepath.Join(home, ".agents", "skills", "plous-debug", "SKILL.md")
+		configPath := filepath.Join(home, ".codex", "config.toml")
 		if kind == "claude" {
 			skillPath = filepath.Join(home, ".claude", "skills", "plous-debug", "SKILL.md")
+			configPath = filepath.Join(home, ".claude.json")
 		}
 		data, err := os.ReadFile(skillPath)
 		if err != nil || !bytes.HasPrefix(data, []byte("---\nname: plous-debug")) || !bytes.Contains(data, []byte("## Reproduce")) {
 			t.Fatalf("missing portable skill: %s %v", data, err)
 		}
-		info, _ := os.Stat(skillPath)
-		if info.Mode().Perm() != 0600 {
-			t.Fatal("skill is not private")
+		info, err := os.Stat(skillPath)
+		if err != nil || info.Mode().Perm() != 0600 {
+			t.Fatal("skill is not private", err)
 		}
-	}
-	data, _ := os.ReadFile(path)
-	if string(data) != config {
-		t.Fatal("setup changed kubeconfig")
+		config, err := os.ReadFile(configPath)
+		if err != nil || bytes.Contains(config, []byte("--kubeconfig")) || bytes.Contains(config, []byte("--context")) || bytes.Contains(config, []byte("--namespace")) {
+			t.Fatalf("setup did not leave the target live: %s %v", config, err)
+		}
 	}
 }
 

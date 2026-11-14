@@ -2,7 +2,7 @@
 
 [MCP server](README.md) · [Tools and permissions](../reference/mcp.md#active-diagnostics)
 
-Agent tools read cluster data by default. Enable commands or temporary tests only for the cluster and namespace you intend to investigate.
+Agent tools read cluster data by default. Enable commands or temporary tests only for the cluster and namespace you intend to investigate. The examples pin a context. If you omit `--context`, these capabilities follow the current kubeconfig context.
 
 ## Run commands in a container
 
@@ -32,7 +32,7 @@ plous mcp serve \
   --diagnostic-image registry.example.com/team/diagnostics@sha256:YOUR_IMAGE_DIGEST
 ```
 
-`kubernetes_diagnostic_run` performs one HTTP GET, DNS lookup, or TCP connection check in a temporary Job. The agent cannot change the configured image or submit an arbitrary Pod manifest.
+`kubernetes_diagnostic_run` performs one HTTP GET, DNS lookup, or TCP connection check in a temporary Job. It accepts the probe type and target. Plous builds the command and Job from the probe and the configured image.
 
 HTTP tests do not follow redirects or retry. Choose an endpoint that is safe to call. Even a GET can change data if the application implements it that way.
 

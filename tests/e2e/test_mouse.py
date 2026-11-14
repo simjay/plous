@@ -95,7 +95,7 @@ class MouseTests(unittest.TestCase):
         session = json.loads((self.state / "session.json").read_text())
         self.assertEqual(session["drafts"].get(""), "new tea two")
 
-    def test_local_clipboard_helpers_and_forwarded_paste(self):
+    def test_local_clipboard_helpers_mouse_copy_and_forwarded_paste(self):
         helpers = self.root / "helpers"
         helpers.mkdir()
         clipboard = self.root / "clipboard"
@@ -114,7 +114,11 @@ class MouseTests(unittest.TestCase):
         app.mouse_press(88, 24)
         app.mouse_drag(92, 24)
         app.mouse_release(92, 24)
-        app.send("\x1b[99;9u")
+        app.expect_screen("Copy selection")
+        x, y = self.visible_point(app, "Copy selection")
+        app.mouse_press(x, y)
+        app.mouse_drag(x + 1, y)
+        app.mouse_release(x + 1, y)
         app.expect_screen("Copied to clipboard.")
         self.assertEqual(clipboard.read_text(), "alpha")
         clipboard.write_text("界\n:quit")
@@ -176,7 +180,9 @@ class MouseTests(unittest.TestCase):
         app.mouse_release(x + len(text) - 1, y)
         app.expect_screen("Copy selection")
         x, y = self.visible_point(app, "Copy selection")
-        app.mouse_click(x, y)
+        app.mouse_press(x, y)
+        app.mouse_drag(x + 1, y)
+        app.mouse_release(x + 1, y)
         encoded = base64.b64encode(text.encode())
         self.assertIn(b"\x1b]52;c;" + encoded, app.output)
         self.assertIn("Mouse support: On", "\n".join(app.screen()["rows"]))

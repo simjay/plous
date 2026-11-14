@@ -24,7 +24,7 @@ Homebrew installs a bottle when available, or builds from source. See the [tap](
 
 Choose website documentation matching `plous --version`. Development docs follow `main` and may describe unreleased features.
 
-Standalone MCP and `plous setup` require v0.0.3 or newer.
+Standalone MCP and `plous setup` require v0.0.3 or newer. Starting with v0.0.4, standalone MCP follows kubeconfig’s current context by default.
 
 ## Build from source
 

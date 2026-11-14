@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	diffview "github.com/simjay/plous/internal/ui/diff"
 	docedit "github.com/simjay/plous/internal/ui/editor"
+	logview "github.com/simjay/plous/internal/ui/logs"
 	textview "github.com/simjay/plous/internal/ui/text"
 )
 
@@ -29,6 +30,10 @@ type mouseTextGesture struct {
 	context    string
 	x, y       int
 	dragged    bool
+	log        *logview.Model
+	logDropped int
+	logPointer tea.Mouse
+	logPending bool
 }
 
 type mouseTextClick struct {
@@ -191,12 +196,19 @@ func (s mouseTextSurface) valid() bool {
 }
 
 func textPoint(span textview.MouseSpan, target textview.TextTarget, lines []string, x int) (textview.Point, bool) {
-	if target.Row >= len(lines) || textview.TextHash(lines[target.Row]) != target.Hash {
+	if target.Row >= len(lines) {
+		return textview.Point{}, false
+	}
+	return textPointOnLine(span, target, lines[target.Row], x)
+}
+
+func textPointOnLine(span textview.MouseSpan, target textview.TextTarget, line string, x int) (textview.Point, bool) {
+	if textview.TextHash(line) != target.Hash {
 		return textview.Point{}, false
 	}
 	col := target.Offset
 	if target.Cells {
-		col = textview.ColumnAt(lines[target.Row], col+x-span.X)
+		col = textview.ColumnAt(line, col+x-span.X)
 	}
 	return textview.Point{Row: target.Row, Col: col}, true
 }
@@ -243,38 +255,69 @@ func (m *model) applyTextPointer(s mouseTextSurface, point textview.Point, ancho
 	}
 }
 
-func (m *model) updateTextMouse(msg tea.MouseMsg, span textview.MouseSpan, hit bool, now time.Time, context string) bool {
+func (m *model) validTextGesture(g *mouseTextGesture, context string) bool {
+	if context != g.context || m.mouseTextSurface(g.surface.scope, g.surface.owner) != g.surface || g.inputValue != g.surface.inputValue() {
+		return false
+	}
+	if g.log == nil {
+		return slices.Equal(g.lines, g.surface.lines())
+	}
+	lines := g.log.Reader.Lines
+	if g.log.Dropped != g.logDropped || len(lines) < len(g.lines) {
+		return false
+	}
+	// A stream append replaces the empty line after the previous final newline.
+	end := len(g.lines)
+	if len(lines) > end && end > 0 && g.lines[end-1] == "" {
+		end--
+	}
+	for i, line := range g.lines[:end] {
+		if lines[i].Text != line {
+			return false
+		}
+	}
+	return true
+}
+
+func (m *model) updateTextMouse(msg tea.MouseMsg, span textview.MouseSpan, hit bool, now time.Time, context string) (bool, tea.Cmd) {
 	p := msg.Mouse()
 	if _, wheel := msg.(tea.MouseWheelMsg); wheel {
-		return false
+		return false, nil
 	}
 	if g := m.mouse.text; g != nil {
 		if _, press := msg.(tea.MouseClickMsg); press {
 			m.mouse.text = nil
-			return false
+			return false, nil
 		}
-		if context != g.context || m.mouseTextSurface(g.surface.scope, g.surface.owner) != g.surface || g.inputValue != g.surface.inputValue() || !slices.Equal(g.lines, g.surface.lines()) {
+		if !m.validTextGesture(g, context) {
 			m.mouse.reset()
-			return true
+			return true, nil
 		}
-		// Use the pressed frame while dragging. Cursor decoration and selection
-		// redraws must not move the source positions under the pointer.
 		point, found := g.anchor, false
-		for _, old := range g.spans {
-			if old.Y != p.Y || p.X < old.X || p.X >= old.X+old.Width || old.Scope != g.surface.scope {
-				continue
+		scroll := 0
+		if g.log != nil && (g.dragged || p.X != g.x || p.Y != g.y) {
+			point, found, scroll = m.logDragPoint(g.log, p)
+		} else if g.log != nil {
+			point, found = g.anchor, true
+		} else {
+			// Fixed viewports use the pressed frame so redraws cannot move the
+			// source positions under the pointer.
+			for _, old := range g.spans {
+				if old.Y != p.Y || p.X < old.X || p.X >= old.X+old.Width || old.Scope != g.surface.scope {
+					continue
+				}
+				t, ok := textview.ParseTextTarget(old.Target)
+				if ok && t.Owner == g.surface.owner {
+					point, found = textPoint(old, t, g.lines, p.X)
+				}
+				break
 			}
-			t, ok := textview.ParseTextTarget(old.Target)
-			if ok && t.Owner == g.surface.owner {
-				point, found = textPoint(old, t, g.lines, p.X)
-			}
-			break
 		}
 		switch msg.(type) {
 		case tea.MouseMotionMsg:
 			if p.Button != tea.MouseLeft {
 				m.mouse.reset()
-				return true
+				return true, nil
 			}
 			if p.X != g.x || p.Y != g.y {
 				g.dragged = true
@@ -282,11 +325,17 @@ func (m *model) updateTextMouse(msg tea.MouseMsg, span textview.MouseSpan, hit b
 			if g.dragged && found {
 				m.applyTextPointer(g.surface, point, &g.anchor, false)
 			}
+			if g.log != nil {
+				g.logPointer = p
+				if g.dragged && found && scroll != 0 && !g.logPending {
+					return true, g.logScrollTick()
+				}
+			}
 		case tea.MouseReleaseMsg:
 			m.mouse.text = nil
 			if p.Button != tea.MouseLeft && p.Button != tea.MouseNone {
 				m.mouse.lastText = nil
-				return true
+				return true, nil
 			}
 			if g.dragged {
 				if found {
@@ -306,30 +355,38 @@ func (m *model) updateTextMouse(msg tea.MouseMsg, span textview.MouseSpan, hit b
 			}
 			m.persist()
 		}
-		return true
+		return true, nil
 	}
 	if _, press := msg.(tea.MouseClickMsg); !press || p.Button != tea.MouseLeft || !hit {
-		return false
+		return false, nil
 	}
 	target, ok := textview.ParseTextTarget(span.Target)
 	if !ok {
 		m.mouse.lastText = nil
-		return false
+		return false, nil
 	}
 	surface := m.mouseTextSurface(span.Scope, target.Owner)
 	if !surface.valid() {
-		return false
+		return false, nil
 	}
 	lines := surface.lines()
 	point, ok := textPoint(span, target, lines, p.X)
 	if !ok {
-		return true
+		return true, nil
 	}
 	m.mouse.press, m.mouse.last = nil, nil
 	m.shortcutPrefix = ""
 	m.clearDocumentPrefix()
-	m.mouse.text = &mouseTextGesture{surface: surface, inputValue: surface.inputValue(), lines: lines, spans: slices.Clone(m.mouse.spans), anchor: point, context: context, x: p.X, y: p.Y}
-	return true
+	g := &mouseTextGesture{surface: surface, inputValue: surface.inputValue(), lines: lines, anchor: point, context: context, x: p.X, y: p.Y}
+	if surface.reader != nil && surface.scope == "main" && m.logWorkspaceActive() && surface.reader == &m.podLogViewer().Reader {
+		g.log = m.podLogViewer()
+		g.logDropped = g.log.Dropped
+		g.log.Pause()
+	} else {
+		g.spans = slices.Clone(m.mouse.spans)
+	}
+	m.mouse.text = g
+	return true, nil
 }
 
 func (m *model) inputSurface() mouseTextSurface {

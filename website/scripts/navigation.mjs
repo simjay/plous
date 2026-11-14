@@ -5,6 +5,6 @@ export const groups = [
   { label: 'Agent skills', items: [['Overview','agent-skills'],['plous-debug','agent-skills/plous-debug']] },
   { label: 'Tutorials', items: [['Investigate a restarting Pod','guides/investigate-restarting-pod'],['Kubernetes playground','integrations/kubernetes/playground'],['GitOps playground','integrations/gitops/playground']] },
   { label: 'Integrations', items: [['Capabilities & connection setup','integrations'],['Kubernetes','integrations/kubernetes'],['Helm','integrations/helm'],['Argo CD','integrations/argo'],['Flux','integrations/flux']] },
-  { label: 'Reference', items: [['Keyboard shortcuts & commands','reference/keymap'],['Configuration','reference/configuration'],['Data & privacy','reference/data-and-privacy'],['Troubleshooting','reference/troubleshooting']] },
+  { label: 'Reference', items: [['Keyboard shortcuts and commands','reference/keymap'],['Configuration','reference/configuration'],['Data & privacy','reference/data-and-privacy'],['Troubleshooting','reference/troubleshooting']] },
   { label: 'Developers', items: [['Contributing','contributing'],['Architecture','contributing/#build-and-layout'],['AI implementation','contributing/ai-assistant'],['Testing & benchmarks','contributing/#run-checks'],['Releases','contributing/releases'],['Website maintenance','contributing/website']] },
 ];

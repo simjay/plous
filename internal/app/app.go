@@ -21,7 +21,7 @@ func Run(version string) int {
 	allowExec := flag.Bool("allow-exec", false, "Allow agent commands in containers in the captured default namespace")
 	diagnosticImage := flag.String("diagnostic-image", "", "Enable temporary agent tests using this diagnostic image")
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: plous [options]\n       plous setup codex|claude [options]\n       plous mcp serve --context NAME [options]")
+		fmt.Fprintln(os.Stderr, "Usage: plous [options]\n       plous setup codex|claude [options]\n       plous mcp serve [options]")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -36,7 +36,7 @@ func Run(version string) int {
 			defer cancel()
 			return debugging.Run(ctx, flag.Args(), os.Stdin, os.Stdout, os.Stderr, version, *dataDir, policy)
 		}
-		fmt.Fprintln(os.Stderr, "Usage: plous [--version] [--data-dir PATH] [--allow-exec] [--diagnostic-image IMAGE]\n       plous setup codex|claude [options]\n       plous mcp serve --context NAME [options]")
+		fmt.Fprintln(os.Stderr, "Usage: plous [--version] [--data-dir PATH] [--allow-exec] [--diagnostic-image IMAGE]\n       plous setup codex|claude [options]\n       plous mcp serve [options]")
 		return 2
 	}
 	return tui.Run(version, *dataDir, policy)

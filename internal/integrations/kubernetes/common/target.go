@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -32,27 +33,49 @@ func loadConfiguration(paths string) (*clientcmdapi.Config, string, error) {
 	if paths != "" {
 		rules.Precedence = filepath.SplitList(paths)
 	}
-	resolved := make([]string, 0, len(rules.Precedence))
+	resolved, err := normalizeConfigPaths(rules.Precedence)
+	if err != nil {
+		return nil, "", err
+	}
+	rules.Precedence = resolved
 	for _, path := range rules.Precedence {
-		if path == "" {
-			continue
-		}
-		path, err := resolvePath(path)
-		if err != nil {
-			return nil, "", err
-		}
 		// Validate bounded input without surfacing parser excerpts or credentials.
 		if _, err = readContexts(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return nil, "", err
 		}
-		resolved = append(resolved, path)
 	}
-	rules.Precedence = resolved
 	raw, err := rules.Load()
 	if err != nil {
 		return nil, "", errors.New("Cannot load kubeconfig. Check its paths and YAML configuration.")
 	}
 	return raw, strings.Join(resolved, string(os.PathListSeparator)), nil
+}
+
+// NormalizeConfigPaths anchors explicitly supplied relative paths without loading credentials.
+func NormalizeConfigPaths(paths string) (string, error) {
+	resolved, err := normalizeConfigPaths(filepath.SplitList(paths))
+	if err != nil {
+		return "", err
+	}
+	if paths != "" && len(resolved) == 0 {
+		return "", errors.New("Choose a kubeconfig path.")
+	}
+	return strings.Join(resolved, string(os.PathListSeparator)), nil
+}
+
+func normalizeConfigPaths(paths []string) ([]string, error) {
+	var resolved []string
+	for _, path := range paths {
+		if path == "" {
+			continue
+		}
+		absolute, err := resolvePath(path)
+		if err != nil {
+			return nil, err
+		}
+		resolved = append(resolved, absolute)
+	}
+	return resolved, nil
 }
 
 // DiscoverCurrent reads local metadata only, without clients or authentication.
@@ -128,6 +151,12 @@ func (t *Target) Loader(namespace string) clientcmd.ClientConfig {
 		namespace = t.Namespace
 	}
 	return clientcmd.NewNonInteractiveClientConfig(*t.raw.DeepCopy(), t.Context, &clientcmd.ConfigOverrides{CurrentContext: t.Context, Context: clientcmdapi.Context{Namespace: namespace}}, nil)
+}
+
+// SameConfig compares snapshots without exposing credentials or config contents.
+func (t *Target) SameConfig(other *Target) bool {
+	return t != nil && other != nil && t.Fingerprint == other.Fingerprint &&
+		t.Paths == other.Paths && t.Namespace == other.Namespace && reflect.DeepEqual(t.raw, other.raw)
 }
 
 func (t *Target) CheckIdentity() error {

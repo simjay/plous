@@ -165,10 +165,13 @@ func (op *operation) connectionParameter(owner string) map[string]any {
 	var ids []string
 	var descriptions []string
 	for _, c := range op.o.Connections {
-		if c.Tool == owner {
+		if c.Tool == owner && c.ConnectionID != "" {
 			ids = append(ids, c.ConnectionID)
 			descriptions = append(descriptions, c.Name+"; context="+c.Context+"; default_namespace="+c.Namespace)
 		}
+	}
+	if len(ids) == 0 {
+		return map[string]any{"type": "string", "minLength": 1, "description": "Exact ID for this tool in the current connection inventory."}
 	}
 	return map[string]any{"type": "string", "enum": ids, "description": strings.Join(descriptions, " | ")}
 }

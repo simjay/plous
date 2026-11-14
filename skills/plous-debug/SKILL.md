@@ -9,7 +9,7 @@ Use the connected Plous tools for runtime evidence. When the host provides repos
 
 ## Investigate
 
-Identify the expected behavior, symptom, workload, namespace, and relevant time window. Use the captured connection inventory supplied by the MCP server; naming another context does not switch it. If the target is wrong, have the user reconfigure and reconnect the server.
+Identify the expected behavior, symptom, workload, namespace, and relevant time window. If `kubernetes_context_read` is available, call it first for the current target and connection IDs. Refresh that inventory if a context switch invalidates a connection ID. Otherwise use the connection supplied by the Plous panel. If the current target differs from the requested one, ask the user to select the intended context before continuing.
 
 Read workload and Pod state, container names, termination reasons, and events before selecting logs. `kubernetes_resources_read` supports get and describe; events are resources. `kubernetes_logs_read` requires an explicit container and can read previous-instance logs with previous=true. Follow concrete errors to related services and workloads within the captured cluster. Match error messages and configuration assumptions to repository code.
 

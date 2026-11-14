@@ -2,20 +2,16 @@ package debugging
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/pelletier/go-toml/v2"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
+	"github.com/pelletier/go-toml/v2"
 	"github.com/simjay/plous/internal/ai/agent"
-	kubecommon "github.com/simjay/plous/internal/integrations/kubernetes/common"
-	kubernetes "github.com/simjay/plous/internal/integrations/kubernetes/monitor"
 	"github.com/simjay/plous/skills"
 )
 
@@ -23,18 +19,7 @@ const skillMarker = "<!-- Managed by plous setup. -->\n"
 const configStart = "# BEGIN PLOUS DEBUG MCP"
 const configEnd = "# END PLOUS DEBUG MCP"
 
-func install(ctx context.Context, c configuration, target *kubecommon.Target, output io.Writer) error {
-	if !c.skipCheck {
-		client, err := kubernetes.NewTarget(target, c.namespace)
-		if err != nil {
-			return errors.New("cannot initialize Kubernetes connection")
-		}
-		check, cancel := context.WithTimeout(ctx, 15*time.Second)
-		defer cancel()
-		if err = client.CheckConnection(check); err != nil {
-			return errors.New("Kubernetes API connection check failed; check authentication and network access, or use --skip-check")
-		}
-	}
+func install(c configuration, output io.Writer) error {
 	home := c.home
 	if home == "" {
 		var err error
@@ -55,7 +40,14 @@ func install(ctx context.Context, c configuration, target *kubecommon.Target, ou
 	if err != nil {
 		return err
 	}
-	args := []string{"mcp", "serve", "--agent", string(c.kind), "--kubeconfig", c.paths, "--context", c.context, "--namespace", c.namespace, "--data-dir", c.dataDir}
+	args := []string{"mcp", "serve", "--agent", string(c.kind), "--data-dir", c.dataDir}
+	for _, option := range []struct{ flag, value string }{
+		{"--kubeconfig", c.paths}, {"--context", c.context}, {"--namespace", c.namespace},
+	} {
+		if option.value != "" {
+			args = append(args, option.flag, option.value)
+		}
+	}
 	if c.policy.Exec {
 		args = append(args, "--allow-exec")
 	}
@@ -98,7 +90,14 @@ func install(ctx context.Context, c configuration, target *kubecommon.Target, ou
 	if err = writeInstallFile(configPath, newConfig); err != nil {
 		return fmt.Errorf("skill installed, but MCP configuration could not be saved: %w", err)
 	}
-	fmt.Fprintf(output, "Installed plous-debug for %s.\nSkill: %s\nMCP configuration: %s\nTarget: %s / %s\nExec enabled: %t\nTemporary diagnostics enabled: %t\nRestart or reconnect the agent.\n", c.kind.Label(), skillPath, configPath, c.context, c.namespace, c.policy.Exec, c.policy.Image != "")
+	target := c.context
+	if target == "" {
+		target = "follows kubeconfig current context"
+	}
+	if c.namespace != "" {
+		target += " / " + c.namespace
+	}
+	fmt.Fprintf(output, "Installed plous-debug for %s.\nSkill: %s\nMCP configuration: %s\nTarget: %s\nExec enabled: %t\nTemporary diagnostics enabled: %t\nRestart or reconnect the agent.\n", c.kind.Label(), skillPath, configPath, target, c.policy.Exec, c.policy.Image != "")
 	return nil
 }
 
@@ -121,7 +120,7 @@ func mergeConfig(kind agent.Kind, old []byte, executable string, args []string) 
 		} else if servers, ok := existing["mcp_servers"].(map[string]any); ok && servers[name] != nil {
 			return nil, errors.New("Codex already has an unmanaged plous_debug MCP server")
 		}
-		section, err := toml.Marshal(map[string]any{"command": executable, "args": args, "tool_timeout_sec": 150})
+		section, err := toml.Marshal(map[string]any{"command": executable, "args": args, "tool_timeout_sec": 150, "env_vars": []string{"KUBECONFIG"}})
 		if err != nil {
 			return nil, err
 		}

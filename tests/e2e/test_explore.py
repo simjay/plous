@@ -3,6 +3,7 @@
 from copy import deepcopy
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import base64
 import json
 import queue
 from pathlib import Path
@@ -544,6 +545,53 @@ class ExploreTests(ExploreFixture):
         app.assert_exit()
         self.assertFalse(self.mutations)
         self.assertEqual(self.config.read_bytes(), self.original)
+
+    def test_log_mouse_selection_scrolls_both_directions_and_copies_hidden_rows(self):
+        self.log_chunks = queue.Queue()
+        self.addCleanup(lambda: self.log_chunks.put(None))
+        app = self.open_resource()
+        app.send("\r")
+        app.expect_screen("Pod overview")
+        app.send("l")
+        records = [f"record {i:03d}" for i in range(40)]
+        self.log_chunks.put(("\n".join(records) + "\n").encode())
+        app.expect_screen(records[-1])
+
+        def point(text):
+            for y, row in enumerate(app.screen()["rows"]):
+                x = row.find(text)
+                if x >= 0:
+                    return x, y
+            self.fail("Missing visible log text " + text)
+
+        x, y = point(records[-1])
+        self.assertNotIn(records[0], "\n".join(app.screen()["rows"]))
+        app.mouse_press(x + len(records[-1]) - 1, y)
+        app.mouse_drag(x, 6)
+        app.expect_screen(records[0])
+        self.log_chunks.put(b"appended while selecting\n")
+        app.expect_screen("1 new line")
+        app.mouse_release(x, 6)
+        before = len(app.output)
+        app.send("y")
+        copied = base64.b64encode("\n".join(records).encode())
+        app.wait(lambda: b"\x1b]52;c;" + copied in app.output[before:], "all selected log rows")
+
+        x, y = point(records[0])
+        app.mouse_press(x, y)
+        bottom = len(app.screen()["rows"]) - 2
+        app.mouse_drag(x + len(records[-1]) - 1, bottom)
+        # The appended row can appear one tick before the viewport reaches the
+        # end. Wait for the final empty row before using screen coordinates.
+        total = len(records) + 2
+        app.expect_screen(f"-{total} / {total}")
+        x, y = point(records[-1])
+        app.mouse_release(x + len(records[-1]) - 1, y)
+        before = len(app.output)
+        app.send("y")
+        app.wait(lambda: b"\x1b]52;c;" + copied in app.output[before:], "selection after scrolling back down")
+        app.send("\x03")
+        app.assert_exit()
 
     def test_logs_keep_collecting_while_reading_and_resume_without_refetch(self):
         self.log_chunks = queue.Queue()

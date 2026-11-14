@@ -257,6 +257,9 @@ func (m *model) logContainers() []string {
 
 func (m *model) resetExploreLogs() {
 	e := m.explorer()
+	if g := m.mouse.text; g != nil && g.log != nil {
+		m.mouse.reset()
+	}
 	e.LogError = ""
 	e.WorkloadLogStatus = kubernetes.WorkloadLogStatus{}
 	e.LogConnected = false

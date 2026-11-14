@@ -139,6 +139,8 @@ Workload **All Pods** follows controller ownership. Pod **All application contai
 
 Collection continues while you read or search. Current-log membership is checked every three seconds. Up to 32 sources are selected in Pod-name order, with omissions reported.
 
+To copy logs beyond the visible rows, drag a selection to the top or bottom edge of the log text and hold there to scroll. Release, then press `y` or click **Copy selection**.
+
 Each source initially requests up to 200 lines. The buffer keeps at most 128 KiB or 5,000 complete lines and reports eviction. Previous logs depend on Kubernetes retention.
 
 ## Container terminals

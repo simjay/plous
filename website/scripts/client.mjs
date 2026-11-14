@@ -79,9 +79,13 @@ document.addEventListener('click',async event=>{
     if(control.startsWith('copy-')){
       try{await navigator.clipboard.writeText(codes[Number(control.slice(5))]??'');button.setAttribute('aria-label','Copied code')}catch{button.setAttribute('aria-label','Select the code to copy')}
     }
-    if(control.startsWith('group-')){
-      const items=button.nextElementSibling;
-      if(items){const open=button.getAttribute('aria-expanded')!=='false';button.setAttribute('aria-expanded',String(!open));items.style.display=open?'none':'flex';items.inert=open}
+    if(control==='contents'||control.startsWith('group-')){
+      const open=button.getAttribute('aria-expanded')!=='false';
+      button.setAttribute('aria-expanded',String(!open));
+      if(control!=='contents'){
+        const items=button.nextElementSibling;
+        if(items){items.style.display=open?'none':'flex';items.inert=open}
+      }
     }
   }
   const link=event.target.closest('[data-rune-a11y] a[href]');

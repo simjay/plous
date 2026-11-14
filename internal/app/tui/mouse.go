@@ -62,7 +62,7 @@ func (m *model) mouseContext() string {
 	}
 
 	if e := m.explore; e != nil {
-		s += fmt.Sprintf("/k:%s/%s/%d/%s/%p/%p", e.Key, e.Resource.Key(), e.Tab, e.Picker, e.Log, e.Terminal)
+		s += fmt.Sprintf("/k:%s/%s/%d/%s/%s/%p", e.Key, e.Resource.Key(), e.Tab, e.Picker, e.LogKey, e.Terminal)
 		if e.Detail != nil {
 			s += "/" + string(e.Detail.GetUID()) + "/" + e.Detail.GetName()
 		}
@@ -117,8 +117,8 @@ func (m *model) updateMouse(msg tea.MouseMsg) tea.Cmd {
 	if m.updateScreenMouse(msg, span) {
 		return nil
 	}
-	if m.updateTextMouse(msg, span, hit, now, context) {
-		return nil
+	if handled, cmd := m.updateTextMouse(msg, span, hit, now, context); handled {
+		return cmd
 	}
 	if span.Target != "clipboard/copy" && !m.screenSelectionControl(span) {
 		m.startScreenMouse(msg, span)
@@ -131,8 +131,9 @@ func (m *model) updateMouse(msg tea.MouseMsg) tea.Cmd {
 	}
 	switch msg.(type) {
 	case tea.MouseMotionMsg:
-		if p := m.mouse.press; p != nil && (p.x != point.X || p.y != point.Y) {
-			m.mouse.reset()
+		if p := m.mouse.press; p != nil && (absMouse(p.x-point.X) > 1 || absMouse(p.y-point.Y) > 1) {
+			// Cancel the button gesture without discarding the text being copied.
+			m.mouse.press, m.mouse.last = nil, nil
 		}
 	case tea.MouseWheelMsg:
 		m.mouse.reset()

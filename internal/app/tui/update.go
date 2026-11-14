@@ -39,6 +39,9 @@ func (m *model) Update(msg tea.Msg) (next tea.Model, command tea.Cmd) {
 	}
 	m.nativeScroll.pending = nil
 	m.nativeScroll.onlyNative = false
+	if tick, ok := msg.(logDragTick); ok {
+		return m, m.updateLogDrag(tick)
+	}
 	// Animation ticks only redraw; they must not start requests or change navigation.
 	if _, ok := msg.(loadingTickMsg); ok {
 		m.loadingTickPending = false
