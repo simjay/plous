@@ -56,6 +56,8 @@ Use short sentences and concrete names. Avoid semicolons and em dashes in prose.
 
 Label code fences by language. Format long argument arrays across lines. Keep plain-text output separate from commands. Verify colors in light and dark themes, static HTML, and live Rune.
 
+Place the interactive examples where they help explain a step. The `plous-example` markers in Quickstart render the terminal recording and panel controls.
+
 Keep the approved flat navigation groups and separate Argo CD and Flux guides. Preserve public routes and heading links when moving content. Development source links use main. Release corrections link to their exact source commit.
 
 ## GitHub Pages setup
@@ -93,7 +95,7 @@ Release archives and SHA-256 files live as GitHub release assets. They do not de
 
 ### Correct released docs
 
-Run **Correct released documentation** on main and enter the released version. For example:
+Run **Correct released documentation** from a revision whose application source matches the release. This command corrects v0.0.3 from a matching main revision.
 
 ```sh
 gh workflow run docs-correction.yml --ref main \
@@ -104,7 +106,7 @@ The workflow rejects a draft release, a version mismatch, or application-source 
 
 Corrections add new archives without replacing the original snapshot or application assets. Pages uses the newest complete correction. The application version and release tag do not change, and Homebrew is not triggered.
 
-If the application has advanced beyond the target release, prepare the correction from matching application source. Do not relabel newer behavior as older-version docs.
+If main has advanced beyond the target release, start from that version's current documentation source and apply the relevant website and guide changes. Push a correction branch and pass it to `--ref`. Keep the release branch's application source and version-specific instructions intact.
 
 ### Recover a failed publication
 

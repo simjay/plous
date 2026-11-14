@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::OnceLock;
 use rune::{AppSpec, Color, Cx, El, ImageCache, Span, SurfaceFit, TextStyle, col, el, row, text};
 use rune_kit::{Markdown, MarkdownStyle};
@@ -18,7 +18,22 @@ struct Heading {
     #[cfg(not(target_arch="wasm32"))] offset: usize,
 }
 #[derive(Deserialize)]
-struct Page { route: String, href: String, title: String, body: String, headings: Vec<Heading>, section: String, developers: bool, edit: String }
+#[serde(rename_all = "kebab-case")]
+enum Example { PanelFocus, TerminalReplay }
+impl Example {
+    fn marker(&self) -> &'static str {
+        match self {
+            Self::PanelFocus => "plous-example:panel-focus",
+            Self::TerminalReplay => "plous-example:terminal-replay",
+        }
+    }
+}
+#[derive(Deserialize)]
+struct Page {
+    route: String, href: String, title: String, body: String, headings: Vec<Heading>,
+    section: String, developers: bool, edit: String,
+    #[serde(default)] examples: Vec<Example>,
+}
 #[derive(Deserialize)]
 struct Content {
     version: String,
@@ -49,22 +64,38 @@ impl Paint {
 const BODY: TextStyle = TextStyle::new(16.0,400.0).lh(27.0);
 const LABEL: TextStyle = TextStyle::new(14.0,500.0).lh(21.0);
 const SMALL: TextStyle = TextStyle::new(13.0,400.0).lh(20.0);
-const SECTION: TextStyle = TextStyle::new(26.0,650.0).lh(38.0).tracking(-0.4);
+const SECTION: TextStyle = TextStyle::new(24.0,600.0).lh(32.0);
+
+#[derive(Clone, Copy)]
+enum Icon { Terminal, Code, Skill, Arrow, Right, Down, Search, Theme, Menu }
+
 // Shape paths export as SVG and use the same geometry in the GPU view.
-fn symbol(kind: usize,size: f32,color: Color) -> El {
+fn symbol(icon: Icon,size: f32,color: Color) -> El {
     use rune::{Path,Shape,LineCap,canvas};
     let path=|points: &[[f32;2]]| {
         let mut value=Path::new().move_to(points[0]);
         for point in &points[1..] {value=value.line_to(*point);}
         value
     };
-    let paths=match kind {
-        0=>vec![path(&[[5.0,7.0],[10.0,12.0],[5.0,17.0]]),path(&[[13.0,17.0],[19.0,17.0]])],
-        1=>vec![path(&[[9.0,7.0],[4.0,12.0],[9.0,17.0]]),path(&[[15.0,7.0],[20.0,12.0],[15.0,17.0]]),path(&[[13.0,4.0],[11.0,20.0]])],
-        2=>vec![path(&[[12.0,3.0],[14.5,9.5],[21.0,12.0],[14.5,14.5],[12.0,21.0],[9.5,14.5],[3.0,12.0],[9.5,9.5],[12.0,3.0]])],
-        3=>vec![path(&[[5.0,12.0],[19.0,12.0]]),path(&[[13.0,6.0],[19.0,12.0],[13.0,18.0]])],
-        4=>vec![path(&[[10.0,7.0],[15.0,12.0],[10.0,17.0]])],
-        _=>vec![path(&[[7.0,10.0],[12.0,15.0],[17.0,10.0]])],
+    let paths=match icon {
+        Icon::Terminal=>vec![path(&[[5.0,7.0],[10.0,12.0],[5.0,17.0]]),path(&[[13.0,17.0],[19.0,17.0]])],
+        Icon::Code=>vec![path(&[[9.0,7.0],[4.0,12.0],[9.0,17.0]]),path(&[[15.0,7.0],[20.0,12.0],[15.0,17.0]]),path(&[[13.0,4.0],[11.0,20.0]])],
+        Icon::Skill=>vec![
+            path(&[[6.0,4.0],[14.0,4.0],[18.0,8.0],[18.0,20.0],[6.0,20.0],[6.0,4.0]]),
+            path(&[[9.0,11.0],[15.0,11.0]]),path(&[[9.0,15.0],[15.0,15.0]]),
+        ],
+        Icon::Arrow=>vec![path(&[[5.0,12.0],[19.0,12.0]]),path(&[[13.0,6.0],[19.0,12.0],[13.0,18.0]])],
+        Icon::Right=>vec![path(&[[10.0,7.0],[15.0,12.0],[10.0,17.0]])],
+        Icon::Down=>vec![path(&[[7.0,10.0],[12.0,15.0],[17.0,10.0]])],
+        Icon::Search=>vec![
+            path(&[[10.0,4.0],[14.2,5.7],[16.0,10.0],[14.2,14.2],[10.0,16.0],[5.8,14.2],[4.0,10.0],[5.8,5.8],[10.0,4.0]]),
+            path(&[[14.4,14.4],[20.0,20.0]]),
+        ],
+        Icon::Theme=>vec![
+            path(&[[12.0,4.0],[17.7,6.3],[20.0,12.0],[17.7,17.7],[12.0,20.0],[6.3,17.7],[4.0,12.0],[6.3,6.3],[12.0,4.0]]),
+            path(&[[12.0,4.0],[12.0,20.0]]),
+        ],
+        Icon::Menu=>vec![path(&[[4.0,7.0],[20.0,7.0]]),path(&[[4.0,12.0],[20.0,12.0]]),path(&[[4.0,17.0],[20.0,17.0]])],
     };
     let mut shape=Shape::new().view_box(24.0,24.0);
     for path in paths {shape=shape.stroke_path(&path,1.7,LineCap::Round,color);}
@@ -81,6 +112,7 @@ extern "C" {
     #[wasm_bindgen(js_namespace=window,js_name=plousOpenSearch)] fn open_search();
     #[wasm_bindgen(js_namespace=window,js_name=plousOpenMenu)] fn open_menu();
     #[wasm_bindgen(js_namespace=window,js_name=plousOpenVersions)] fn open_versions();
+    #[wasm_bindgen(js_namespace=window,js_name=plousOpenQuickstart)] fn open_quickstart();
     #[wasm_bindgen(js_namespace=window,js_name=plousRuneMarkdown)] fn browser_markdown(source: &str) -> String;
 }
 impl State {
@@ -114,6 +146,11 @@ fn button(key: &str,label: &str,p: Paint) -> El {
     row().key(key).role("button").label(label).focusable(true).h(36.0).px(12.0).center_y().fill(p.surface).radius(6.0).hover(p.wash).press_scale(0.98)
         .child(txt(&format!("{key}-text"),label,LABEL,p.ink))
 }
+fn header_action(key: &str, label: &str, icon: Icon, p: Paint) -> El {
+    row().key(key).role("button").label(label).focusable(true).focus_ring(2.0, 2.0, p.blue)
+        .size(44.0,44.0).center().radius(6.0).fill(p.bg).hover(p.surface)
+        .child(symbol(icon,20.0,p.ink))
+}
 fn asset(name: &str) -> String {
     #[cfg(target_arch="wasm32")]
     return format!("{}assets/{name}",content().base);
@@ -133,28 +170,28 @@ fn picture(s: &State,cx: &Cx<State>,key: &str,name: &str,width: f32,alt: &str) -
 fn header(s: &State,cx: &Cx<State>,phone: bool,p: Paint) -> El {
     let brand=row().key("brand").href(&content().root).label("Plous home").gap(10.0).center_y()
         .child(picture(s,cx,"brand-wordmark",if s.dark {"lockup-dark.svg"} else {"lockup.svg"},104.0,"Plous").size(104.0,104.0*124.0/375.0));
-    let mut nav=row().key("primary").role("navigation").label("Primary").center_y().gap(if phone {4.0} else {24.0});
+    let mut nav=row().key("primary").role("navigation").label("Primary").center_y().gap(if phone {4.0} else {16.0});
     let docs=link("nav-docs","Docs",&format!("{}docs/",content().base),p);
     let developers=link("nav-developers","Developers",&format!("{}docs/contributing/",content().base),p);
     nav=nav.child(if phone {docs.absolute(0.0,0.0).w(0.0).h(0.0).clip_rounded(0.0).a11y_hidden()} else {docs})
         .child(if phone {developers.absolute(0.0,0.0).w(0.0).h(0.0).clip_rounded(0.0).a11y_hidden()} else {developers});
-    nav=nav.child(button("search","Search",p).px(if phone {8.0} else {12.0}).label("Search documentation").on_press(|_: &mut State| { #[cfg(target_arch="wasm32")] open_search(); }));
-    nav=nav.child(button("theme",if s.dark {"Light"} else {"Dark"},p).px(if phone {8.0} else {12.0}).label("Change color theme").on_press(|s: &mut State| {
+    nav=nav.child(header_action("search","Search documentation",Icon::Search,p).on_press(|_: &mut State| { #[cfg(target_arch="wasm32")] open_search(); }));
+    nav=nav.child(header_action("theme","Change color theme",Icon::Theme,p).on_press(|s: &mut State| {
         s.dark=!s.dark;
         #[cfg(target_arch="wasm32")] set_browser_dark(s.dark);
     }));
-    let menu=button("menu","Menu",p).px(8.0).label("Open navigation").on_press(|_: &mut State| { #[cfg(target_arch="wasm32")] open_menu(); });
+    let menu=header_action("menu","Open navigation",Icon::Menu,p).on_press(|_: &mut State| { #[cfg(target_arch="wasm32")] open_menu(); });
     nav=nav.child(if phone {menu} else {menu.absolute(0.0,0.0).w(0.0).h(0.0).px(0.0).clip_rounded(0.0).a11y_hidden()});
-    row().key("header").role("banner").w_full().h(76.0).justify_between().center_y().child(brand).child(nav)
+    row().key("header").role("banner").w_full().h(if phone {64.0} else {72.0}).justify_between().center_y().child(brand).child(nav)
 }
 fn workflows(p: Paint,phone: bool) -> El {
     let mut cards=(if phone {col()} else {row().items_stretch()}).key("workflows").w_full().gap(16.0);
-    for (i,path) in content().paths.iter().enumerate() {
+    for (i,(path,icon)) in content().paths.iter().zip([Icon::Terminal,Icon::Code,Icon::Skill]).enumerate() {
         let card=col().key(format!("workflow-{i}")).href(&path.href).padding(18.0).gap(12.0)
             .fill(p.surface).border(1.0,p.line).radius(10.0).hover(p.wash).hover_group()
             .child(row().justify_between().center_y()
-                .child(row().size(36.0,36.0).center().fill(p.wash).radius(7.0).child(symbol(i,22.0,p.blue)))
-                .child(symbol(3,18.0,p.blue)))
+                .child(row().size(36.0,36.0).center().fill(p.wash).radius(7.0).child(symbol(icon,22.0,p.blue)))
+                .child(symbol(Icon::Arrow,18.0,p.blue)))
             .child(workflow_title(i,&path.title,p))
             .child(txt(&format!("workflow-description-{i}"),&path.description,TextStyle::new(14.0,400.0).lh(22.0),p.muted).w_full());
         cards=cards.child(if phone {card.w_full()} else {card.w(0.0).grow(1.0)});
@@ -180,7 +217,7 @@ fn workflow_rows(p: Paint) -> El {
             .child(col().w(0.0).grow(1.0).gap(4.0)
                 .child(workflow_title(i,&path.title,p))
                 .child(txt(&format!("workflow-description-{i}"),&path.description,TextStyle::new(14.0,400.0).lh(20.0),p.muted).w_full()))
-            .child(symbol(3,16.0,p.muted))
+            .child(symbol(Icon::Arrow,16.0,p.muted))
     });
     col().key("workflow-section").w_full().gap(8.0)
         .child(txt("choose-your-workflow","Choose your workflow",TextStyle::new(24.0,600.0).lh(32.0),p.ink).role("heading").level(2))
@@ -227,36 +264,34 @@ fn version_button(p: Paint) -> El {
 fn sidebar(s: &State,page: &Page,phone: bool,p: Paint) -> El {
     let index = page.route == "docs/";
     let mut nav=col().key("sidebar").role("navigation").label("Documentation navigation")
-        .w(228.0).mt(28.0);
-    nav = if index { nav.w(208.0).gap(4.0) }
-        else { nav.gap(6.0).padding(14.0).fill(p.surface).border(1.0,p.line).radius(10.0) };
+        .w(if index {208.0} else {216.0}).mt(24.0).gap(4.0);
     nav=nav.child(version_button(p));
     let root = link("sidebar-root",if page.developers {"User docs"} else {"Docs"},&format!("{}docs/",content().base),p);
-    nav=nav.child(if index { root.label("Docs, current page").px(12.0).py(8.0)
+    let root = root.px(12.0).py(8.0);
+    nav=nav.child(if index { root.label("Docs, current page")
         .border_sides([0.0,0.0,0.0,2.0],p.blue).fill(p.surface) } else { root });
     for (i,group) in content().navigation.iter().enumerate().filter(|(_,g)| (g.label=="Developers")==page.developers) {
         let opened=s.open.contains(&i);
-        let title=button(&format!("group-toggle-{i}"),&group.label,p).w_full().mt(if index {0.0} else {6.0})
-            .fill(if index {p.bg} else {p.surface})
-            .justify_between().child(symbol(if opened {5} else {4}, 16.0, p.muted)).expanded(opened)
+        let title=button(&format!("group-toggle-{i}"),&group.label,p).w_full()
+            .fill(p.bg)
+            .justify_between().child(symbol(if opened {Icon::Down} else {Icon::Right}, 16.0, p.muted)).expanded(opened)
             .on_press(move |s: &mut State| { if !s.open.remove(&i) {s.open.insert(i);} });
         let mut items=col().key(format!("group-items-{i}")).w_full().gap(2.0).pt(4.0);
         for (j,item) in group.items.iter().enumerate() {
             let selected=item.href.split('#').next()==Some(page.href.as_str()) && !item.href.contains('#');
             items=items.child(row().key(format!("nav-link-{i}-{j}")).href(&item.href).w_full().py(7.0).px(12.0)
-                .radius(5.0).fill(if selected {p.wash} else if index {p.bg} else {p.surface}).hover(p.wash)
-                .border_sides([0.0,0.0,0.0,if selected {3.0} else {0.0}],p.blue)
+                .radius(4.0).fill(if selected {p.wash} else {p.bg}).hover(p.wash)
+                .border_sides([0.0,0.0,0.0,if selected {2.0} else {0.0}],p.blue)
                 .child(txt(&format!("nav-label-{i}-{j}"),&item.title,TextStyle::new(14.0,if selected {600.0} else {400.0}).lh(21.0),if selected {p.blue} else {p.muted}).w(0.0).grow(1.0)));
         }
         if !opened {
-            items=items.h(0.0).clip_rounded(0.0).a11y_hidden();
-            if index { items=items.absolute(0.0,0.0); }
+            items=items.h(0.0).clip_rounded(0.0).a11y_hidden().absolute(0.0,0.0);
         }
         nav=nav.child(title).child(items);
     }
     if phone {nav.absolute(0.0,0.0).w(0.0).h(0.0).padding(0.0).mt(0.0).clip_rounded(0.0).a11y_hidden()} else {nav}
 }
-fn markdown(s: &State,page: &Page,width: f32,p: Paint) -> El {
+fn markdown(s: &State,cx: &Cx<State>,page: &Page,width: f32,p: Paint) -> El {
     #[cfg(target_arch="wasm32")]
     let source=browser_markdown(&page.body);
     #[cfg(not(target_arch="wasm32"))]
@@ -313,9 +348,32 @@ fn markdown(s: &State,page: &Page,width: f32,p: Paint) -> El {
                         .on_press_tx(move |_: &mut State,tx| tx.copy(value.clone()))))
                 .child(card)
         });
-    md.render(&style)
+    if page.examples.is_empty() {
+        return md.render(&style);
+    }
+    let examples = std::cell::RefCell::new(page.examples.iter().map(|example| {
+        let content = match example {
+            Example::PanelFocus => examples::panels(s,cx,p),
+            Example::TerminalReplay => quickstart_recording(s,cx,p),
+        };
+        (example.marker(), content)
+    }).collect::<BTreeMap<_,_>>());
+    md.quote_frame(move |quote, frame| examples.borrow_mut().remove(frame.text).unwrap_or(quote)).render(&style)
 }
-fn docs_index(s: &State, page: &Page, width: f32, stack: bool, p: Paint) -> El {
+fn quickstart_recording(s: &State, cx: &Cx<State>, p: Paint) -> El {
+    col().w_full().gap(8.0)
+        .child(picture(s,cx,"quickstart-poster","plous-quickstart-poster.png",760.0,
+            "Plous Explore in a terminal showing Pods from the local test fixture.")
+            .w_full().aspect_ratio(1280.0/576.0).radius(8.0).border(1.0,p.line))
+        .child(row().w_full().gap(12.0).center_y().flex_wrap()
+            .child(button("quickstart-recording","Play terminal recording",p)
+                .h(44.0)
+                .on_press(|_: &mut State| {
+                    #[cfg(target_arch="wasm32")] open_quickstart();
+                }))
+            .child(txt("quickstart-fixture","Local Kubernetes test fixture",SMALL,p.muted)))
+}
+fn docs_index(s: &State, cx: &Cx<State>, page: &Page, width: f32, stack: bool, p: Paint) -> El {
     let title = TextStyle::new(if stack {40.0} else {56.0},600.0)
         .lh(if stack {44.0} else {60.0}).tracking(-1.6);
     let intro = col().gap(12.0)
@@ -327,7 +385,7 @@ fn docs_index(s: &State, page: &Page, width: f32, stack: bool, p: Paint) -> El {
         .child(workflow_rows(p))
         .child(index_links(p, stack))
         .child(col().w_full().gap(16.0).child(rule("name-rule",p))
-            .child(markdown(s,page,width.min(640.0),p)))
+            .child(markdown(s,cx,page,width.min(640.0),p)))
         .child(col().w_full().gap(8.0).child(rule("edit-rule",p)).child(edit_link(page,p)))
 }
 fn edit_link(page: &Page, p: Paint) -> El {
@@ -337,18 +395,22 @@ fn article(s: &State,cx: &Cx<State>,page: &Page,narrow: bool,wide: bool,p: Paint
     let width = cx.layout_size("article").map_or(if narrow {350.0} else {700.0}, |v| v[0]);
     let mut header = col().w_full().gap(8.0);
     if page.section != page.title {
-        header = header.child(txt("section-name",&page.section,LABEL,p.muted));
+        let mut context = row().w_full().justify_between().center_y()
+            .child(txt("section-name",&page.section,SMALL,p.muted));
+        if narrow {
+            context = context.child(txt("guide-version",&content().version,SMALL,p.muted));
+        }
+        header = header.child(context);
     }
-    header = header.child(txt("top",&page.title,TextStyle::new(if narrow {32.0} else {42.0},650.0)
-        .lh(if narrow {40.0} else {50.0}).tracking(-0.9),p.ink).role("heading").level(1));
+    header = header.child(txt("top",&page.title,TextStyle::new(if narrow {36.0} else {44.0},600.0)
+        .lh(if narrow {44.0} else {52.0}).tracking(-0.9),p.ink).role("heading").level(1));
     let header = if page.headings.iter().any(|heading| heading.level == 2) {
         header.child(inline_contents(s,page,wide,p))
     } else { header };
     let mut body = col().key("article").w_full().max_w(760.0).gap(24.0)
-        .py(if narrow {28.0} else {42.0}).child(header);
-    if page.route == "docs/getting-started/" { body = body.child(examples::panels(s,cx,p)); }
+        .py(if narrow {24.0} else {40.0}).child(header);
     if page.route == "docs/mcp/setup/" { body = body.child(examples::target(s,cx,p)); }
-    body.child(markdown(s,page,width,p))
+    body.child(markdown(s,cx,page,width,p))
         .child(rule("edit-rule",p)).child(edit_link(page,p))
 }
 fn contents_links(page: &Page, key: &str, p: Paint) -> El {
@@ -360,13 +422,15 @@ fn contents_links(page: &Page, key: &str, p: Paint) -> El {
         }))
 }
 fn inline_contents(s: &State, page: &Page, wide: bool, p: Paint) -> El {
-    let toggle = button("contents-toggle","On this page",p).w_full().justify_between()
-        .child(symbol(if s.contents_open {5} else {4}, 16.0, p.muted)).expanded(s.contents_open)
+    let toggle = button("contents-toggle","On this page",p).w_full().justify_between().h(44.0).px(0.0)
+        .fill(p.bg).hover(p.surface)
+        .child(symbol(if s.contents_open {Icon::Down} else {Icon::Right}, 16.0, p.muted)).expanded(s.contents_open)
         .on_press(|s: &mut State| s.contents_open = !s.contents_open);
-    let links = contents_links(page,"contents-inline-links",p).px(12.0).pb(8.0);
+    let links = contents_links(page,"contents-inline-links",p).pb(8.0);
     #[cfg(target_arch="wasm32")]
     let links = if s.contents_open { links } else { links.h(0.0).padding(0.0).clip_rounded(0.0).a11y_hidden() };
-    let panel = col().key("contents-inline").role("region").w_full().fill(p.surface).border(1.0,p.line).radius(8.0)
+    let panel = col().key("contents-inline").role("region").w_full()
+        .border_sides([0.0,0.0,1.0,0.0],p.line)
         .child(toggle).child(links);
     if wide { panel.h(0.0).clip_rounded(0.0).a11y_hidden() } else { panel }
 }
@@ -391,7 +455,7 @@ fn view(s: &State,cx: &mut Cx<State>) -> El {
         let wide = measured >= 1280.0 && has_contents;
         let document = if page.route == "docs/" {
             let width = measured.min(1480.0) - 2.0 * gutter - if phone {0.0} else {248.0};
-            docs_index(s,page,width,narrow,p)
+            docs_index(s,cx,page,width,narrow,p)
         } else { article(s,cx,page,narrow,wide,p) };
         let content_columns = row().items_start().gap(if wide {32.0} else {0.0})
             .child(document.w(0.0).grow(1.0));

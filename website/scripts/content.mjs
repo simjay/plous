@@ -33,7 +33,7 @@ function publishedURL(value, source) {
   return `https://github.com/simjay/plous/blob/${sourceRef}/${relative.split(path.sep).map(encodeURIComponent).join('/')}${suffix}`;
 }
 
-export function rewriteMarkdown(markdown, source) {
+export function rewriteMarkdown(markdown, source, examples) {
   let fence = '';
   return markdown.split('\n').map((line) => {
     const marker = line.match(/^\s*(`{3,}|~{3,})/);
@@ -43,6 +43,13 @@ export function rewriteMarkdown(markdown, source) {
       return line;
     }
     if (fence) return line;
+    const example = line.match(/^<!-- plous-example: ([a-z-]+) -->$/);
+    if (example && examples) {
+      const name = example[1];
+      if (examples.has(name)) throw new Error(`Repeated example '${name}' in ${source}`);
+      examples.add(name);
+      return `> plous-example:${name}`;
+    }
     return line.replace(/(\]\()([^\s)]+)(\))/g, (_, before, url, after) => before + publishedURL(url, source) + after)
       .replace(/((?:href|src)=")([^"]+)(")/g, (_, before, url, after) => before + publishedURL(url, source) + after);
   }).join('\n');
