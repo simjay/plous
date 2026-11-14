@@ -521,6 +521,7 @@ class ChatTests(unittest.TestCase):
             {"tool": "history_read", "arguments": {"purpose": "Recover saved evidence", "operation": "read", "ref": record_id}},
             {"text": "Decision: release-cobalt"},
         ]
+        restarted.expect_screen("Decision retained.")
         restarted.send(":c\rConfirm our decision\r")
         restarted.wait(lambda: len(responses()) == 3, "reopened context")
         self.wait_response(restarted, responses()[-1], lambda r: r["status"] == "completed")
