@@ -158,7 +158,7 @@ Ctrl+C exits Plous. For a failed session, `e` edits the command and `R` explicit
 
 Check the selected agent first.
 
-For Claude Code or Codex, check the installed command and native sign-in. Plous provider keys do not authenticate these CLIs. See [native panel troubleshooting](../guides/plous-mcp.md#troubleshoot-the-connection).
+For Claude Code or Codex, check the entry command in Settings, the PATH inherited by Plous, and the CLI’s native sign-in. For startup errors, see [MCP connection details](mcp.md#mcp-connection-details).
 
 For Plous:
 
@@ -177,7 +177,7 @@ Inside Plous, MCP setup is automatic. Check the assistant header and full startu
 
 For a wrong cluster or revoked tool access, press Ctrl+], close with `:X`, select the target, and reopen with `cc`.
 
-For a standalone client, use [MCP troubleshooting](../mcp/troubleshooting.md). Native conversations stay with the CLI. Plous's tool-evidence history stores the returned cluster results.
+For a standalone client, use [MCP troubleshooting](../mcp/setup.md#troubleshoot-the-connection). Native conversations stay with the CLI. Plous's tool-evidence history stores the returned cluster results.
 
 ## An AI investigation stops or cannot read a resource
 

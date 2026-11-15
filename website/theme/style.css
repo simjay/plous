@@ -1,0 +1,119 @@
+:root {
+  --vp-c-brand-1: #245ac5;
+  --vp-c-brand-2: #2752ab;
+  --vp-c-brand-3: #245ac5;
+  --vp-c-brand-soft: #326ce51a;
+  --vp-nav-logo-height: 36px;
+}
+
+.dark {
+  --vp-c-brand-1: #a1bcff;
+  --vp-c-brand-2: #3665c8;
+  --vp-c-brand-3: #2b56ad;
+  --vp-c-brand-soft: #7da6ff24;
+}
+
+.workspace-preview {
+  margin: 32px 0;
+}
+
+.VPHome .workspace-preview {
+  max-width: 1152px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.workspace-preview img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.workspace-preview figcaption {
+  margin-top: 8px;
+  color: var(--vp-c-text-2);
+  font-size: 13px;
+}
+
+.VPDocAsideOutline .outline-link {
+  padding-block: 6px;
+  line-height: 20px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.version-picker {
+  appearance: auto;
+  max-width: 100%;
+  min-height: 36px;
+  padding: 4px 8px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 6px;
+  background: var(--vp-c-bg);
+  color: var(--vp-c-text-1);
+  font-size: 13px;
+}
+
+.desktop-version {
+  display: none;
+}
+
+.mobile-version {
+  margin-top: 12px;
+}
+
+@media (min-width: 768px) {
+  .desktop-version {
+    display: block;
+    margin-left: 12px;
+  }
+}
+
+.guide-tabs {
+  margin: 24px 0;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 8px;
+}
+
+.guide-tabs [role="tablist"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--vp-c-divider);
+}
+
+.guide-tabs button {
+  min-height: 44px;
+  padding: 8px 12px;
+  border-bottom: 2px solid transparent;
+  color: var(--vp-c-text-2);
+  font-size: 14px;
+}
+
+.guide-tabs button:hover,
+.guide-tabs button[aria-selected="true"] {
+  color: var(--vp-c-brand-1);
+}
+
+.guide-tabs button[aria-selected="true"] {
+  border-bottom-color: var(--vp-c-brand-1);
+}
+
+.guide-tabs [role="tabpanel"] {
+  padding: 12px 16px;
+}
+
+.vp-doc .guide-tabs p {
+  margin: 0;
+}
+
+.guide-tabs [role="tabpanel"] code + p {
+  margin-top: 8px;
+}
+
+.version-picker:focus-visible,
+.guide-tabs :focus-visible {
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: 2px;
+}

@@ -155,6 +155,6 @@ Use short sentences and concrete names. Put an action before its edge cases. Avo
 
 Do not publish proposals, private paths, or local decision files. Preserve incoming URLs when moving content.
 
-Run `make docs-check` for Markdown. Website changes also need `make website-check` and `make website-build`. Check examples and code colors in both static HTML and live Rune rendering.
+Run `make docs-check` for Markdown. Website changes also need `make website-check` and `make website-build`. Check examples, code colors, and controls in desktop and mobile browsers.
 
 See [releases](releases.md) for application archives and Homebrew. Keep generated outputs out of source control.

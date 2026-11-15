@@ -1,6 +1,6 @@
 # Tool integrations
 
-[Documentation](../README.md) · [Workspaces](../guides/workspaces.md)
+[Documentation](../README.md) · [Workspaces](../guides/navigation.md#workspaces-and-connections)
 
 Add a cluster once. Plous uses that connection for Kubernetes and any detected Helm, Argo CD, or Flux tools.
 
@@ -38,7 +38,7 @@ Kubernetes is always available. Helm appears when release metadata is found. Arg
 
 Adding a context reads local metadata without contacting the cluster. Opening its views connects. Existing separate Kubernetes and Helm records keep their identities and histories.
 
-See [connection setup](kubernetes/README.md#connect-a-cluster) and [Activity](../guides/activity.md).
+See [connection setup](kubernetes/README.md#connect-a-cluster) and [Activity](../guides/navigation.md#review-activity).
 
 ## AI and integrations
 

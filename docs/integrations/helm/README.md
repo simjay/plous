@@ -72,7 +72,7 @@ Rollback creates a new revision and may run hooks. It does not restore external 
 
 ## Activity and assistant
 
-[Activity](../../guides/activity.md) stores operation outcomes and observed revision metadata, without values or manifests. It is not a complete audit log.
+[Activity](../../guides/navigation.md#review-activity) stores operation outcomes and observed revision metadata, without values or manifests. It is not a complete audit log.
 
 A successful Helm command does not prove workload readiness. A failed or interrupted operation can have partial effects. Check the release before retrying an unknown outcome.
 

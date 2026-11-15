@@ -28,7 +28,6 @@ website-dev:
 website-check:
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m unittest discover -s tests/website -p 'test_*.py' -v
 	npm --prefix website test
-	npm --prefix website run check
 
 website-build:
 	npm --prefix website run build

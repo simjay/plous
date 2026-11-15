@@ -1,3 +1,13 @@
+function mergedGuide(slug, route, defaultSection, sections) {
+  const anchors = Object.fromEntries(Object.entries(sections).flatMap(([section, names]) =>
+    names.map((name) => [name, route + '#' + section])));
+  return {slug, destination: route + '#' + defaultSection, anchors};
+}
+
+const explore = 'docs/guides/navigation/';
+const assistant = 'docs/guides/ai-chat/';
+const mcpSetup = 'docs/mcp/setup/';
+
 // Keep published links usable while each guide has one canonical source.
 export const legacyRoutes = [
   {
@@ -30,6 +40,19 @@ export const legacyRoutes = [
     destination: 'docs/agent-skills/plous-debug/',
     anchors: {},
   },
+  mergedGuide('guides/workspaces', explore, 'workspaces-and-connections', {
+    'review-activity': ['activity-and-revisions'],
+  }),
+  mergedGuide('guides/overview', explore, 'read-overview', {}),
+  mergedGuide('guides/activity', explore, 'review-activity', {}),
+  mergedGuide('guides/plous-mcp', assistant, 'run-claude-code-or-codex', {
+    'investigate-a-workload': ['try-an-investigation', 'available-tools', 'scope-access-and-limits'],
+    'inspect-a-replys-sources': ['inspect-saved-evidence'],
+  }),
+  mergedGuide('mcp/scope', mcpSetup, 'saved-evidence', {
+    'target-and-evidence-options': ['captured-access'],
+  }),
+  mergedGuide('mcp/troubleshooting', mcpSetup, 'troubleshoot-the-connection', {}),
   {
     slug: 'integrations/gitops',
     destination: 'docs/integrations/',

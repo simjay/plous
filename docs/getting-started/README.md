@@ -1,6 +1,6 @@
-# Quickstart
+# Terminal quickstart
 
-Read logs from a Pod in a Kubernetes cluster you can already access.
+Open your Kubernetes cluster, check its health, and inspect a Pod.
 
 ## Install and launch
 
@@ -23,6 +23,8 @@ plous
 - **Missing cluster?** Open **Settings → Choose Kubeconfig**, or see [connection troubleshooting](../reference/troubleshooting.md).
 
 ## Inspect your first workload
+
+Check **Needs Attention** in Overview for reported warnings. To inspect a Pod:
 
 1. **Open Explore.** Press `22`.
 2. **List Pods.** Type `:pods` and press Enter. Use `n` to choose a namespace.
@@ -53,7 +55,4 @@ Type `:quit` and press Enter. Plous saves your settings and conversations.
 
 ## Next steps
 
-- [Investigate a restarting Pod](../guides/investigate-restarting-pod.md) in a disposable cluster.
-- [Save a workspace](../guides/workspaces.md) for clusters you use often.
-- [Set up the optional AI assistant](../guides/ai-chat.md) to investigate a cluster from the right panel.
-- [Connect your coding agent to Kubernetes](../agent-skills/plous-debug.md) for agent-led troubleshooting.
+Continue with [Explore clusters](../guides/navigation.md) or [set up the assistant inside Plous](../guides/ai-chat.md).

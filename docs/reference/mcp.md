@@ -2,7 +2,7 @@
 
 [Documentation](../README.md) · [Client setup](../mcp/setup.md)
 
-This reference lists Plous's agent tools. For a guided setup, use [plous-debug](../agent-skills/plous-debug.md) or the [assistant panel](../guides/plous-mcp.md).
+This reference lists Plous's agent tools. For a guided setup, use [plous-debug](../agent-skills/plous-debug.md) or the [assistant panel](../guides/ai-chat.md#run-claude-code-or-codex).
 
 ## Available tools
 
@@ -73,7 +73,7 @@ A standalone server follows kubeconfig’s current context unless configured wit
 
 Each standalone call captures a single target. Reads may use any namespace allowed by those Kubernetes credentials. Diagnostic operations stay in the captured default namespace.
 
-General chat and history-only views have no live cluster tools. To change a pinned standalone target, update its arguments and reconnect. To change the panel's target, [close and reopen its session](../guides/plous-mcp.md#switch-connections-or-close-a-session).
+General chat and history-only views have no live cluster tools. To change a pinned standalone target, update its arguments and reconnect. To change the panel's target, [close and reopen its session](../guides/ai-chat.md#run-claude-code-or-codex).
 
 Plous validates and serializes calls, then saves results before delivery. Fatal storage, history, or target errors disable further tool access. A native CLI remains open so you can inspect the error.
 

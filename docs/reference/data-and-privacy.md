@@ -55,7 +55,7 @@ The panel's MCP configuration is temporary and removed when the session ends. Cl
 
 Each `plous mcp serve` process saves evidence under `~/.plous/mcp/session-*`, or the chosen `--data-dir` root. These profiles remain after exit and are not imported into TUI history automatically.
 
-Closing the client stops local work and attempts temporary Job cleanup. It cannot guarantee that an exec process stopped inside an application container. See [MCP scope and saved evidence](../mcp/scope.md).
+Closing the client stops local work and attempts temporary Job cleanup. It cannot guarantee that an exec process stopped inside an application container. See [MCP scope and saved evidence](../mcp/setup.md#saved-evidence).
 
 ## Credentials
 

@@ -2,17 +2,14 @@
 
 [Contributing](README.md) · [Documentation](../README.md)
 
-Rune renders the website from Markdown in `docs/`. It exports static HTML, then starts the same view through WebAssembly and WebGPU where available. GitHub Pages serves the files without an application server.
+VitePress builds the website from Markdown in `docs/` and serves it as static files on GitHub Pages. The contributor guides stay in the repository.
 
 ## Preview and verify
 
-You need Node.js 22.23.4+, npm, Rust 1.99.1, its Wasm target, and wasm-bindgen CLI 0.2.129. These are website tools, not Plous runtime requirements.
+You need Node.js 22.23.4 or newer, npm, and Python 3.11 or newer. Use Python 3.13 to assemble release archives locally.
 
 ```sh
 npm ci --prefix website
-rustup toolchain install 1.99.1 \
-  --profile minimal --target wasm32-unknown-unknown
-cargo +1.99.1 install wasm-bindgen-cli --version 0.2.129 --locked
 make website-check
 make website-build
 npm --prefix website run preview
@@ -23,10 +20,10 @@ Open `http://127.0.0.1:8046/plous/`. Rebuild after source edits. Stop the previe
 | Check | What it verifies |
 | --- | --- |
 | `make docs-check` | Source titles, links, anchors, navigation, prose punctuation |
-| `make website-check` | Content mapping, examples, headings, redirects, publication rules, Rune compilation |
-| `make website-build` | Full export, generated links, assets, search, syntax colors |
+| `make website-check` | Guide mapping, examples, bookmarks, redirects, version publication |
+| `make website-build` | VitePress build, generated links, images, search, and code examples |
 
-Follow both entry points from the homepage and docs index at desktop and mobile widths. Check that coding agent setup shows the supported clients before the connection details. Check search, copy, theme, and code colors. Use `?static=1` for static HTML. The document's `data-runtime` reports the live Rune handoff.
+Follow the homepage links at desktop and mobile widths. Check sidebar selection and Back navigation, version switching, search, theme, code copying, and keyboard navigation in the interactive examples.
 
 Passing structural checks does not establish readability. Read each changed guide as a user following its steps.
 
@@ -34,17 +31,15 @@ Passing structural checks does not establish readability. Read each changed guid
 
 | Source | Owns |
 | --- | --- |
-| `website/rune/src/lib.rs` | Layout, typography, colors, icons, Markdown rendering |
+| `vitepress.config.mjs` | VitePress defaults, site navigation, search, and metadata |
+| `home.md` | Homepage and entry links |
 | `scripts/navigation.mjs` | Flat sidebar groups |
-| `scripts/prepare.mjs` | Markdown, links, headings, compiler input |
-| `scripts/build.mjs` | Native HTML export, Wasm, fonts, assets, search |
-| `scripts/template.html` | Metadata and browser dialogs |
-| `scripts/client.mjs` | Static controls, dialogs, themes, live startup |
+| `scripts/prepare.mjs` | Guide selection, Markdown links, and compatibility bookmarks |
+| `scripts/build.mjs` | VitePress build, assets, redirects, and version manifest |
+| `theme/` | Brand styles, version picker, screenshot, and guide tabs |
 | `scripts/publish.py` | Release archives, corrections, version assembly |
 
-Paths in this table are under `website/`. Generated input, outputs, and dependencies are ignored by Git. The build includes Rune and Geist license files from the pinned dependency checkout.
-
-Do not use `MarkdownStyle::shell_code` for syntax-colored examples. Rune treats that option as plain shell text. Use the normal code-block theme and syntax palette.
+Paths in this table are under `website/`. The build stages Markdown and the VitePress configuration in a temporary directory. The package lockfile pins the toolchain. VitePress 1.6 uses the patched Vite 6 build dependency selected in `package.json`.
 
 ## Content and links
 
@@ -54,13 +49,15 @@ Write one task per guide. Put exact commands and limits in references. Keep impl
 
 Use short sentences and concrete names. Avoid semicolons and em dashes in prose. Put warnings beside the action they affect. Code and quoted output keep their literal punctuation.
 
-Label code fences by language. Format long argument arrays across lines. Keep plain-text output separate from commands. Verify colors in light and dark themes, static HTML, and live Rune.
+Label code fences by language. Format long argument arrays across lines. Keep plain-text output separate from commands. Verify syntax colors in light and dark themes.
 
 Place examples beside the steps they explain. The `plous-example` markers in Quickstart render the workspace screenshot and the interactive panel controls.
 
 Group the user guides under Terminal UI and Coding agents. Keep assistant setup with the terminal UI. Put plous-debug setup first under Coding agents and keep manual MCP configuration there for users who need it. Preserve the shared installation, integration, and reference material and keep Argo CD and Flux guides separate.
 
 Preserve public routes and heading links when moving content. Development source links use main. Release corrections link to their exact source commit.
+
+The build excludes `docs/contributing/` from public guides and search. Old contributor URLs redirect to Markdown in the repository. Earlier release archives retain their original pages.
 
 ## GitHub Pages setup
 

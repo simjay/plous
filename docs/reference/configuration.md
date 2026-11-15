@@ -43,7 +43,7 @@ Save applies a change. Esc cancels. Exiting does not apply an unfinished form.
 
 A workspace can contain several cluster contexts. Kubernetes, Helm, Argo CD, and Flux share each cluster connection.
 
-See [connection fields](../integrations/README.md#saved-tool-connections). Saved changes appear in [Activity](../guides/activity.md).
+See [connection fields](../integrations/README.md#saved-tool-connections). Saved changes appear in [Activity](../guides/navigation.md#review-activity).
 
 ## Kubernetes connections
 
@@ -63,7 +63,9 @@ Type `/model` afresh in the Plous composer to choose a model. The selection appl
 
 Claude Code and Codex use their own authentication and model settings. Edit **Entry command** to use a wrapper such as `celai codex`. Saving a different agent or command closes the native session after saving its evidence.
 
-See [AI setup](../guides/ai-chat.md), [credentials](../guides/ai-chat.md#credentials-and-advanced-settings), and [active diagnostics](../mcp/active-diagnostics.md).
+Provider options include a display name, API proxy, environment variable for the key, and custom instructions. A saved key takes precedence over an environment reference. Proxies require HTTPS except on loopback.
+
+See [AI setup](../guides/ai-chat.md), [credentials](data-and-privacy.md#credentials), and [active diagnostics](../mcp/active-diagnostics.md).
 
 ## Agent runtime configuration
 

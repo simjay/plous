@@ -1,122 +1,52 @@
-# Learn the interface
+# Explore clusters in Plous
 
-[Documentation](../README.md) · [Keymap](../reference/keymap.md)
+The sidebar selects the cluster, the main panel shows its resources, and the right panel holds the optional [assistant](ai-chat.md). The blue border shows which panel receives your keys.
 
-Plous has three panels. The blue border shows which panel receives your keys.
+## Workspaces and connections
 
-| Panel | Contents |
-| --- | --- |
-| Left | Current Workspace, saved workspaces, connections, and Settings |
-| Main | Overview, Explore, or Activity |
-| Right | Plous chat, Claude Code, or Codex |
+**Current Workspace** opens the current context in your terminal kubeconfig. Enter `:K` to choose another context in Plous. Selecting one leaves the kubeconfig's active context as it was.
 
-Use **Alt+Left / Alt+Right** to move between panels. These keys also work while typing or using an agent terminal.
+- **Save the current cluster:** Open **Settings → Save as Workspace**. Existing Current Workspace chat stays there.
+- **Group several clusters:** Open **Workspaces → + New Workspace** (or `:n`), name the workspace, then select **Monitor → + Add Context** to add contexts from your kubeconfig.
+- **Switch or maintain connections:** Select the workspace or connection in the sidebar. Use **Settings → Current Workspace** to rename, edit, or remove entries. Each connection keeps its settings, namespace, and chat. Removing a connection leaves its cluster resources alone.
 
-Click a panel to focus it. Click a data row to select it and double-click to open it. Drag over text to select it, then use **Copy selection** in the footer. See [mouse controls](../reference/keymap.md#mouse-controls) for details.
-
-The footer shows controls for the current view. **n Namespace** means press `n`. **hh Help** means press `h` twice.
-
-## Understand the workspace tree
-
-**Current Workspace** uses the cluster selected from your terminal kubeconfig. **Workspaces** contains connections you have saved. Both use the same tree:
-
-- A workspace contains Monitor connections.
-- A cluster connection contains Kubernetes and any detected Helm, Argo CD, or Flux tools.
-- A tool contains resource groups and lists.
-
-| Key | Tree action |
-| --- | --- |
-| Enter | Select a workspace or connection and toggle its branch. Open a resource list. |
-| Right | Expand a branch |
-| Left | Collapse a branch, or move to its parent |
-| `/` | Search names, including items in collapsed branches |
-| `g` | Refresh discovery for the selected cluster or tool |
-
-Kubernetes is always available. Helm appears when Plous finds release metadata. Argo CD and Flux appear when their APIs are available.
-
-**Tool discovery incomplete** means a check failed or access was denied. It does not confirm that the tool is absent.
-
-Use [Workspaces and connections](workspaces.md) to save clusters and organize them.
+Use Right and Left to expand and collapse the tree. Select a cluster to discover its tools and press `g` to retry discovery. See [integrations](../integrations/README.md) for what each tool supports.
 
 ## Choose a main view
 
-| View | Purpose | Shortcut | Command |
-| --- | --- | --- | --- |
-| [Overview](overview.md) | Cluster health, warnings, and inventory | `11` | `:1` |
-| Explore | Resource lists and details | `22` | `:2` |
-| [Activity](activity.md) | Workspace changes and Helm history | `33` | `:3` |
+| View | Shortcut | Use it to |
+| --- | --- | --- |
+| [Overview](#read-overview) | `11` or `:1` | Check health and find warnings across the cluster |
+| [Explore](../integrations/kubernetes/README.md#explore-resources) | `22` or `:2` | Browse resource lists, details, events, logs, and YAML |
+| [Activity](#review-activity) | `33` or `:3` | Review saved workspace changes and Helm history |
 
-Press both keys consecutively. A single number does not switch views.
+Press both digits in sequence. In Explore, `:pods` opens the Pod list and `n` chooses its namespace.
 
-Plous starts in Overview. Explore starts with Pods in the context's namespace, or `default` if none is set. Type `:K` to choose another context.
+## Read Overview
 
-## Run a command
+Start with **Needs Attention**. Enter opens a warning or a group of affected resources. **NEW** marks an error that appeared between comparable reads. Check **Availability** before interpreting an empty list, unknown count, or partial result.
 
-1. Press `:` while navigating.
-2. Type a command, such as `s` for Settings.
-3. Press Enter to run it, or Esc to cancel.
-
-These docs write that sequence as `:s`. Commands work from any navigation panel.
-
-Common commands are `:h` for Help, `:s` for Settings, and `:c` for chat. The [keymap](../reference/keymap.md#commands) lists their full names.
-
-## Switch between tree and main
-
-Press Tab during navigation to switch between the sidebar and main panel. Tab reveals a hidden sidebar and leaves main fullscreen.
-
-Use **Ctrl+]** for the agent panel. Tab does not enter or leave it. Forms, searches, editors, Help, Sources, and native terminals keep their own Tab behavior.
-
-## Know when you are typing
-
-Text fields accept literal text. Typing `cc`, `22`, or `:pods` in a field does not run a shortcut.
-
-- Press `cc` from navigation to enter chat or the native agent terminal.
-- Press Esc to leave Plous chat typing and keep your draft.
-- Press Ctrl+] to leave a native agent terminal.
-- Use arrows and Enter to move through forms. Save applies changes. Esc cancels.
-
-Paste works in text fields and chat. Pasted navigation keys and colon commands are ignored.
-
-## Search and clear a filter
-
-Press `/` in the panel you want to search.
-
-| View | Search behavior |
+| Section | What it shows |
 | --- | --- |
-| Sidebar, Activity, history | Filter entries. Use arrows and Enter to open a result. |
-| Kubernetes table | Type a row filter and press Enter to apply it. |
-| Overview | Filter its lower lists |
-| Details, logs, chat | Find text. Press Enter to finish typing, then `n` / `N` for the next / previous match. |
+| Cluster Pulse | CPU and memory usage against allocatable capacity, Node health, Pods, and autoscaling. Enter opens a chart, then its source details. |
+| Recent Deployments | Observed Kubernetes rollouts, Helm revisions, Argo CD syncs, and Flux status changes |
+| Infrastructure Snapshot | Kubernetes and detected integration inventory. Enter opens objects behind a count. |
 
-Esc closes search. In a resource table, it cancels an unfinished edit but keeps an applied filter. Press Backspace in table navigation to clear that filter without changing the namespace, labels, or sorting.
+CPU and memory require access to `metrics.k8s.io`. Pulse refreshes every 5 seconds and keeps up to 15 minutes of samples in memory. Inventory refreshes every 15 seconds. Recent Deployments keeps up to 200 observations in the cluster session. Use `g` to refresh and `e` to expand a section. See [usage and charts](../integrations/kubernetes/README.md#usage-and-charts) for resource-level metrics.
 
-Log search pauses following. Press Space after closing search to resume it.
+## Review Activity
 
-## Go back with Esc
+Use Left and Right to choose **Workspace changes**, **Plous actions**, or **Observed Helm history**. Press `/` to filter and Enter for details.
 
-Esc closes one layer at a time: search, selection, input, then the current detail or document. A modified editor asks whether to keep editing or discard changes.
+- **Workspace changes:** Use `d` for a read-only Before / After comparison. To recover saved settings, see [profile backups](../reference/data-and-privacy.md#back-up-or-recover-a-profile).
+- **Plous actions:** Check the Helm operation's target and outcome. Check the current release before retrying a failed or unconfirmed operation.
+- **Observed Helm history:** Use `O` for original observations. A saved revision describes what Plous saw at the time. Activity persists in your profile.
 
-Returning from a detail view keeps the list's filter and selection. At a root main view, Esc focuses the visible sidebar.
+## Move, search, and go back
 
-Esc does not stop a running chat reply. Use `:X` for that. Leaving a resource operation does not undo a request Kubernetes has already accepted.
+- **Move:** Alt+Left and Alt+Right cycle visible panels. Tab switches the sidebar and main during navigation. Ctrl+] enters or leaves the assistant.
+- **Find:** Press `/` in the focused panel. In a resource table, Enter applies the text filter and Backspace clears it while navigating. In details or logs, Enter starts reviewing matches. Use `n` and `N` to move between them.
+- **Go back:** Esc closes the current input, search, or detail. Use `ff` to expand or restore the main panel.
+- **Get help:** Press `hh` for the current view's controls, or open the [keymap](../reference/keymap.md).
 
-## Make more room
-
-| Key | Action |
-| --- | --- |
-| `bb` | Hide or show the sidebar |
-| `ii` | Cycle the assistant through normal width, double width, and hidden |
-| `ff` or `:f` | Expand or restore main |
-| Ctrl+] | Focus the agent, or return to the previous panel |
-
-Fullscreen lasts while you navigate within main. Repeat `ff`, change panel focus, or toggle a panel to restore the layout. In an editable document, use `:f`.
-
-Panel visibility and assistant size are saved across restarts. Hiding the assistant keeps its draft and running session.
-
-## Use Help
-
-Press `hh` or `:h`. Help shows controls for the workspace tree, current view, and chat, with global controls below.
-
-Use Left / Right to choose a section. Use arrows or page keys to scroll. Esc returns to your previous view, including an unfinished form.
-
-Next: [Save a workspace](workspaces.md) or [explore Kubernetes](../integrations/kubernetes/README.md#explore-resources).
+Practice with [a restarting Pod](investigate-restarting-pod.md).

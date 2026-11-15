@@ -1,6 +1,10 @@
 # Plous
 
-Troubleshoot Kubernetes from your terminal or coding agent.
+Explore and troubleshoot Kubernetes from your terminal or coding agent.
+
+## Install Plous
+
+[Installation and updates](getting-started/installation.md)
 
 <a name="terminal-ui"></a>
 <a name="mcp-server"></a>
@@ -8,8 +12,8 @@ Troubleshoot Kubernetes from your terminal or coding agent.
 
 ## Choose your workflow
 
-- [Explore Kubernetes in Plous](getting-started/README.md). Browse workloads, check cluster health, and inspect events and logs. The optional assistant supports Plous, Claude Code, and Codex.
-- [Let your agent debug on Kubernetes](agent-skills/plous-debug.md). Connect with plous-debug so your coding agent can inspect workloads, events, and logs.
+- [Explore Kubernetes in Plous](getting-started/README.md). Pick a cluster and inspect a workload.
+- [Let your agent debug on Kubernetes](agent-skills/plous-debug.md). Connect your coding agent and verify which cluster it can read.
 
 <a name="get-started"></a>
 <a name="keep-these-nearby"></a>
@@ -19,18 +23,4 @@ Troubleshoot Kubernetes from your terminal or coding agent.
 
 ## Quick links
 
-### Setup
-
-- [Installation and updates](getting-started/installation.md)
-- [AI assistant setup](guides/ai-chat.md)
-- [Supported integrations](integrations/README.md)
-
-### Reference
-
-- [Keyboard shortcuts and commands](reference/keymap.md)
-- [Agent tools and permissions](reference/mcp.md)
-- [Troubleshooting](reference/troubleshooting.md)
-
-## Why Plous?
-
-Plous comes from the ancient Greek **πλοῦς**, meaning a voyage by sea. Kubernetes takes its name from **κυβερνήτης**, meaning helmsman. Plous names the voyage.
+[Integrations](integrations/README.md) · [Keyboard shortcuts](reference/keymap.md) · [Configuration](reference/configuration.md) · [Data and privacy](reference/data-and-privacy.md) · [Troubleshooting](reference/troubleshooting.md)

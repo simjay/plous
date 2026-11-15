@@ -1,10 +1,6 @@
-# Configure MCP manually
+# MCP setup and troubleshooting
 
-[Coding agent setup](../agent-skills/plous-debug.md) · [Tools and permissions](../reference/mcp.md)
-
-Use manual configuration when you need to register the Plous cluster tools yourself. For automatic setup, use [plous-debug](../agent-skills/plous-debug.md#install).
-
-[Install Plous](../getting-started/installation.md) and make sure your client can find `plous` on PATH. Check that your kubeconfig can read the cluster you want to inspect.
+For automatic setup, use [plous-debug](../agent-skills/plous-debug.md). Use this page to register MCP manually or fix a connection. [Install Plous](../getting-started/installation.md) first and make sure your client can find `plous` on PATH.
 
 ## Configure your client
 
@@ -48,7 +44,7 @@ Use an absolute executable path only if the client cannot find `plous`. The comm
 
 ### Other supported clients
 
-Register a local stdio server named `plous_debug` with command `plous` and arguments `mcp`, `serve`, `--agent`, followed by your client name. The client names are `opencode`, `grok`, `agy`, `cursor`, and `gemini`. Use the client’s MCP settings or the [configuration file listed for that client](../agent-skills/plous-debug.md#installed-files). OpenCode takes the executable and its arguments in one `command` array.
+Register a local stdio server named `plous_debug` with command `plous` and arguments `mcp`, `serve`, `--agent`, followed by your client name. The client names are `opencode`, `grok`, `agy`, `cursor`, and `gemini`. Use the client’s MCP settings or the [configuration file listed for that client](#installed-files-and-removal). OpenCode takes the executable and its arguments in one `command` array.
 
 In Cursor, set the server's `env.KUBECONFIG` to `${KUBECONFIG:-}` to forward the shell's value and allow Plous to use the standard kubeconfig when it is unset.
 
@@ -60,7 +56,7 @@ In Cursor, set the server's `env.KUBECONFIG` to `${KUBECONFIG:-}` to forward the
 
 <!-- plous-example: mcp-target -->
 
-A connected MCP client can still encounter Kubernetes permission errors. See [MCP troubleshooting](troubleshooting.md) if reads fail.
+A connected MCP client can still encounter Kubernetes permission errors. See [MCP troubleshooting](#troubleshoot-the-connection) if reads fail.
 
 ## Target and evidence options
 
@@ -73,10 +69,44 @@ Add these arguments to your client's `args` list to choose a target or change wh
 | `--namespace NAME` | Override the selected context’s default namespace. Diagnostic operations use this namespace. |
 | `--data-dir PATH` | Choose where Plous stores evidence profiles. |
 
-Reconnect after changing launch arguments. See [Scope and saved evidence](scope.md) for how Plous resolves the target and stores results.
+Reconnect after changing launch arguments. See [Saved evidence](#saved-evidence) for profile and retention details.
 
 To enable container commands or temporary tests, follow [Active diagnostics](active-diagnostics.md).
 
-## Use MCP inside the TUI
+## Troubleshoot the connection
 
-Plous configures the connection automatically when you [use Claude Code or Codex in the assistant panel](../guides/plous-mcp.md).
+| Symptom | Check |
+| --- | --- |
+| Client cannot find Plous | Run `command -v plous` in its environment. Supply that path if the client cannot resolve it. |
+| Server stops or reads fail | Read stderr for kubeconfig, network, permission, or storage errors. Fix the reported issue, then reconnect. |
+| Wrong cluster | Call `kubernetes_context_read`. Switch kubeconfig's current context, or change a pinned `--context` and reconnect. |
+| Diagnostics missing | [Enable the diagnostic option](active-diagnostics.md), check RBAC, and reconnect. |
+| Earlier evidence missing | Check the profile printed on startup. The client searches evidence from the current process and context. |
+| Command timed out or cleanup is pending | Check the outcome or reported Job and Pod identities before retrying. |
+| Existing setup entry blocks installation | Resolve the unrelated skill or unmanaged MCP entry. Setup preserves it. |
+
+Use the [assistant panel guide](../guides/ai-chat.md#run-claude-code-or-codex) for native CLI startup or sign-in. See [tool permissions](../reference/mcp.md) for which tools each connection grants.
+
+## Saved evidence
+
+A standalone client starts `plous mcp serve` locally. Each call captures one cluster and namespace, and reads may span namespaces allowed by the same credentials. Diagnostics use the default namespace. The assistant panel uses a separate connection.
+
+Each process stores results in a separate profile, usually `~/.plous/mcp/session-*`. Find the actual path in the server's startup message. Results survive exit. History searches are limited to that process's evidence for the current context. See [Data and privacy](../reference/data-and-privacy.md#independent-coding-agent-sessions).
+
+Closing the connection stops local work and attempts to clean up temporary Jobs. Check the outcome before retrying an interrupted command. The container command may still be running.
+
+## Installed files and removal
+
+`plous setup` prints both installed paths, including custom homes. Rerun setup to update launch flags without replacing the client's tool filters or unrelated servers.
+
+| Agent | Skill directory | MCP config |
+| --- | --- | --- |
+| Codex | `~/.agents/skills/plous-debug/` | `~/.codex/config.toml` or `$CODEX_HOME/config.toml` |
+| Claude Code | `~/.claude/skills/plous-debug/` | `~/.claude.json` |
+| OpenCode | `~/.agents/skills/plous-debug/` | `~/.config/opencode/opencode.json` or existing config |
+| Grok Build | `~/.grok/skills/plous-debug/` | `~/.grok/config.toml` |
+| Antigravity CLI | `~/.gemini/skills/plous-debug/` | `~/.gemini/config/mcp_config.json` |
+| Cursor Agent | `~/.agents/skills/plous-debug/` | `~/.cursor/mcp.json` |
+| Gemini CLI | `~/.gemini/skills/plous-debug/` | `~/.gemini/settings.json` |
+
+To remove the connection, delete the `plous_debug` entry from `mcp_servers` in Codex or Grok Build, `mcp` or `mcp.servers` in OpenCode, or `mcpServers` in the other clients. Delete the skill directory once none of your clients use it, then reconnect. Evidence remains in the standalone profiles.

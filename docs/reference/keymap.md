@@ -223,7 +223,7 @@ Below 80×16, most views have restricted navigation. Overview has a minimal view
 
 ### Cluster Overview
 
-Select a cluster connection and use `11` or `:1`. See [Overview](../guides/overview.md) for data meanings.
+Select a cluster connection and use `11` or `:1`. See [Overview](../guides/navigation.md#read-overview) for data meanings.
 
 | Key | Command | Action |
 | --- | --- | --- |

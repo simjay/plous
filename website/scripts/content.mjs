@@ -10,6 +10,9 @@ export const sourceRef = process.env.PLOUS_DOCS_SOURCE_REF || process.env.PLOUS_
 export const versionLabel = process.env.PLOUS_DOCS_VERSION || 'Development';
 export const siteRoot = ('/' + (process.env.PLOUS_SITE_ROOT ?? process.env.PLOUS_SITE_BASE ?? '/plous').split('/').filter(Boolean).join('/')).replace(/\/$/, '') + '/';
 export const href = (route = '') => base + route.replace(/^\/+/, '');
+export const isMaintainerGuide = (relative) => relative.startsWith('contributing/');
+export const repositoryURL = (relative, action = 'blob') =>
+  `https://github.com/simjay/plous/${action}/${sourceRef}/${relative.split('/').map(encodeURIComponent).join('/')}`;
 
 export function routeFor(relative) {
   const route = relative.replace(/\.md$/, '').replace(/(^|\/)README$/, '$1').replace(/\/$/, '');
@@ -24,16 +27,22 @@ function publishedURL(value, source) {
   if (relative.startsWith('..') || relative.split(path.sep).some((part) => part.startsWith('.'))) {
     throw new Error(`Documentation link leaves public repository content: ${value}`);
   }
-  if (relative === 'README.md') return href() + suffix;
+  if (relative === 'README.md') return '/' + suffix;
   if (target.startsWith(docs + path.sep)) {
     const entry = path.relative(docs, target).split(path.sep).join('/');
-    if (entry.endsWith('.md')) return href(routeFor(entry)) + suffix;
-    if (entry.startsWith('assets/')) return href(entry) + suffix;
+    if (entry.endsWith('.md') && !isMaintainerGuide(entry)) return '/' + routeFor(entry) + suffix;
+    if (entry.startsWith('assets/')) return '/' + entry + suffix;
   }
-  return `https://github.com/simjay/plous/blob/${sourceRef}/${relative.split(path.sep).map(encodeURIComponent).join('/')}${suffix}`;
+  return repositoryURL(relative.split(path.sep).join('/')) + suffix;
 }
 
-export function rewriteMarkdown(markdown, source, examples) {
+const exampleComponents = new Map([
+  ['panel-focus', '<GuideTabs example="panel-focus" />'],
+  ['workspace-overview', '<WorkspaceScreenshot />'],
+  ['mcp-target', '<GuideTabs example="mcp-target" />'],
+]);
+
+export function rewriteMarkdown(markdown, source, renderExamples = false) {
   let fence = '';
   return markdown.split('\n').map((line) => {
     const marker = line.match(/^\s*(`{3,}|~{3,})/);
@@ -44,11 +53,10 @@ export function rewriteMarkdown(markdown, source, examples) {
     }
     if (fence) return line;
     const example = line.match(/^<!-- plous-example: ([a-z-]+) -->$/);
-    if (example && examples) {
+    if (example && renderExamples) {
       const name = example[1];
-      if (examples.has(name)) throw new Error(`Repeated example '${name}' in ${source}`);
-      examples.add(name);
-      return `> plous-example:${name}`;
+      if (!exampleComponents.has(name)) throw new Error(`Unknown example '${name}' in ${source}`);
+      return exampleComponents.get(name);
     }
     return line.replace(/(\]\()([^\s)]+)(\))/g, (_, before, url, after) => before + publishedURL(url, source) + after)
       .replace(/((?:href|src)=")([^"]+)(")/g, (_, before, url, after) => before + publishedURL(url, source) + after);

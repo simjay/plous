@@ -65,4 +65,4 @@ For the assistant panel inside Plous, launch with `plous --allow-exec` or `plous
 
 ## Next steps
 
-Read [scope and saved evidence](scope.md) for cancellation and storage behavior.
+Read [scope and saved evidence](setup.md#saved-evidence) for cancellation and storage behavior.

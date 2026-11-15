@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
-import { docs, href, rewriteMarkdown, routeFor, sourceRef } from '../../website/scripts/content.mjs';
+import { docs, rewriteMarkdown, routeFor, sourceRef } from '../../website/scripts/content.mjs';
 
 test('repository pages map to stable website routes', () => {
   assert.equal(routeFor('README.md'), 'docs/');
@@ -11,11 +11,16 @@ test('repository pages map to stable website routes', () => {
 
 test('links preserve fragments, assets, and source references', () => {
   const result = rewriteMarkdown('[Guide](../getting-started/README.md#before-you-begin)\n![Screen](../assets/plous-overview.png)\n[Test](../../internal/app/tui/interaction_test.go)\n[Site](https://example.com/)\n[Here](#heading)', path.join(docs, 'guides/overview.md'));
-  assert.ok(result.includes(`(${href('docs/getting-started/#before-you-begin')})`));
-  assert.ok(result.includes(`(${href('assets/plous-overview.png')})`));
+  assert.ok(result.includes('(/docs/getting-started/#before-you-begin)'));
+  assert.ok(result.includes('(/assets/plous-overview.png)'));
   assert.ok(result.includes(`(https://github.com/simjay/plous/blob/${sourceRef}/internal/app/tui/interaction_test.go)`));
   assert.ok(result.includes('(https://example.com/)'));
   assert.ok(result.includes('(#heading)'));
+});
+
+test('implementation links point to repository notes rather than public docs pages', () => {
+  const result = rewriteMarkdown('[History](../contributing/ai-assistant.md#history-tools)', path.join(docs, 'reference/mcp.md'));
+  assert.equal(result, `[History](https://github.com/simjay/plous/blob/${sourceRef}/docs/contributing/ai-assistant.md#history-tools)`);
 });
 
 test('code examples remain literal', () => {
