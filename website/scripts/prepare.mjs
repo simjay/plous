@@ -35,11 +35,20 @@ export async function prepareContent() {
   const indexIntro = intro.split('\n').find(line => line && !line.startsWith('#') && !line.startsWith('<'));
   const paths = [...workflowSection.matchAll(/^- \[([^\]]+)\]\(([^)]+)\)\. (.+)$/gm)]
     .map(([, title, href, description]) => ({ href, title, description }));
-  const quickLinks = [...quickLinksSection.matchAll(/^- \[([^\]]+)\]\(([^)]+)\)$/gm)]
-    .map(([, title, href]) => ({ href, title }));
-  if (!indexIntro || paths.length !== 2 || !quickLinks.length || !nameSection.trim()) {
-    throw new Error('The docs index must include its introduction, two workflows, quick links, and name origin.');
+  const quickLinkSections = quickLinksSection.split(/^### (.+)\n/m);
+  const quickLinks = [];
+  for (let i = 1; i < quickLinkSections.length; i += 2) {
+    const label = quickLinkSections[i];
+    const items = [...quickLinkSections[i + 1].matchAll(/^- \[([^\]]+)\]\(([^)]+)\)$/gm)]
+      .map(([, title, href]) => ({ href, title }));
+    quickLinks.push({label, items});
   }
+  const quickstart = await readFile(path.join(docs,'getting-started/README.md'),'utf8');
+  const installCommand = quickstart.match(/^`{3}sh\n(brew install [^\n]+)\n/m)?.[1];
+  if (!indexIntro || paths.length !== 2 || !quickLinks.length || quickLinks.some(group => !group.items.length) || !nameSection.trim()) {
+    throw new Error('The docs index must include its introduction, two workflows, quick link groups, and name origin.');
+  }
+  if (!installCommand) throw new Error('Quickstart must include its Homebrew install command.');
   const pages = [];
   for (const source of await markdownFiles(docs)) {
     const relative = path.relative(docs,source).split(path.sep).join('/');
@@ -56,7 +65,8 @@ export async function prepareContent() {
     aliases._top = 'top';
     if (relative === 'README.md') {
       for (const anchor of ['terminal-ui', 'mcp-server', 'agent-skills']) aliases[anchor] = 'choose-your-workflow';
-      for (const anchor of ['get-started', 'keep-these-nearby', 'tutorials', 'integrations', 'develop-plous']) aliases[anchor] = 'quick-links';
+      for (const anchor of ['get-started', 'keep-these-nearby', 'tutorials', 'integrations']) aliases[anchor] = 'quick-links';
+      aliases['develop-plous'] = 'footer-developers';
     }
     if (relative === 'reference/keymap.md') aliases.keymap = 'top';
     if (relative === 'mcp/setup.md') aliases['register-a-standalone-server'] = 'configure-your-client';
@@ -74,7 +84,7 @@ export async function prepareContent() {
   for (const group of navigation) for (const item of group.items) {
     if (!routes.has(item.href.split('#')[0])) throw new Error(`Navigation points to missing guide: ${item.href}`);
   }
-  const content = {version:versionLabel,siteRoot,base,root:href(),navigation,indexIntro,paths,quickLinks,pages};
+  const content = {version:versionLabel,siteRoot,base,root:href(),navigation,indexIntro,installCommand,paths,quickLinks,pages};
   await mkdir(path.join(website,'rune/.generated'),{recursive:true});
   const destination = path.join(website,'rune/.generated/content.json');
   const serialized = JSON.stringify(content,null,2)+'\n';

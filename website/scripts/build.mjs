@@ -32,14 +32,13 @@ await rm(dist,{recursive:true,force:true});
 const assets=path.join(dist,'assets');await mkdir(assets,{recursive:true});
 for(const name of ['lockup.svg','lockup-dark.svg','icon.svg']) await cp(path.join(website,'../assets/logo',name),path.join(assets,name));
 await cp(path.join(website,'../docs/assets/plous-overview.png'),path.join(assets,'plous-overview.png'));
-for(const name of ['plous-quickstart-poster.png','plous-quickstart-replay.mp4']) await cp(path.join(website,'../docs/assets',name),path.join(assets,name));
 for(const name of ['geist.ttf','geist-mono.ttf','geist-OFL.txt']) await cp(path.join(upstream,'www/public/fonts',name),path.join(assets,name));
 for(const name of ['Inter-Regular.ttf','Inter-SemiBold.ttf','Inter-LICENSE.txt']) await cp(path.join(upstream,'crates/rune/assets',name),path.join(assets,name));
 await cp(path.join(upstream,'LICENSE'),path.join(assets,'Rune-LICENSE.txt'));
 await cp(path.join(website,'scripts/client.mjs'),path.join(assets,'client.mjs'));
 await run('cargo',['build','--locked','--target','wasm32-unknown-unknown','--release','--lib']);
 await run('wasm-bindgen',['--target','web','--out-dir',assets,'--out-name','app','--remove-name-section',path.join(metadata.target_directory,'wasm32-unknown-unknown/release/plous_docs_rune.wasm')]);
-const colors={'#ffffff':'bg','#f6f8fc':'surface','#172033':'ink','#56657a':'muted','#e2e8f0':'line','#326ce5':'blue','#2458b8':'code-blue','#edf3ff':'wash','#206a43':'green','#7045ba':'violet','#905500':'amber','#b63e50':'red'};
+const colors={'#ffffff':'bg','#f5f6f8':'surface','#1b2330':'ink','#505d6f':'muted','#dce2e9':'line','#245cc5':'blue','#2458b8':'code-blue','#eef3fd':'wash','#206a43':'green','#7045ba':'violet','#905500':'amber','#b63e50':'red'};
 function controls(html) {
   // Rune's exported press targets retain their keys; use native buttons before the live handoff.
   const stack=[];
@@ -56,10 +55,10 @@ function controls(html) {
       return tag.replace(`aria-label="${label}"`,`id="${label}"${frame[1]==='0'?'':' hidden'}`);
     }
     const example=label.match(/^example-step-(\d+)$/);
-    const button=example||/\brole="button"/.test(tag)||['Search documentation','Change color theme','Open navigation','Choose documentation version','On this page','Play terminal recording'].includes(label)||content.navigation.some(g=>escape(g.label)===label)||/^Copy code block \d+$/.test(label);
+    const button=example||/\brole="button"/.test(tag)||['Search documentation','Change color theme','Open navigation','Choose documentation version','On this page'].includes(label)||content.navigation.some(g=>escape(g.label)===label)||/^Copy code block \d+$/.test(label);
     stack.push(button);
     if(!button)return tag;
-    let control=({'Search documentation':'search','Change color theme':'theme','Open navigation':'menu','Choose documentation version':'versions','On this page':'contents','Play terminal recording':'quickstart'})[label];
+    let control=({'Search documentation':'search','Change color theme':'theme','Open navigation':'menu','Choose documentation version':'versions','On this page':'contents'})[label];
     const group=content.navigation.findIndex(group=>escape(group.label)===label);
     if(group>=0)control='group-'+group;
     const code=label.match(/^Copy code block (\d+)$/);
@@ -85,9 +84,9 @@ for(const page of pages) {
   const templateFile=path.join(rune,'.generated/template.html');await writeFile(templateFile,frame);
   await run(path.join(metadata.target_directory,'debug/plous-docs-rune'),['--html',output,'--html-widths','360,700,1000,1280,1440','--html-template',templateFile],{cwd:dist,env:{...process.env,PLOUS_SITE_PAGE:page.route}});
   let html=controls(await readFile(output,'utf8'));
-  if(page.examples?.includes('terminal-replay')) html=html.replace('</body>',`<dialog id="quickstart-replay" aria-labelledby="quickstart-replay-heading"><div class="dialog-head"><h2 id="quickstart-replay-heading">Inspect a Pod in Plous</h2><button type="button" autofocus>Close</button></div><video controls playsinline preload="none" poster="${href('assets/plous-quickstart-poster.png')}" src="${href('assets/plous-quickstart-replay.mp4')}" aria-label="Terminal recording of opening a Pod and its logs"></video></dialog></body>`);
-  if(page.route==='docs/') html=html.replace(/<a\b(?=[^>]*\bid="sidebar-root")/, '$& aria-current="page"');
-  html=html.replace(/(<(?:nav|a|section)\b[^>]*id="(?:sidebar|nav-docs|nav-developers|contents)"[^>]*)\saria-hidden="true"/g,'$1');
+  if(page.href) html=html.replace(/<a\b[^>]*\bid="(?:sidebar-root|nav-link-\d+-\d+)"[^>]*>/g,tag=>
+    tag.includes(` href="${escape(page.href)}"`) ? tag.replace('<a ', '<a aria-current="page" ') : tag);
+  html=html.replace(/(<(?:nav|section)\b[^>]*id="(?:sidebar|primary|contents)"[^>]*)\saria-hidden="true"/g,'$1');
   html=html.replaceAll('src="assets/',`src="${content.base}assets/`);
   html=html.replace(/<img\b[^>]*src="[^"]*\/lockup(?:-dark)?\.svg"[^>]*>/g,tag=>tag.replace('<img','<img data-wordmark'));
   html=html.replace(/<style data-rune-static>([\s\S]*?)<\/style>/,(_,css)=>`<style data-rune-static>${css.replaceAll('[data-rune-static]',':is([data-rune-static],[data-rune-menu])').replace(/#[a-f\d]{6}\b/gi,color=>colors[color.toLowerCase()]?`var(--${colors[color.toLowerCase()]})`:color)}</style>`);
@@ -102,7 +101,8 @@ for(const page of pages) {
   }
   html=html.replace('__MENU__',nav?`<div data-rune-menu>${nav.replace(/\bid="([^"]+)"/g,'id="mobile-$1"').replace(/\saria-hidden="true"/,'')}</div>`:`<p><a href="${href('docs/')}">Open documentation</a></p>`);
   html=html.replace('__ALIASES__',JSON.stringify(page.aliases).replaceAll('<','\\u003c'));
-  const codes=[];let fence='',lines=[];
+  const codes=page.route==='docs/'?[content.installCommand]:[];
+  let fence='',lines=[];
   for(const line of page.body.split('\n')){
     const marker=line.match(/^\s*(`{3,}|~{3,})/);
     if(!fence&&marker){fence=marker[1];lines=[]}

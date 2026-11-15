@@ -48,16 +48,6 @@ window.plousOpenVersions=async()=>{
 };
 document.querySelector('#close-versions').addEventListener('click',()=>versions.close());
 window.plousOpenMenu=()=>{if(!menu.open)menu.showModal()};
-const quickstart=document.querySelector('#quickstart-replay');
-if(quickstart){
-  const video=quickstart.querySelector('video');
-  quickstart.querySelector('button').addEventListener('click',()=>quickstart.close());
-  quickstart.addEventListener('close',()=>video.pause());
-  window.plousOpenQuickstart=()=>{
-    if(!quickstart.open)quickstart.showModal();
-    video.play().catch(()=>{});
-  };
-}
 // Rune's link bridge treats absolute HTTP URLs as browser navigation.
 window.plousRuneMarkdown=(source)=>{
   let fence='';
@@ -81,7 +71,6 @@ document.addEventListener('click',async event=>{
     if(control==='versions')window.plousOpenVersions();
     if(control==='search')window.plousOpenSearch();
     if(control==='menu')window.plousOpenMenu();
-    if(control==='quickstart')window.plousOpenQuickstart();
     if(control.startsWith('example-step-')){
       exampleStep=Number(control.slice('example-step-'.length));
       for(const step of button.parentElement.querySelectorAll('[data-control^="example-step-"]')){
@@ -116,7 +105,7 @@ document.addEventListener('click',async event=>{
 let index,sequence=0;
 input.addEventListener('input',async()=>{
   const current=++sequence,query=input.value.trim();results.replaceChildren();
-  if(!query){status.textContent='Search the documentation.';return}
+  if(!query){status.textContent='';return}
   status.textContent='Searching…';
   try{
     index??=import(`${base}pagefind/pagefind.js`).then(async module=>{await module.options({baseUrl:base});return module});

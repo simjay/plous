@@ -56,7 +56,7 @@ Use short sentences and concrete names. Avoid semicolons and em dashes in prose.
 
 Label code fences by language. Format long argument arrays across lines. Keep plain-text output separate from commands. Verify colors in light and dark themes, static HTML, and live Rune.
 
-Place the interactive examples where they help explain a step. The `plous-example` markers in Quickstart render the terminal recording and panel controls.
+Place examples beside the steps they explain. The `plous-example` markers in Quickstart render the workspace screenshot and the interactive panel controls.
 
 Group the user guides under Terminal UI and Coding agents. Keep assistant setup with the terminal UI. Put plous-debug setup first under Coding agents and keep manual MCP configuration there for users who need it. Preserve the shared installation, integration, and reference material and keep Argo CD and Flux guides separate.
 

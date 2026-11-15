@@ -1,48 +1,45 @@
 # Debug with your coding agent
 
-Use **plous-debug** to investigate Kubernetes failures and verify fixes from your repository.
+Connect your coding agent to Kubernetes. With `plous-debug`, it can inspect workloads, events, and logs, then verify a fix after deployment.
 
 ## Install
 
-[Install Plous v0.0.5 or later](../getting-started/installation.md). Run the command for your agent to add the skill and connect the cluster tools.
+[Install Plous v0.0.5 or later](../getting-started/installation.md), then run the command for your agent in a terminal.
 
-- **OpenCode** · `plous setup opencode`
-- **Grok Build** · `plous setup grok`
-- **Antigravity CLI** · `plous setup agy`
-- **Cursor Agent** · `plous setup cursor`
-- **Gemini CLI** · `plous setup gemini`
-- **Codex** · `plous setup codex`
-- **Claude Code** · `plous setup claude`
+| Coding agent | Setup command |
+| --- | --- |
+| Antigravity CLI | `plous setup agy` |
+| Claude Code | `plous setup claude` |
+| Codex | `plous setup codex` |
+| Cursor Agent | `plous setup cursor` |
+| Gemini CLI | `plous setup gemini` |
+| Grok Build | `plous setup grok` |
+| OpenCode | `plous setup opencode` |
 
 ## Start in your repository
 
-Restart or reconnect your agent and open your repository. Follow its workspace trust prompts. If it asks you to approve an MCP server, review `plous_debug`.
+1. **Open your repository.** Restart or reconnect your agent and follow its workspace trust prompts. If it asks you to approve an MCP server, review `plous_debug`.
+2. **Load the skill.** In Codex, type `$plous-debug`. In Claude Code, Grok Build, or Antigravity CLI, enter `/plous-debug`. In OpenCode, Cursor Agent, or Gemini CLI, ask the agent to use `plous-debug`.
+3. **Check the cluster.** Ask your agent which Kubernetes context and namespace it sees. By default, Plous follows the current context in the agent's kubeconfig on each tool call.
 
-- In Codex, type `$plous-debug`.
-- In Claude Code, Grok Build, and Antigravity CLI, enter `/plous-debug`.
-- In OpenCode, Cursor Agent, and Gemini CLI, ask the agent to use `plous-debug`.
-
-Ask the agent to confirm the Kubernetes context and namespace before investigating. Plous follows the current context in the agent's kubeconfig. A context switch takes effect on the next tool call.
+If the cluster tools are missing or reads fail, see [connection troubleshooting](../mcp/troubleshooting.md).
 
 ## Investigate a checkout error
 
-Suppose checkout starts returning 502 after a deployment. Invoke the skill from your repository and give the agent the symptom and the intended target.
+### Collect evidence
+
+Give the agent the symptom and the intended target.
 
 > Checkout started returning 502 in staging/shop after the last deploy. Confirm the Kubernetes context, then check the checkout Pods, events, and logs around a failed request. Tell me what you observed and what you think caused it.
 
-An illustrative result would separate the evidence from the suspected cause.
+- **Observed.** Checkout logged a timeout calling `payments.shop.svc:8081`. The payments Service exposes port `8080`.
+- **Suspected cause.** Checkout may be using an old port in its runtime configuration.
 
-| | Example |
-| --- | --- |
-| **Observed** | Checkout logged a timeout calling `payments.shop.svc:8081`. The payments Service exposes port `8080`. |
-| **Suspected cause** | Checkout may be using an old port in its runtime configuration. |
-| **Next check** | Trace where checkout gets its payments URL. Compare the deployed setting and the code's default with the payments Service port. |
-
-Ask the agent to follow that lead into the repository.
+### Trace the configuration
 
 > Trace how checkout builds the payments URL. Check whether the deployment sets the port or the code falls back to a default. If you find a mismatch, fix it in the repository and add a test that would have caught it.
 
-After you deploy the fix, ask the agent to check the original failure.
+### Verify after deployment
 
 > I deployed the fix to staging/shop. Confirm the intended image is running. Check fresh checkout logs and, if active diagnostics are enabled, repeat the failing request. Tell me which checks passed and which still need evidence.
 
@@ -107,4 +104,4 @@ Delete the installed skill directory when you no longer use it with any client t
 
 ## Next steps
 
-Try the [restarting Pod exercise](../guides/investigate-restarting-pod.md) in a disposable cluster. Give the agent the failing Pod's name and compare its findings with the guide. See [connection troubleshooting](../mcp/troubleshooting.md) if the cluster tools do not appear.
+Try the [restarting Pod exercise](../guides/investigate-restarting-pod.md) in a disposable cluster. Give the agent the failing Pod's name and compare its findings with the guide.

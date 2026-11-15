@@ -1,42 +1,37 @@
 # Quickstart
 
-Open Plous, find a Pod, and read its logs from your terminal.
+Read logs from a Pod in a Kubernetes cluster you can already access.
 
 ## Install and launch
 
 <a name="before-you-begin"></a>
 
-Use Homebrew on macOS or Linux with a working kubeconfig. See [Installation and updates](installation.md) for other install methods.
+On macOS or Linux, open a terminal at least 80 columns wide and 16 rows tall. Install Plous with Homebrew, then launch it.
 
 ```sh
 brew install simjay/tap/plous
 plous
 ```
 
-Use a terminal at least 80 columns wide and 16 rows tall.
-
-You can follow this guide without AI. To ask questions or open views from the right panel, [set up the AI assistant](../guides/ai-chat.md).
+[See other installation methods](installation.md).
 
 ## Start with Current Workspace
 
-Plous opens your current Kubernetes context. Check the context name in the header before continuing.
+**Check the context in the header.** Plous opens the current context from your kubeconfig.
 
-To choose another context, type `:K` and press Enter. This changes the selection in Plous without editing your kubeconfig.
-
-If Plous cannot connect, open **Settings → Choose Kubeconfig** or follow [connection troubleshooting](../reference/troubleshooting.md).
+- **Wrong cluster?** Type `:K` and press Enter to choose another context in Plous.
+- **Missing cluster?** Open **Settings → Choose Kubeconfig**, or see [connection troubleshooting](../reference/troubleshooting.md).
 
 ## Inspect your first workload
 
-1. Press `22` to open Explore.
-2. Type `:pods` and press Enter.
-3. Press `n` to choose a namespace.
-4. Select a Pod and press Enter.
-5. Press `l` to open its logs. Press `o` to choose another container.
-6. Press Esc to return to the Pod.
-
-<!-- plous-example: terminal-replay -->
+1. **Open Explore.** Press `22`.
+2. **List Pods.** Type `:pods` and press Enter. Use `n` to choose a namespace.
+3. **Open a Pod.** Select it and press Enter.
+4. **Read the logs.** Press `l`. Use `o` to choose another container, or Esc to return to the Pod.
 
 ## Learn the basic controls
+
+<!-- plous-example: workspace-overview -->
 
 Use `Alt+Right` to move to the next visible panel and `Alt+Left` to move back.
 
@@ -60,4 +55,5 @@ Type `:quit` and press Enter. Plous saves your settings and conversations.
 
 - [Investigate a restarting Pod](../guides/investigate-restarting-pod.md) in a disposable cluster.
 - [Save a workspace](../guides/workspaces.md) for clusters you use often.
-- [Debug from your coding agent](../agent-skills/plous-debug.md) when your investigation takes you into the repository.
+- [Set up the optional AI assistant](../guides/ai-chat.md) to investigate a cluster from the right panel.
+- [Connect your coding agent to Kubernetes](../agent-skills/plous-debug.md) for agent-led troubleshooting.

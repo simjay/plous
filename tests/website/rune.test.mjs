@@ -41,13 +41,23 @@ test('workflow links lead to the terminal UI and coding agent setup',()=>{
   assert.deepEqual(content.paths.map(p=>p.href),[quickstart,setup]);
   assert.deepEqual(content.navigation.map(g=>g.label),['Get started','Terminal UI','Coding agents','Integrations','Reference','Developers']);
   const terminal=content.navigation.find(group=>group.label==='Terminal UI');
-  assert.deepEqual(terminal.items.slice(0,3).map(item=>item.href),[quickstart,href('docs/guides/ai-chat/'),href('docs/guides/plous-mcp/')]);
+  assert.deepEqual(terminal.items.slice(0,3).map(item=>item.href),[quickstart,href('docs/guides/navigation/'),href('docs/guides/workspaces/')]);
   const coding=content.navigation.find(group=>group.label==='Coding agents');
-  assert.equal(coding.items[0].href,setup);
+  assert.deepEqual(coding.items.slice(0,2).map(item=>item.href),[setup,href('docs/mcp/troubleshooting/')]);
   assert.ok(coding.items.some(item=>item.href===href('docs/mcp/setup/')));
   const guide=content.pages.find(page=>page.href===setup);
   const install=guide.body.split('## Install\n')[1].split('\n## ')[0];
   for(const client of ['opencode','grok','agy','cursor','gemini','codex','claude']) {
     assert.ok(install.includes('`plous setup '+client+'`'),`Missing install command for ${client}`);
   }
+});
+
+test('the index groups shared links by intent and the MCP diagram follows the target check',()=>{
+  assert.deepEqual(content.quickLinks.map(group=>[group.label,group.items.map(item=>item.href)]),[
+    ['Setup',[href('docs/getting-started/installation/'),href('docs/guides/ai-chat/'),href('docs/integrations/')]],
+    ['Reference',[href('docs/reference/keymap/'),href('docs/reference/mcp/'),href('docs/reference/troubleshooting/')]],
+  ]);
+  const setup=content.pages.find(page=>page.route==='docs/mcp/setup/');
+  assert.deepEqual(setup.examples,['mcp-target']);
+  assert.match(setup.body,/## Check the connection\n[^]*> plous-example:mcp-target\n[^]*## Target and evidence options/);
 });

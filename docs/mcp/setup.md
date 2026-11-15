@@ -2,9 +2,9 @@
 
 [Coding agent setup](../agent-skills/plous-debug.md) · [Tools and permissions](../reference/mcp.md)
 
-Use this guide to register the cluster tools yourself. For automatic configuration with the debugging skill, follow [plous-debug setup](../agent-skills/plous-debug.md#install).
+Use manual configuration when you need to register the Plous cluster tools yourself. For automatic setup, use [plous-debug](../agent-skills/plous-debug.md#install).
 
-Install [Plous](../getting-started/installation.md) and make sure your client can find `plous` on PATH. You need a working kubeconfig and access to the cluster you want to inspect.
+[Install Plous](../getting-started/installation.md) and make sure your client can find `plous` on PATH. Check that your kubeconfig can read the cluster you want to inspect.
 
 ## Configure your client
 
@@ -54,10 +54,11 @@ In Cursor, set the server's `env.KUBECONFIG` to `${KUBECONFIG:-}` to forward the
 
 ## Check the connection
 
-1. Restart or reconnect the client.
-2. In the client's MCP tools, look for `kubernetes_context_read`.
-3. Ask “Which Kubernetes context and default namespace is Plous using?”
-4. Verify the context and namespace before asking the agent to inspect Pods or events.
+1. **Reconnect the client.** Look for `kubernetes_context_read` in its MCP tools.
+2. **Ask for the active target.** “Which Kubernetes context and default namespace is Plous using?”
+3. **Compare the result with your intended cluster.** Verify both values before requesting Pod or event reads.
+
+<!-- plous-example: mcp-target -->
 
 A connected MCP client can still encounter Kubernetes permission errors. See [MCP troubleshooting](troubleshooting.md) if reads fail.
 

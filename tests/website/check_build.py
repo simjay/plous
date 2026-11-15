@@ -133,7 +133,7 @@ def main():
             guide = quickstart.read_text()
             markers = (
                 'id="install-and-launch"', 'data-control="copy-0"', 'id="inspect-your-first-workload"',
-                'data-control="quickstart"', 'id="learn-the-basic-controls"',
+                'id="learn-the-basic-controls"', f'src="{BASE}assets/plous-overview.png"',
                 'aria-label="Panel focus diagram"', 'id="leave-and-return"',
             )
             positions = [guide.find(marker) for marker in markers]
@@ -141,6 +141,10 @@ def main():
                 failures.append("Quickstart installation and interactive examples must follow their guide sections")
             if guide.count('data-control="example-step-') != 3 or "plous-example:" in guide:
                 failures.append("Quickstart must export one three-panel diagram and hide its source markers")
+        for route in ["index.html", "docs/index.html", "docs/getting-started/index.html"]:
+            screen = DIST / route
+            if screen in pages and f'src="{BASE}assets/plous-overview.png"' not in screen.read_text():
+                failures.append(f"{route}: missing the Plous workspace screenshot")
         examples = {
             "docs/getting-started/index.html": [("code-block-0", 1)],
             "docs/mcp/setup/index.html": [("code-block-0", 2), ("code-block-1", 2)],

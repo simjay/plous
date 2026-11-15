@@ -1,6 +1,6 @@
 # Plous
 
-Inspect Kubernetes in the Plous terminal UI or debug a failure from your coding agent.
+Troubleshoot Kubernetes from your terminal or coding agent.
 
 <a name="terminal-ui"></a>
 <a name="mcp-server"></a>
@@ -8,8 +8,8 @@ Inspect Kubernetes in the Plous terminal UI or debug a failure from your coding 
 
 ## Choose your workflow
 
-- [Use the Plous terminal UI](getting-started/README.md). Browse resources and read logs. Use Plous, Claude Code, or Codex in the optional AI assistant panel.
-- [Debug with your coding agent](agent-skills/plous-debug.md). Set up plous-debug for OpenCode, Grok Build, Antigravity CLI, Cursor Agent, Gemini CLI, Codex, or Claude Code.
+- [Explore Kubernetes in Plous](getting-started/README.md). Browse workloads, check cluster health, and inspect events and logs. The optional assistant supports Plous, Claude Code, and Codex.
+- [Let your agent debug on Kubernetes](agent-skills/plous-debug.md). Connect with plous-debug so your coding agent can inspect workloads, events, and logs.
 
 <a name="get-started"></a>
 <a name="keep-these-nearby"></a>
@@ -19,12 +19,17 @@ Inspect Kubernetes in the Plous terminal UI or debug a failure from your coding 
 
 ## Quick links
 
+### Setup
+
 - [Installation and updates](getting-started/installation.md)
 - [AI assistant setup](guides/ai-chat.md)
-- [Keyboard shortcuts and commands](reference/keymap.md)
-- [Troubleshooting](reference/troubleshooting.md)
 - [Supported integrations](integrations/README.md)
-- [Contributing](contributing/README.md)
+
+### Reference
+
+- [Keyboard shortcuts and commands](reference/keymap.md)
+- [Agent tools and permissions](reference/mcp.md)
+- [Troubleshooting](reference/troubleshooting.md)
 
 ## Why Plous?
 
