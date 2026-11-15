@@ -37,8 +37,8 @@ export async function prepareContent() {
     .map(([, title, href, description]) => ({ href, title, description }));
   const quickLinks = [...quickLinksSection.matchAll(/^- \[([^\]]+)\]\(([^)]+)\)$/gm)]
     .map(([, title, href]) => ({ href, title }));
-  if (!indexIntro || paths.length !== 3 || !quickLinks.length || !nameSection.trim()) {
-    throw new Error('The docs index must include its introduction, three workflows, quick links, and name origin.');
+  if (!indexIntro || paths.length !== 2 || !quickLinks.length || !nameSection.trim()) {
+    throw new Error('The docs index must include its introduction, two workflows, quick links, and name origin.');
   }
   const pages = [];
   for (const source of await markdownFiles(docs)) {

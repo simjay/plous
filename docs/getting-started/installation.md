@@ -1,6 +1,6 @@
 # Installation and updates
 
-[Get started](README.md) · [Choose your workflow](workflows.md)
+[Terminal UI quickstart](README.md) · [Coding agent setup](../agent-skills/plous-debug.md)
 
 ## Requirements
 

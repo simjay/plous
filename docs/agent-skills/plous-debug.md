@@ -1,28 +1,28 @@
-# plous-debug
+# Debug with your coding agent
 
-[Agent skills](README.md) · [MCP tools](../reference/mcp.md)
-
-Use **plous-debug** in your coding agent to investigate a Kubernetes failure, connect runtime evidence to your repository, and verify a deployed fix. The skill uses Plous's cluster tools through a local MCP server while the agent uses its usual tools for code and tests.
+Use **plous-debug** to investigate Kubernetes failures and verify fixes from your repository.
 
 ## Install
 
-[Install Plous](../getting-started/installation.md) v0.0.5 or later to use all the setup commands below. Run the command for your agent.
+[Install Plous v0.0.5 or later](../getting-started/installation.md). Run the command for your agent to add the skill and connect the cluster tools.
 
-| Agent | Setup | Invoke in your agent |
-| --- | --- | --- |
-| Codex | `plous setup codex` | `$plous-debug` |
-| Claude Code | `plous setup claude` | `/plous-debug` |
-| OpenCode | `plous setup opencode` | Ask it to use `plous-debug` |
-| Grok Build | `plous setup grok` | `/plous-debug` |
-| Google Antigravity CLI | `plous setup agy` | `/plous-debug` |
-| Cursor Agent | `plous setup cursor` | Ask it to use `plous-debug` |
-| Gemini CLI | `plous setup gemini` | Ask it to use `plous-debug` |
+- **OpenCode** · `plous setup opencode`
+- **Grok Build** · `plous setup grok`
+- **Antigravity CLI** · `plous setup agy`
+- **Cursor Agent** · `plous setup cursor`
+- **Gemini CLI** · `plous setup gemini`
+- **Codex** · `plous setup codex`
+- **Claude Code** · `plous setup claude`
 
-Setup runs without prompts. Restart or reconnect your agent afterward. If the client requires workspace trust or MCP approval, review `plous_debug` in the client. The server follows the current context in the agent's kubeconfig. If you switch contexts, the next tool call uses the new one.
+## Start in your repository
 
-Setup forwards the shell's `KUBECONFIG` to Cursor. If it is unset, Plous uses `~/.kube/config`. An existing Cursor environment override or explicit `--kubeconfig` still applies.
+Restart or reconnect your agent and open your repository. Follow its workspace trust prompts. If it asks you to approve an MCP server, review `plous_debug`.
 
-For Google, use the setup command for the CLI you run. Google AI Pro and Ultra users use Antigravity CLI. Gemini CLI remains available with Gemini Code Assist Standard and Enterprise. [Google's CLI comparison](https://github.com/google-gemini/gemini-cli#readme)
+- In Codex, type `$plous-debug`.
+- In Claude Code, Grok Build, and Antigravity CLI, enter `/plous-debug`.
+- In OpenCode, Cursor Agent, and Gemini CLI, ask the agent to use `plous-debug`.
+
+Ask the agent to confirm the Kubernetes context and namespace before investigating. Plous follows the current context in the agent's kubeconfig. A context switch takes effect on the next tool call.
 
 ## Investigate a checkout error
 
@@ -59,6 +59,12 @@ For the checkout example, a useful follow-up is “From the checkout container, 
 
 Both options require explicit enablement and Kubernetes permissions. Add `--allow-exec` for commands in a container or `--diagnostic-image IMAGE` for temporary Jobs that run HTTP GET, DNS, or TCP checks. Reconnect the agent after changing setup options. [Active diagnostics, permissions, and cleanup](../mcp/active-diagnostics.md)
 
+## What setup installs
+
+The [plous-debug skill instructions](../../skills/plous-debug/SKILL.md) guide the investigation. A local MCP connection gives your coding agent Plous's cluster tools and saved evidence. Your agent uses its usual repository tools, model, and sign-in. You can also [configure the cluster tools manually](../mcp/setup.md).
+
+If you run Claude Code or Codex [inside the Plous assistant panel](../guides/plous-mcp.md), Plous connects the tools and supplies the debugging instructions when the panel starts.
+
 ## Configuration reference
 
 ### Pin a context
@@ -83,7 +89,9 @@ The same options work for every client. Rerun setup without `--context` and reco
 | Cursor Agent | `~/.agents/skills/plous-debug/SKILL.md` | `~/.cursor/mcp.json` |
 | Gemini CLI | `~/.gemini/skills/plous-debug/SKILL.md` | `~/.gemini/settings.json` |
 
-Setup prints both file paths. It honors `XDG_CONFIG_HOME` for OpenCode, `GROK_HOME` for Grok Build, and `GEMINI_CLI_HOME` for Gemini CLI. Use `--home PATH` for a separate installation home or `--data-dir PATH` for a separate evidence location.
+Setup runs without prompts and prints both file paths. It honors `XDG_CONFIG_HOME` for OpenCode, `GROK_HOME` for Grok Build, and `GEMINI_CLI_HOME` for Gemini CLI. Use `--home PATH` for a separate installation home or `--data-dir PATH` for a separate evidence location.
+
+Setup forwards `KUBECONFIG` to Cursor. If it is unset, Plous uses `~/.kube/config`. An existing Cursor environment override or explicit `--kubeconfig` still applies.
 
 Rerun setup to update the executable and launch flags in an existing installation. Setup keeps client settings such as disabled state, tool filters, and environment overrides. Setup also keeps other MCP servers and stops if an unrelated skill or a different `plous_debug` launch occupies the destination.
 
@@ -99,4 +107,4 @@ Delete the installed skill directory when you no longer use it with any client t
 
 ## Next steps
 
-Practice with [Investigate a restarting Pod](../guides/investigate-restarting-pod.md), configure [MCP without the skill](../mcp/setup.md), or read the [skill instructions](../../skills/plous-debug/SKILL.md).
+Try the [restarting Pod exercise](../guides/investigate-restarting-pod.md) in a disposable cluster. Give the agent the failing Pod's name and compare its findings with the guide. See [connection troubleshooting](../mcp/troubleshooting.md) if the cluster tools do not appear.

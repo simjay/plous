@@ -1,8 +1,8 @@
-# Set up AI chat
+# Use the AI assistant
 
-[Documentation](../README.md) · [Claude Code and Codex](plous-mcp.md)
+[Terminal UI quickstart](../getting-started/README.md) · [Claude Code and Codex in Plous](plous-mcp.md)
 
-The right panel can run Plous, Claude Code, or Codex. Choose an agent in Settings. You can use the rest of Plous without AI.
+Use the right panel to investigate the selected Kubernetes cluster and open views beside the conversation. Choose the built-in Plous agent or use your installed Claude Code or Codex CLI. AI is optional.
 
 | Agent | What you need |
 | --- | --- |

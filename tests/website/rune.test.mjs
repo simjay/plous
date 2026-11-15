@@ -35,7 +35,19 @@ test('headings ignore fenced content and retain numeric and repeated anchor alia
   const tutorial=content.pages.find(p=>p.route==='docs/guides/investigate-restarting-pod/');
   assert.equal(tutorial.aliases['1-create-the-example'],'section-1-create-the-example');
 });
-test('workflow links use the three approved entry points',()=>{
-  assert.deepEqual(content.paths.map(p=>p.href),[href('docs/getting-started/'),href('docs/mcp/setup/'),href('docs/agent-skills/plous-debug/')]);
-  assert.deepEqual(content.navigation.filter(g=>g.label!=='Developers').map(g=>g.label),['Get started','Terminal UI','MCP server','Agent skills','Tutorials','Integrations','Reference']);
+test('workflow links lead to the terminal UI and coding agent setup',()=>{
+  const quickstart=href('docs/getting-started/');
+  const setup=href('docs/agent-skills/plous-debug/');
+  assert.deepEqual(content.paths.map(p=>p.href),[quickstart,setup]);
+  assert.deepEqual(content.navigation.map(g=>g.label),['Get started','Terminal UI','Coding agents','Integrations','Reference','Developers']);
+  const terminal=content.navigation.find(group=>group.label==='Terminal UI');
+  assert.deepEqual(terminal.items.slice(0,3).map(item=>item.href),[quickstart,href('docs/guides/ai-chat/'),href('docs/guides/plous-mcp/')]);
+  const coding=content.navigation.find(group=>group.label==='Coding agents');
+  assert.equal(coding.items[0].href,setup);
+  assert.ok(coding.items.some(item=>item.href===href('docs/mcp/setup/')));
+  const guide=content.pages.find(page=>page.href===setup);
+  const install=guide.body.split('## Install\n')[1].split('\n## ')[0];
+  for(const client of ['opencode','grok','agy','cursor','gemini','codex','claude']) {
+    assert.ok(install.includes('`plous setup '+client+'`'),`Missing install command for ${client}`);
+  }
 });

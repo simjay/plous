@@ -67,7 +67,7 @@ const SMALL: TextStyle = TextStyle::new(13.0,400.0).lh(20.0);
 const SECTION: TextStyle = TextStyle::new(24.0,600.0).lh(32.0);
 
 #[derive(Clone, Copy)]
-enum Icon { Terminal, Code, Skill, Arrow, Right, Down, Search, Theme, Menu }
+enum Icon { Terminal, Code, Arrow, Right, Down, Search, Theme, Menu }
 
 // Shape paths export as SVG and use the same geometry in the GPU view.
 fn symbol(icon: Icon,size: f32,color: Color) -> El {
@@ -80,10 +80,6 @@ fn symbol(icon: Icon,size: f32,color: Color) -> El {
     let paths=match icon {
         Icon::Terminal=>vec![path(&[[5.0,7.0],[10.0,12.0],[5.0,17.0]]),path(&[[13.0,17.0],[19.0,17.0]])],
         Icon::Code=>vec![path(&[[9.0,7.0],[4.0,12.0],[9.0,17.0]]),path(&[[15.0,7.0],[20.0,12.0],[15.0,17.0]]),path(&[[13.0,4.0],[11.0,20.0]])],
-        Icon::Skill=>vec![
-            path(&[[6.0,4.0],[14.0,4.0],[18.0,8.0],[18.0,20.0],[6.0,20.0],[6.0,4.0]]),
-            path(&[[9.0,11.0],[15.0,11.0]]),path(&[[9.0,15.0],[15.0,15.0]]),
-        ],
         Icon::Arrow=>vec![path(&[[5.0,12.0],[19.0,12.0]]),path(&[[13.0,6.0],[19.0,12.0],[13.0,18.0]])],
         Icon::Right=>vec![path(&[[10.0,7.0],[15.0,12.0],[10.0,17.0]])],
         Icon::Down=>vec![path(&[[7.0,10.0],[12.0,15.0],[17.0,10.0]])],
@@ -186,7 +182,7 @@ fn header(s: &State,cx: &Cx<State>,phone: bool,p: Paint) -> El {
 }
 fn workflows(p: Paint,phone: bool) -> El {
     let mut cards=(if phone {col()} else {row().items_stretch()}).key("workflows").w_full().gap(16.0);
-    for (i,(path,icon)) in content().paths.iter().zip([Icon::Terminal,Icon::Code,Icon::Skill]).enumerate() {
+    for (i,(path,icon)) in content().paths.iter().zip([Icon::Terminal,Icon::Code]).enumerate() {
         let card=col().key(format!("workflow-{i}")).href(&path.href).padding(18.0).gap(12.0)
             .fill(p.surface).border(1.0,p.line).radius(10.0).hover(p.wash).hover_group()
             .child(row().justify_between().center_y()
@@ -213,7 +209,6 @@ fn workflow_rows(p: Paint) -> El {
         row().key(format!("workflow-{i}")).href(&path.href).focusable(true).focus_ring(2.0,2.0,p.blue)
             .w_full().center_y().gap(12.0).py(12.0).px(12.0)
             .border_sides([0.0,0.0,1.0,0.0],p.line).hover(p.surface).hover_group()
-            .child(el().w(2.0).h(28.0).fill(if i == 0 {p.blue} else {Color::TRANSPARENT}).a11y_hidden())
             .child(col().w(0.0).grow(1.0).gap(4.0)
                 .child(workflow_title(i,&path.title,p))
                 .child(txt(&format!("workflow-description-{i}"),&path.description,TextStyle::new(14.0,400.0).lh(20.0),p.muted).w_full()))
@@ -241,7 +236,7 @@ fn home(s: &State,cx: &Cx<State>,phone: bool,p: Paint) -> El {
     let intro=col().w_full().gap(22.0).pt(if phone {40.0} else {72.0}).pb(44.0)
         .child(txt("top","Kubernetes,\nin your terminal.",TextStyle::new(size,600.0).lh(size+8.0).tracking(-1.2),p.ink).role("heading").level(1))
         .child(version_button(p))
-        .child(txt("home-intro","Browse resources, read logs, and debug failures from one terminal.",TextStyle::new(19.0,400.0).lh(31.0),p.muted).max_w(650.0));
+        .child(txt("home-intro","Inspect your cluster in Plous or trace Kubernetes failures from your coding agent.",TextStyle::new(19.0,400.0).lh(31.0),p.muted).max_w(650.0));
     let product=col().key("product").w_full().gap(16.0).py(48.0)
         .child(row().href(format!("{}assets/plous-overview.png",content().base)).label("Open full size Plous workspace screenshot").w_full()
             .child(picture(s,cx,"product-image","plous-overview.png",1200.0,"Plous workspace overview with cluster health and the Codex assistant.").w_full().aspect_ratio(3024.0/1898.0).radius(10.0).border(1.0,p.line)))

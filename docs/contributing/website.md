@@ -26,7 +26,7 @@ Open `http://127.0.0.1:8046/plous/`. Rebuild after source edits. Stop the previe
 | `make website-check` | Content mapping, examples, headings, redirects, publication rules, Rune compilation |
 | `make website-build` | Full export, generated links, assets, search, syntax colors |
 
-Review Quickstart, MCP setup, and a long reference at desktop and mobile widths. Check search, copy, theme, and code colors. Use `?static=1` for static HTML. The document's `data-runtime` reports the live Rune handoff.
+Follow both entry points from the homepage and docs index at desktop and mobile widths. Check that coding agent setup shows the supported clients before the connection details. Check search, copy, theme, and code colors. Use `?static=1` for static HTML. The document's `data-runtime` reports the live Rune handoff.
 
 Passing structural checks does not establish readability. Read each changed guide as a user following its steps.
 
@@ -58,7 +58,9 @@ Label code fences by language. Format long argument arrays across lines. Keep pl
 
 Place the interactive examples where they help explain a step. The `plous-example` markers in Quickstart render the terminal recording and panel controls.
 
-Keep the approved flat navigation groups and separate Argo CD and Flux guides. Preserve public routes and heading links when moving content. Development source links use main. Release corrections link to their exact source commit.
+Group the user guides under Terminal UI and Coding agents. Keep assistant setup with the terminal UI. Put plous-debug setup first under Coding agents and keep manual MCP configuration there for users who need it. Preserve the shared installation, integration, and reference material and keep Argo CD and Flux guides separate.
+
+Preserve public routes and heading links when moving content. Development source links use main. Release corrections link to their exact source commit.
 
 ## GitHub Pages setup
 

@@ -1,6 +1,6 @@
 # Active diagnostics
 
-[MCP server](README.md) · [Tools and permissions](../reference/mcp.md#active-diagnostics)
+[Coding agent setup](../agent-skills/plous-debug.md) · [Tools and permissions](../reference/mcp.md#active-diagnostics)
 
 Agent tools read cluster data by default. Enable commands or temporary tests only for the cluster and namespace you intend to investigate. The examples pin a context. If you omit `--context`, these capabilities follow the current kubeconfig context.
 

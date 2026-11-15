@@ -1,12 +1,10 @@
-# Connect an MCP client
+# Configure MCP manually
 
-[MCP server](README.md) · [Tools and permissions](../reference/mcp.md)
+[Coding agent setup](../agent-skills/plous-debug.md) · [Tools and permissions](../reference/mcp.md)
 
-Connect your coding agent to Plous and verify which Kubernetes context it can read.
+Use this guide to register the cluster tools yourself. For automatic configuration with the debugging skill, follow [plous-debug setup](../agent-skills/plous-debug.md#install).
 
 Install [Plous](../getting-started/installation.md) and make sure your client can find `plous` on PATH. You need a working kubeconfig and access to the cluster you want to inspect.
-
-For automatic configuration with the debug workflow, use [plous-debug setup](../agent-skills/plous-debug.md#install). To register only the MCP server, use the examples below.
 
 ## Configure your client
 
@@ -80,4 +78,4 @@ To enable container commands or temporary tests, follow [Active diagnostics](act
 
 ## Use MCP inside the TUI
 
-Choose Claude Code or Codex in **Settings → Application → Agent** and save. Plous configures MCP for that session automatically. See [Claude Code and Codex inside Plous](../guides/plous-mcp.md).
+Plous configures the connection automatically when you [use Claude Code or Codex in the assistant panel](../guides/plous-mcp.md).

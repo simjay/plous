@@ -1,10 +1,10 @@
 # Use Claude Code or Codex inside Plous
 
-[Documentation](../README.md) · [AI chat](ai-chat.md)
+[Terminal UI quickstart](../getting-started/README.md) · [AI assistant](ai-chat.md)
 
 Run your installed Claude Code or Codex CLI in the right panel. Plous connects it to cluster tools automatically.
 
-For agents running outside Plous, use [MCP setup](../mcp/setup.md) or [plous-debug](../agent-skills/plous-debug.md).
+To investigate from a coding agent in your repository, [set up plous-debug](../agent-skills/plous-debug.md).
 
 <span id="use-plous-mcp"></span>
 

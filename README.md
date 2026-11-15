@@ -12,9 +12,9 @@
 </p>
 
 <p align="center">
-  <a href="#getting-started">Getting started</a> ·
+  <a href="#getting-started">Terminal UI</a> ·
+  <a href="#coding-agents">Coding agents</a> ·
   <a href="https://simjay.github.io/plous/docs/">Documentation</a> ·
-  <a href="#mcp">MCP</a> ·
   <a href="#contributing">Contributing</a>
 </p>
 
@@ -44,27 +44,15 @@ plous
 
 Plous opens with your current Kubernetes context. Press **hh** for Help while navigating, or use `:quit` to exit.
 
-Choose your [workflow](docs/getting-started/workflows.md), read [installation requirements](docs/getting-started/installation.md), or follow the [quickstart](docs/getting-started/README.md).
+Follow the [terminal UI quickstart](docs/getting-started/README.md) or [set up the AI assistant](docs/guides/ai-chat.md).
 
-## MCP
+<a name="mcp"></a>
 
-See [Installation](docs/getting-started/installation.md) to install or update Plous.
+## Coding agents
 
-Plous connects cluster tools to coding agents through **Model Context Protocol (MCP)**.
+Use **plous-debug** in the coding agent you run in your repository. It gives your agent a workflow for investigating Kubernetes failures and connects the cluster tools it needs to check its findings.
 
-| Workflow | Setup |
-| --- | --- |
-| Inside the Plous assistant panel | Select your installed agent in **Settings → Application → Agent**. Plous configures the connection automatically. |
-| Direct MCP integration | Configure your client to launch `plous mcp serve`. It follows kubeconfig’s current context by default. Use `--context` to pin it. |
-| Guided debugging in your coding-agent session | Run `plous setup` to list clients, or follow the [plous-debug guide](docs/agent-skills/plous-debug.md#install). |
-
-Entry commands default to `claude` and `codex`. Configure each agent's **Entry command** in the same settings to use a wrapper such as `celai codex`.
-
-All workflows use the same guarded cluster tools. The CLI keeps its own authentication and model settings. Agents inside Plous can also open views beside the conversation. Independent coding agents keep their normal repository tools.
-
-Enable [active diagnostics](docs/mcp/active-diagnostics.md) to run a specific command in an existing container or run an HTTP GET, DNS lookup, or TCP check from a temporary Job.
-
-[MCP server](docs/mcp/README.md) · [Agent skills](docs/agent-skills/README.md) · [plous-debug](docs/agent-skills/plous-debug.md) · [Assistant panel](docs/guides/plous-mcp.md)
+Run `plous setup` to list the supported clients. Pick your agent in the [setup guide](docs/agent-skills/plous-debug.md#install) to install the skill and connect its tools.
 
 ## Documentation
 

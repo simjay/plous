@@ -1,6 +1,6 @@
 # MCP scope and saved evidence
 
-[MCP server](README.md)
+[Coding agent setup](../agent-skills/plous-debug.md)
 
 A standalone MCP client starts `plous mcp serve` as a subprocess. There is no listening port or permanent background server.
 

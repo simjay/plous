@@ -1,6 +1,6 @@
-# MCP troubleshooting
+# Troubleshoot your coding agent connection
 
-[MCP server](README.md) · [Setup](setup.md)
+[Coding agent setup](../agent-skills/plous-debug.md) · [Manual MCP setup](setup.md)
 
 First check whether the agent runs inside Plous or as a separate MCP client.
 

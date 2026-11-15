@@ -15,6 +15,8 @@ plous
 
 Use a terminal at least 80 columns wide and 16 rows tall.
 
+You can follow this guide without AI. To ask questions or open views from the right panel, [set up the AI assistant](../guides/ai-chat.md).
+
 ## Start with Current Workspace
 
 Plous opens your current Kubernetes context. Check the context name in the header before continuing.
@@ -58,4 +60,4 @@ Type `:quit` and press Enter. Plous saves your settings and conversations.
 
 - [Investigate a restarting Pod](../guides/investigate-restarting-pod.md) in a disposable cluster.
 - [Save a workspace](../guides/workspaces.md) for clusters you use often.
-- [Set up an AI assistant](../guides/ai-chat.md), [connect an MCP client](../mcp/setup.md), or install [plous-debug](../agent-skills/plous-debug.md).
+- [Debug from your coding agent](../agent-skills/plous-debug.md) when your investigation takes you into the repository.
