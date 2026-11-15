@@ -6,7 +6,7 @@ Use **plous-debug** in your coding agent to investigate a Kubernetes failure, co
 
 ## Install
 
-[Install Plous](../getting-started/installation.md) and use the documentation version that matches `plous --version`. To use the full client list in the Development docs, [build Plous from source](../getting-started/installation.md#build-from-source). Run the setup command for your agent.
+[Install Plous](../getting-started/installation.md) v0.0.5 or later to use all the setup commands below. Run the command for your agent.
 
 | Agent | Setup | Invoke in your agent |
 | --- | --- | --- |
