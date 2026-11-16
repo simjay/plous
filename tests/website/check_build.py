@@ -115,6 +115,25 @@ def check_versions(roots, pages, failures):
                 failures.append(f"{root}: missing rendered page for {route or '/'}")
 
 
+def published_roots(catalog, failures):
+    latest = catalog["latest"]
+    roots = [DIST]
+    for entry in catalog["versions"]:
+        name = entry["version"]
+        archive = DIST / ("dev" if name == "Development" else name)
+        archive_manifest = json.loads((archive / "site.json").read_text())
+        archive_base = BASE + archive.name + "/"
+        if archive_manifest != {**entry, "base": archive_base}:
+            failures.append(f"{archive}: archived manifest does not match the catalog")
+        if name == latest:
+            if entry != json.loads((DIST / "site.json").read_text()) or entry["base"] != BASE:
+                failures.append("The latest version must be served directly from the deployment root")
+        elif entry["base"] != archive_base:
+            failures.append(f"{archive}: wrong catalog base")
+        roots.append(archive)
+    return roots
+
+
 def main():
     failures = []
     pages = {file: Page(file.read_text()) for file in DIST.rglob("*.html")}
@@ -122,7 +141,7 @@ def main():
         failures.append("No website pages were built")
     versions = DIST / "versions.json"
     if versions.exists():
-        roots = [DIST / version["base"][len(BASE):] for version in json.loads(versions.read_text())["versions"]]
+        roots = published_roots(json.loads(versions.read_text()), failures)
     else:
         roots = [DIST]
         site = json.loads((DIST / "site.json").read_text())

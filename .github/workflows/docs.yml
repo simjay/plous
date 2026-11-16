@@ -119,8 +119,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: main
+          ref: ${{ github.sha }}
           persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: website/package-lock.json
       - uses: actions/setup-python@v7
         with:
           python-version: '3.13'
@@ -128,7 +133,7 @@ jobs:
         with:
           name: documentation-website
           path: website/dist
-      - name: Download and verify permanent release snapshots
+      - name: Verify release snapshots and build the default site
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 website/scripts/publish.py --base "$PLOUS_SITE_ROOT" --repository "$GITHUB_REPOSITORY"

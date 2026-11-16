@@ -43,7 +43,7 @@ Paths in this table are under `website/`. The build stages Markdown and the Vite
 
 ## Content and links
 
-Keep one source under `docs/`. Relative guide links become website routes. For example, `docs/getting-started/README.md` becomes `/plous/docs/getting-started/` at the default alias.
+Keep one source under `docs/`. Relative guide links become website routes. For example, the latest release serves `docs/getting-started/README.md` at `/plous/docs/getting-started/`.
 
 Write one task per guide. Put exact commands and limits in references. Keep implementation details in contributor pages.
 
@@ -88,9 +88,9 @@ Pages receives `website/published/`. Build outputs, private data, and local inte
 | Application release | Save the tagged docs archive and queue Pages |
 | Documentation correction | Add a commit-identified correction and republish that version |
 
-Default routes open the latest released version. `/plous/dev/` follows main. `/plous/v0.0.3/` serves docs for that application version. Search stays within the selected version.
+The latest release is served directly at `/plous/` and `/plous/docs/`. `/plous/dev/` follows main. `/plous/v0.0.3/` serves docs for that application version. Search stays within the selected version.
 
-Release archives and SHA-256 files live as GitHub release assets. They do not depend on expiring Actions artifacts. Each Pages build verifies and assembles all published versions.
+Release archives and SHA-256 files live as GitHub release assets. Each Pages build verifies and retains those archives, then builds the default site at the deployment base from the latest release's exact tag or correction commit. Before the first release, the default site uses the Development build's source commit.
 
 ### Correct released docs
 

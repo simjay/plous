@@ -2,8 +2,8 @@
 
 import argparse
 import hashlib
-import html
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -32,47 +32,61 @@ def unpack(archive, checksum, destination):
         source.extractall(destination, members=members, filter="data")
 
 
-def redirect(destination):
-    escaped = html.escape(destination, quote=True)
-    script = json.dumps(destination).replace("<", "\\u003c")
-    return ('<!doctype html><html lang="en"><head><meta charset="utf-8">'
-            '<meta name="viewport" content="width=device-width"><title>Plous documentation</title>'
-            f'<link rel="canonical" href="{escaped}"><meta name="robots" content="noindex">'
-            f'<noscript><meta http-equiv="refresh" content="0;url={escaped}"></noscript>'
-            f'<script>location.replace({script}+location.search+location.hash)</script>'
-            f'</head><body><h1>Plous documentation</h1><a href="{escaped}">Open documentation</a></body></html>')
+def read_manifest(source):
+    return json.loads((source / "site.json").read_text())
 
 
-def assemble(development, releases, output, base):
-    if output.exists():
-        shutil.rmtree(output)
-    output.mkdir(parents=True)
-    shutil.copytree(development, output / "dev")
-    versions = []
+def publication_versions(development, releases, base):
+    versions = {}
     for tag, source in sorted(releases, key=lambda pair: release_version(pair[0]), reverse=True):
-        manifest = json.loads((source / "site.json").read_text())
+        manifest = read_manifest(source)
         if manifest["version"] != tag or manifest["base"] != base + tag + "/":
             raise ValueError("Release documentation identity does not match its tag or deployment base")
-        shutil.copytree(source, output / tag)
-        versions.append(manifest)
-    dev = json.loads((development / "site.json").read_text())
+        versions[tag] = (source, manifest)
+    dev = read_manifest(development)
     if dev["version"] != "Development" or dev["base"] != base + "dev/":
         raise ValueError("Development documentation identity does not match deployment base")
-    latest = versions[0] if versions else dev
-    versions.append(dev)
-    (output / "versions.json").write_text(json.dumps({"latest": latest["version"], "versions": versions}, indent=2) + "\n")
-    source = output / (latest["version"] if latest is not dev else "dev")
-    for page in source.rglob("*.html"):
-        relative = page.relative_to(source)
-        target = output / relative
-        if target.exists():
-            raise ValueError("Alias overlaps a version directory")
-        target.parent.mkdir(parents=True, exist_ok=True)
-        route = relative.as_posix().removesuffix("index.html")
-        target.write_text(redirect(latest["base"] + route))
-    (output / "404.html").write_text((source / "404.html").read_text())
+    versions["dev"] = (development, dev)
+    return versions
+
+
+def build_latest(manifest, base, staging):
+    checkout = "HEAD"
+    if manifest["version"] != "Development":
+        ref = manifest.get("revision") or f'refs/tags/{manifest["version"]}'
+        subprocess.run(["git", "fetch", "--no-tags", "--depth=1", "origin", ref], check=True)
+        checkout = "FETCH_HEAD"
+
+    archive = staging / "source.tar"
+    source = staging / "source"
+    subprocess.run(["git", "archive", "-o", str(archive), checkout], check=True)
+    with tarfile.open(archive) as packed:
+        packed.extractall(source, filter="data")
+
+    env = dict(os.environ, PLOUS_SITE_BASE=base, PLOUS_SITE_ROOT=base,
+               PLOUS_DOCS_VERSION=manifest["version"], PLOUS_DOCS_SOURCE_REF=manifest["source"])
+    env.pop("PLOUS_DOCS_REVISION", None)
+    if manifest.get("revision"):
+        env["PLOUS_DOCS_REVISION"] = manifest["revision"]
+    subprocess.run(["npm", "ci", "--prefix", "website"], cwd=source, env=env, check=True)
+    subprocess.run(["npm", "--prefix", "website", "run", "build"], cwd=source, env=env, check=True)
+    return source / "website/dist"
+
+
+def assemble(versions, root, output, base):
+    manifests = (manifest for _, manifest in versions.values())
+    latest = next(manifests)
+    root_manifest = read_manifest(root)
+    if root_manifest != {**latest, "base": base}:
+        raise ValueError("Root documentation must match the latest version and use the deployment base")
+    if output.exists():
+        shutil.rmtree(output)
+    shutil.copytree(root, output)
+    for directory, (source, _) in versions.items():
+        shutil.copytree(source, output / directory)
+    catalog = {"latest": latest["version"], "versions": [root_manifest, *manifests]}
+    (output / "versions.json").write_text(json.dumps(catalog, indent=2) + "\n")
     (output / ".nojekyll").touch()
-    (output / "sitemap.xml").write_text((source / "sitemap.xml").read_text())
     return latest["version"]
 
 
@@ -174,7 +188,10 @@ def main():
             if revision and (manifest.get("revision") != revision or manifest.get("source") != revision):
                 raise ValueError(f"Correction source identity mismatch for {tag}")
             snapshots.append((tag, destination))
-        latest = assemble(args.development, snapshots, args.output, base)
+        versions = publication_versions(args.development, snapshots, base)
+        _, latest_manifest = next(iter(versions.values()))
+        root = build_latest(latest_manifest, base, Path(temporary))
+        latest = assemble(versions, root, args.output, base)
         print(f"Assembled {len(snapshots)} release snapshots and Development; latest is {latest}.")
 
 

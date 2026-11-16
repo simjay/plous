@@ -1,4 +1,4 @@
-"""Check publication identity, latest selection, aliases, and archive safety."""
+"""Check publication identity, latest selection, root routes, and archive safety."""
 
 import hashlib
 import importlib.util
@@ -19,8 +19,10 @@ class PublicationTests(unittest.TestCase):
     def snapshot(self, root, version, base):
         root.mkdir()
         (root / "docs").mkdir()
-        (root / "index.html").write_text("home")
-        (root / "docs/index.html").write_text("guide")
+        (root / "assets").mkdir()
+        (root / "assets/index.js").write_text("bundle")
+        (root / "index.html").write_text(f'<a href="{base}docs/">Home {version}</a>')
+        (root / "docs/index.html").write_text(f'<a href="{base}">Guide {version}</a>')
         (root / "404.html").write_text("not found")
         (root / "sitemap.xml").write_text("sitemap")
         (root / "site.json").write_text(json.dumps({"version": version, "base": base, "routes": ["", "docs/"]}))
@@ -31,22 +33,38 @@ class PublicationTests(unittest.TestCase):
             root = Path(temporary)
             dev = self.snapshot(root / "dev", "Development", "/plous/dev/")
             releases = [(tag, self.snapshot(root / tag, tag, f"/plous/{tag}/")) for tag in ("v0.0.3", "v0.0.10")]
+            default = self.snapshot(root / "default", "v0.0.10", "/plous/")
             output = root / "published"
-            self.assertEqual(publish.assemble(dev, releases, output, "/plous/"), "v0.0.10")
-            self.assertEqual(json.loads((output / "versions.json").read_text())["latest"], "v0.0.10")
-            self.assertIn('/plous/v0.0.10/docs/', (output / "docs/index.html").read_text())
+            versions = publish.publication_versions(dev, releases, "/plous/")
+            self.assertEqual(publish.assemble(versions, default, output, "/plous/"), "v0.0.10")
+            catalog = json.loads((output / "versions.json").read_text())
+            self.assertEqual(catalog["latest"], "v0.0.10")
+            self.assertEqual([(entry["version"], entry["base"]) for entry in catalog["versions"]], [
+                ("v0.0.10", "/plous/"), ("v0.0.3", "/plous/v0.0.3/"), ("Development", "/plous/dev/")])
+            self.assertEqual((output / "index.html").read_text(), '<a href="/plous/docs/">Home v0.0.10</a>')
+            self.assertEqual((output / "docs/index.html").read_text(), '<a href="/plous/">Guide v0.0.10</a>')
+            self.assertEqual((output / "assets/index.js").read_text(), "bundle")
             self.assertTrue((output / "v0.0.3/docs/index.html").exists())
-            self.assertEqual((output / "dev/docs/index.html").read_text(), "guide")
-            self.assertIn('location.search+location.hash', (output / "index.html").read_text())
+            self.assertEqual((output / "v0.0.10/docs/index.html").read_text(),
+                             '<a href="/plous/v0.0.10/">Guide v0.0.10</a>')
+            self.assertEqual((output / "dev/docs/index.html").read_text(), '<a href="/plous/dev/">Guide Development</a>')
+            with self.assertRaisesRegex(ValueError, "Root documentation"):
+                publish.assemble(versions, releases[1][1], output, "/plous/")
 
     def test_first_deployment_and_identity_validation(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             dev = self.snapshot(root / "dev", "Development", "/dev/")
-            self.assertEqual(publish.assemble(dev, [], root / "out", "/"), "Development")
+            default = self.snapshot(root / "default", "Development", "/")
+            versions = publish.publication_versions(dev, [], "/")
+            output = root / "out"
+            self.assertEqual(publish.assemble(versions, default, output, "/"), "Development")
+            catalog = json.loads((output / "versions.json").read_text())
+            self.assertEqual(catalog["versions"][0]["base"], "/")
+            self.assertTrue((output / "dev/index.html").is_file())
             release = self.snapshot(root / "release", "v0.0.3", "/wrong/")
             with self.assertRaises(ValueError):
-                publish.assemble(dev, [("v0.0.3", release)], root / "out", "/")
+                publish.publication_versions(dev, [("v0.0.3", release)], "/")
 
     def test_corrections_preserve_the_original_and_ignore_partial_uploads(self):
         tag = "v0.0.3"
