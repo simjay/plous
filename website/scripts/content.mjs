@@ -5,10 +5,11 @@ import { fileURLToPath } from 'node:url';
 export const website = fileURLToPath(new URL('../', import.meta.url));
 export const repository = path.dirname(website);
 export const docs = path.join(repository, 'docs');
-export const base = `/${(process.env.PLOUS_SITE_BASE ?? '/plous').split('/').filter(Boolean).join('/')}`.replace(/\/$/, '') + '/';
+export const base = `/${(process.env.PLOUS_SITE_BASE ?? '/').split('/').filter(Boolean).join('/')}`.replace(/\/$/, '') + '/';
 export const sourceRef = process.env.PLOUS_DOCS_SOURCE_REF || process.env.PLOUS_DOCS_VERSION || 'main';
 export const versionLabel = process.env.PLOUS_DOCS_VERSION || 'Development';
-export const siteRoot = ('/' + (process.env.PLOUS_SITE_ROOT ?? process.env.PLOUS_SITE_BASE ?? '/plous').split('/').filter(Boolean).join('/')).replace(/\/$/, '') + '/';
+export const siteRoot = ('/' + (process.env.PLOUS_SITE_ROOT ?? process.env.PLOUS_SITE_BASE ?? '/').split('/').filter(Boolean).join('/')).replace(/\/$/, '') + '/';
+export const siteURL = process.env.PLOUS_SITE_URL ?? 'https://plous.ai';
 export const href = (route = '') => base + route.replace(/^\/+/, '');
 export const isMaintainerGuide = (relative) => relative.startsWith('contributing/');
 export const repositoryURL = (relative, action = 'blob') =>

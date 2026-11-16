@@ -14,7 +14,7 @@
 <p align="center">
   <a href="#getting-started">Terminal UI</a> ·
   <a href="#coding-agents">Coding agents</a> ·
-  <a href="https://simjay.github.io/plous/docs/">Documentation</a> ·
+  <a href="https://plous.ai/docs/">Documentation</a> ·
   <a href="#contributing">Contributing</a>
 </p>
 

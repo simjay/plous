@@ -9,7 +9,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 DIST = Path(os.environ.get("PLOUS_SITE_DIST", ROOT / "website/dist")).resolve()
-BASE = "/" + os.environ.get("PLOUS_SITE_BASE", "/plous").strip("/")
+BASE = "/" + os.environ.get("PLOUS_SITE_BASE", "/").strip("/")
 BASE = BASE.rstrip("/") + "/"
 
 
@@ -118,11 +118,19 @@ def check_versions(roots, pages, failures):
 def published_roots(catalog, failures):
     latest = catalog["latest"]
     roots = [DIST]
+    legacy = DIST / "plous"
     for entry in catalog["versions"]:
         name = entry["version"]
-        archive = DIST / ("dev" if name == "Development" else name)
+        directory = "dev" if name == "Development" else name
+        archive = DIST / directory
+        archive_base = BASE + directory + "/"
+        if BASE == "/" and name != "Development" and (legacy / directory / "site.json").is_file():
+            archive = legacy / directory
+            archive_base = "/plous" + archive_base
+            for page in archive.rglob("*.html"):
+                if not (DIST / directory / page.relative_to(archive)).is_file():
+                    failures.append(f"{page.relative_to(DIST)}: missing redirect from the previous Pages URL")
         archive_manifest = json.loads((archive / "site.json").read_text())
-        archive_base = BASE + archive.name + "/"
         if archive_manifest != {**entry, "base": archive_base}:
             failures.append(f"{archive}: archived manifest does not match the catalog")
         if name == latest:
@@ -131,6 +139,9 @@ def published_roots(catalog, failures):
         elif entry["base"] != archive_base:
             failures.append(f"{archive}: wrong catalog base")
         roots.append(archive)
+    if any(root.parent == legacy for root in roots):
+        if not (legacy / "versions.json").is_file() or json.loads((legacy / "versions.json").read_text()) != catalog:
+            failures.append("Archived documentation needs the current version catalog at /plous/versions.json")
     return roots
 
 

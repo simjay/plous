@@ -2,6 +2,7 @@
 
 import argparse
 import hashlib
+from html import escape
 import json
 import os
 from pathlib import Path
@@ -10,6 +11,10 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
+from urllib.parse import quote
+
+
+LEGACY_BASE = "/plous/"
 
 
 def release_version(tag):
@@ -40,7 +45,10 @@ def publication_versions(development, releases, base):
     versions = {}
     for tag, source in sorted(releases, key=lambda pair: release_version(pair[0]), reverse=True):
         manifest = read_manifest(source)
-        if manifest["version"] != tag or manifest["base"] != base + tag + "/":
+        expected_bases = {base + tag + "/"}
+        if base == "/":
+            expected_bases.add(LEGACY_BASE + tag + "/")
+        if manifest["version"] != tag or manifest["base"] not in expected_bases:
             raise ValueError("Release documentation identity does not match its tag or deployment base")
         versions[tag] = (source, manifest)
     dev = read_manifest(development)
@@ -73,6 +81,24 @@ def build_latest(manifest, base, staging):
     return source / "website/dist"
 
 
+def redirect_archive(source, destination, archived_base):
+    for page in source.rglob("*.html"):
+        relative = page.relative_to(source)
+        route = relative.as_posix().removesuffix("index.html") if page.name == "index.html" else relative.as_posix()
+        target = escape(archived_base + quote(route), quote=True)
+        redirect = destination / relative
+        redirect.parent.mkdir(parents=True, exist_ok=True)
+        redirect.write_text(f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="robots" content="noindex">
+<title>Documentation moved</title>
+<link rel="canonical" href="{target}">
+<noscript><meta http-equiv="refresh" content="0;url={target}"></noscript></head>
+<body><h1>Documentation moved</h1><a id="archive" href="{target}">Open the archived page</a>
+<script>location.replace(document.getElementById('archive').href + location.search + location.hash)</script>
+</body></html>
+""", encoding="utf-8")
+
+
 def assemble(versions, root, output, base):
     manifests = (manifest for _, manifest in versions.values())
     latest = next(manifests)
@@ -82,10 +108,21 @@ def assemble(versions, root, output, base):
     if output.exists():
         shutil.rmtree(output)
     shutil.copytree(root, output)
-    for directory, (source, _) in versions.items():
-        shutil.copytree(source, output / directory)
+    legacy_catalog = False
+    for directory, (source, manifest) in versions.items():
+        archived_base = manifest["base"]
+        if archived_base == base + directory + "/":
+            shutil.copytree(source, output / directory)
+        else:
+            # Archived renderers and search indexes contain absolute paths.
+            shutil.copytree(source, output / archived_base.strip("/"))
+            redirect_archive(source, output / directory, archived_base)
+            legacy_catalog = True
     catalog = {"latest": latest["version"], "versions": [root_manifest, *manifests]}
-    (output / "versions.json").write_text(json.dumps(catalog, indent=2) + "\n")
+    catalog_json = json.dumps(catalog, indent=2) + "\n"
+    (output / "versions.json").write_text(catalog_json)
+    if legacy_catalog:
+        (output / LEGACY_BASE.strip("/") / "versions.json").write_text(catalog_json)
     (output / ".nojekyll").touch()
     return latest["version"]
 
@@ -156,7 +193,7 @@ def main():
     parser.add_argument("--correction-directory", type=Path, default=Path("documentation-release"))
     parser.add_argument("--development", type=Path, default=Path("website/dist"))
     parser.add_argument("--output", type=Path, default=Path("website/published"))
-    parser.add_argument("--base", default="/plous/")
+    parser.add_argument("--base", default="/")
     parser.add_argument("--repository", default="simjay/plous")
     args = parser.parse_args()
     if args.upload_correction:

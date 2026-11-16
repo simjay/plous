@@ -66,6 +66,30 @@ class PublicationTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 publish.publication_versions(dev, [("v0.0.3", release)], "/")
 
+    def test_domain_root_serves_legacy_archives_at_their_original_base(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            dev = self.snapshot(root / "dev", "Development", "/dev/")
+            legacy = self.snapshot(root / "old", "v0.0.3", "/plous/v0.0.3/")
+            release = self.snapshot(root / "new", "v0.0.4", "/v0.0.4/")
+            default = self.snapshot(root / "default", "v0.0.4", "/")
+            output = root / "published"
+            versions = publish.publication_versions(dev, [("v0.0.3", legacy), ("v0.0.4", release)], "/")
+            publish.assemble(versions, default, output, "/")
+
+            for path in legacy.rglob("*"):
+                if path.is_file():
+                    archived = output / "plous/v0.0.3" / path.relative_to(legacy)
+                    self.assertEqual(archived.read_bytes(), path.read_bytes())
+            redirect = (output / "v0.0.3/docs/index.html").read_text()
+            self.assertIn('href="/plous/v0.0.3/docs/"', redirect)
+            self.assertIn("location.search + location.hash", redirect)
+            self.assertTrue((output / "v0.0.4/docs/index.html").is_file())
+            catalog = (output / "versions.json").read_text()
+            self.assertEqual((output / "plous/versions.json").read_text(), catalog)
+            self.assertEqual([entry["base"] for entry in json.loads(catalog)["versions"]],
+                             ["/", "/plous/v0.0.3/", "/dev/"])
+
     def test_corrections_preserve_the_original_and_ignore_partial_uploads(self):
         tag = "v0.0.3"
         original = f"documentation-{tag}"

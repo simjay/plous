@@ -9,7 +9,7 @@ import os
 parser = argparse.ArgumentParser()
 parser.add_argument('--port', type=int, default=8046)
 args = parser.parse_args()
-base = '/' + os.environ.get('PLOUS_SITE_BASE', '/plous').strip('/')
+base = '/' + os.environ.get('PLOUS_SITE_BASE', '/').strip('/')
 base = base.rstrip('/') + '/'
 directory = Path(os.environ.get('PLOUS_SITE_DIST', Path(__file__).resolve().parents[1] / 'dist'))
 

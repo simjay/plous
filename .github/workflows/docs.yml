@@ -26,8 +26,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  PLOUS_SITE_URL: ${{ vars.PLOUS_SITE_URL || 'https://simjay.github.io' }}
-  PLOUS_SITE_ROOT: ${{ vars.PLOUS_SITE_BASE || '/plous' }}
+  PLOUS_SITE_URL: ${{ vars.PLOUS_SITE_URL || 'https://plous.ai' }}
+  PLOUS_SITE_ROOT: ${{ vars.PLOUS_SITE_BASE || '/' }}
 
 jobs:
   build:

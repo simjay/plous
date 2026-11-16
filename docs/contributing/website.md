@@ -15,7 +15,7 @@ make website-build
 npm --prefix website run preview
 ```
 
-Open `http://127.0.0.1:8046/plous/`. Rebuild after source edits. Stop the preview with Ctrl+C.
+Open `http://127.0.0.1:8046/`. Rebuild after source edits. Stop the preview with Ctrl+C.
 
 | Check | What it verifies |
 | --- | --- |
@@ -43,7 +43,7 @@ Paths in this table are under `website/`. The build stages Markdown and the Vite
 
 ## Content and links
 
-Keep one source under `docs/`. Relative guide links become website routes. For example, the latest release serves `docs/getting-started/README.md` at `/plous/docs/getting-started/`.
+Keep one source under `docs/`. Relative guide links become website routes. For example, the latest release serves `docs/getting-started/README.md` at `/docs/getting-started/`.
 
 Write one task per guide. Put exact commands and limits in references. Keep implementation details in contributor pages.
 
@@ -63,19 +63,12 @@ The build excludes `docs/contributing/` from public guides and search. Old contr
 
 Enable **Settings → Pages → Source → GitHub Actions**. Allow the `github-pages` environment to deploy from main. Only the deployment job receives Pages write permissions.
 
-The published site is [simjay.github.io/plous](https://simjay.github.io/plous/).
+Set the Pages custom domain to `plous.ai`, point its DNS records to GitHub Pages, and enable Enforce HTTPS after GitHub validates DNS.
 
 | Actions variable | Default |
 | --- | --- |
-| `PLOUS_SITE_URL` | `https://simjay.github.io` |
-| `PLOUS_SITE_BASE` | `/plous` |
-
-For a custom domain, configure Pages and DNS, then set the origin and base. Check domain-root builds locally:
-
-```sh
-PLOUS_SITE_URL=https://docs.example.com \
-  PLOUS_SITE_BASE=/ make website-build
-```
+| `PLOUS_SITE_URL` | `https://plous.ai` |
+| `PLOUS_SITE_BASE` | `/` |
 
 Pages receives `website/published/`. Build outputs, private data, and local internals stay out of source control.
 
@@ -88,7 +81,7 @@ Pages receives `website/published/`. Build outputs, private data, and local inte
 | Application release | Save the tagged docs archive and queue Pages |
 | Documentation correction | Add a commit-identified correction and republish that version |
 
-The latest release is served directly at `/plous/` and `/plous/docs/`. `/plous/dev/` follows main. `/plous/v0.0.3/` serves docs for that application version. Search stays within the selected version.
+The latest release is served directly at `/` and `/docs/`. `/dev/` follows main. Release snapshots built for `/plous/` keep their original base so their archived assets and search keep working. Versioned links redirected from the old GitHub Pages domain, such as `/v0.0.3/docs/`, redirect to the archived page on `plous.ai`. New snapshots use `/vMAJOR.MINOR.PATCH/`. Search stays within the selected version.
 
 Release archives and SHA-256 files live as GitHub release assets. Each Pages build verifies and retains those archives, then builds the default site at the deployment base from the latest release's exact tag or correction commit. Before the first release, the default site uses the Development build's source commit.
 

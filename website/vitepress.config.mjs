@@ -1,9 +1,7 @@
 import { defineConfig } from 'vitepress';
-import { base, siteRoot, versionLabel } from './scripts/content.mjs';
+import { base, siteRoot, siteURL, versionLabel } from './scripts/content.mjs';
 import { groups } from './scripts/navigation.mjs';
 import { headingSlug } from './scripts/prepare.mjs';
-
-const hostname = process.env.PLOUS_SITE_URL ?? 'https://simjay.github.io';
 
 export default defineConfig({
   base,
@@ -13,7 +11,7 @@ export default defineConfig({
   head: [['link', {rel: 'icon', href: base + 'assets/icon.svg'}]],
   transformHead({pageData}) {
     if (pageData.relativePath === '404.md') return [['meta', {name: 'robots', content: 'noindex'}]];
-    return [['link', {rel: 'canonical', href: new URL(base + pageData.relativePath.replace(/index\.md$/, ''), hostname).href}]];
+    return [['link', {rel: 'canonical', href: new URL(base + pageData.relativePath.replace(/index\.md$/, ''), siteURL).href}]];
   },
   transformHtml(html, _file, {page}) {
     if (page === '404.md') {

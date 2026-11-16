@@ -1,12 +1,11 @@
 import { cp, mkdir, mkdtemp, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { build } from 'vitepress';
-import { docs, href, repository, website, base, sourceRef, versionLabel } from './content.mjs';
+import { docs, href, repository, website, base, siteURL, sourceRef, versionLabel } from './content.mjs';
 import { legacyRoutes } from './legacy-routes.mjs';
 import { prepareContent } from './prepare.mjs';
 
 const dist = path.join(website, 'dist');
-const siteURL = process.env.PLOUS_SITE_URL ?? 'https://simjay.github.io';
 const escape = (value) => value.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 const json = (value) => JSON.stringify(value).replaceAll('<', '\\u003c');
 
