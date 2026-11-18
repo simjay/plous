@@ -21,6 +21,7 @@ import (
 
 type Options struct {
 	Debug                               kubernetes.DebugPolicy
+	Monitor                             MonitorReader
 	Agent                               agent.Kind
 	UI                                  agent.UI
 	Store                               *workspace.Store

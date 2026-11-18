@@ -51,44 +51,59 @@ func (client setupClient) install(c configuration, output io.Writer) error {
 		}
 		return err
 	}
-	if client.format == openCodeConfig {
-		configPath, err = client.openCodeConfigFile(configPath, executable)
-		if err != nil {
-			return err
-		}
+	configPath, err = client.configFile(configPath, executable)
+	if err != nil {
+		return err
 	}
 	oldConfig, err := readInstallFile(configPath)
 	if err != nil {
 		return err
 	}
-	oldSkill, err := readInstallFile(skillPath)
-	if err != nil {
-		return err
+	monitorPath := filepath.Join(filepath.Dir(filepath.Dir(skillPath)), "plous-monitor", "SKILL.md")
+	type installSkill struct {
+		path, name, body string
+		old              []byte
 	}
-	if len(oldSkill) > 0 && !bytes.Equal(oldSkill, []byte(skills.DebugSkill)) && !bytes.Contains(oldSkill, []byte("\n---\n\n"+skillMarker)) {
-		return errors.New("plous-debug skill already exists and is not managed by Plous")
+	installedSkills := []installSkill{
+		{path: skillPath, name: "plous-debug", body: skills.DebugSkill},
+		{path: monitorPath, name: "plous-monitor", body: skills.MonitorSkill},
+	}
+	for i := range installedSkills {
+		skill := &installedSkills[i]
+		skill.old, err = readInstallFile(skill.path)
+		if err != nil {
+			return err
+		}
+		if len(skill.old) > 0 && !bytes.Equal(skill.old, []byte(skill.body)) && !bytes.Contains(skill.old, []byte("\n---\n\n"+skillMarker)) {
+			return fmt.Errorf("%s skill already exists and is not managed by Plous", skill.name)
+		}
 	}
 	newConfig, err := client.mergeConfig(oldConfig, executable, client.launchArgs(c))
 	if err != nil {
 		return err
 	}
-	// Keep YAML frontmatter at the start, including for clients that do not
-	// accept comments before the frontmatter delimiter.
-	skill := strings.Replace(skills.DebugSkill, "\n---\n", "\n---\n\n"+skillMarker, 1)
-	if err = writeInstallFile(skillPath, oldSkill, []byte(skill)); err != nil {
-		return err
+	for _, skill := range installedSkills {
+		// Keep YAML frontmatter at the start for clients that require it.
+		body := strings.Replace(skill.body, "\n---\n", "\n---\n\n"+skillMarker, 1)
+		if err := writeInstallFile(skill.path, skill.old, []byte(body)); err != nil {
+			return err
+		}
 	}
 	if err = writeInstallFile(configPath, oldConfig, newConfig); err != nil {
 		return fmt.Errorf("skill installed, but MCP configuration could not be saved: %w", err)
 	}
-	target := c.context
-	if target == "" {
-		target = "follows kubeconfig current context"
-	}
-	if c.namespace != "" {
-		target += " / " + c.namespace
-	}
-	fmt.Fprintf(output, "Installed plous-debug for %s.\nSkill: %s\nMCP configuration: %s\nTarget: %s\nExec enabled: %t\nTemporary diagnostics enabled: %t\nRestart or reconnect the agent.\n", client.kind.Label(), skillPath, configPath, target, c.policy.Exec, c.policy.Image != "")
+	fmt.Fprintf(output, `Configured plous-debug for %s.
+Executable: %s
+Skill: %s
+Monitor skill: %s
+MCP server plous_debug: %s
+Target: follows the agent process's current kubecontext until you select another target
+Exec enabled: %t
+Temporary diagnostics enabled: %t
+
+Restart or reconnect the agent, then use plous-debug and describe what broke.
+Guide: https://plous.ai/docs/agent-skills/clients/%s/
+`, client.kind.Label(), executable, skillPath, monitorPath, configPath, c.policy.Exec, c.policy.Image != "", client.command)
 	return nil
 }
 

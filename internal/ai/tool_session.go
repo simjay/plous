@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"strings"
 	"time"
 
@@ -18,10 +17,11 @@ import (
 // Serial calls also protect source continuations and delivery accounting when a
 // transport receives concurrent tool requests.
 type toolSession struct {
-	op     *operation
-	ctx    context.Context
-	cancel context.CancelFunc
-	gate   chan struct{}
+	op       *operation
+	ctx      context.Context
+	cancel   context.CancelFunc
+	gate     chan struct{}
+	external bool
 }
 
 var _ agent.Tools = (*toolSession)(nil)
@@ -33,17 +33,21 @@ func newToolSession(ctx context.Context, op *operation) *toolSession {
 
 func (s *toolSession) Definitions() []agent.Tool { return s.op.toolDefinitions() }
 
-func (s *toolSession) Call(ctx context.Context, call agent.ToolCall, maxBytes int) (result json.RawMessage, err error) {
-	acquired := false
+func (s *toolSession) Call(requestCtx context.Context, call agent.ToolCall, maxBytes int) (result json.RawMessage, err error) {
+	acquired, mayHaveChangedState := false, false
 	defer func() {
-		if err != nil {
+		if s.external && requestCtx.Err() != nil && s.ctx.Err() == nil &&
+			!mayHaveChangedState &&
+			agent.OnlyCancellation(err, requestCtx.Err()) {
+			err = fmt.Errorf("%w: %w", agent.ErrRequestCancelled, requestCtx.Err())
+		} else if err != nil {
 			s.cancel()
 		}
 		if acquired {
 			<-s.gate
 		}
 	}()
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(requestCtx)
 	stop := context.AfterFunc(s.ctx, cancel)
 	defer stop()
 	defer cancel()
@@ -66,13 +70,7 @@ func (s *toolSession) Call(ctx context.Context, call agent.ToolCall, maxBytes in
 		return nil, errors.New("tool call identity is required")
 	}
 	s.op.deliveryBytes = min(65536, maxBytes)
-	safe, redactErr := s.op.redactArguments(call.Args)
-	if redactErr != nil {
-		// Invalid JSON must also be safe to serialize in execution records.
-		safe = []byte("null")
-	}
-	call.Args = safe
-	body, err := s.op.toolResult(ctx, call)
+	body, err := s.op.toolResult(ctx, call, func() { mayHaveChangedState = true })
 	return json.RawMessage(body), err
 }
 
@@ -82,32 +80,18 @@ func (s *toolSession) Close() {
 	defer func() { <-s.gate }()
 }
 
-func (op *operation) toolResult(ctx context.Context, call aimodel.ToolCall) (body string, err error) {
+func (op *operation) toolResult(ctx context.Context, call aimodel.ToolCall, beforeEffect func()) (body string, err error) {
+	args, parseErr := op.toolInput(call.Args)
+	// Keep the full sanitized request separate from the arguments consumed by routing.
+	call.Args = marshal(args)
 	var receipt string
 	defer func() {
 		err = errors.Join(err, op.observe(Observation{Phase: "tool", Component: call.Name, CallID: call.ID, TurnID: op.o.TurnID, Input: string(marshal(map[string]any{"arguments": call.Args, "result": body, "ref": receipt})), Failed: err != nil}))
 	}()
-	allowed := false
-	if op.hasTool("kubernetes") && op.debugEnabled(call.Name) {
-		allowed = true
-	}
-	for _, d := range op.definitions() {
-		if d.Name == call.Name {
-			allowed = true
-			break
-		}
-	}
-	if call.Name == "history_read" {
-		allowed = true
-	}
-	show, isShow := showDefinition(call.Name)
-	if op.o.UI != nil && (call.Name == "ui_read" || isShow && (show.Owner == "" || op.hasTool(show.Owner))) {
-		allowed = true
-	}
-	if !allowed {
+	tool, available := op.tool(call.Name)
+	if !available {
 		return `{"error":"tool is not available in captured scope"}`, nil
 	}
-	args, parseErr := toolArguments(call.Args)
 	if parseErr != nil {
 		return `{"error":"tool arguments must be an object"}`, nil
 	}
@@ -116,11 +100,14 @@ func (op *operation) toolResult(ctx context.Context, call aimodel.ToolCall) (bod
 		return `{"error":"purpose is required"}`, nil
 	}
 	delete(args, "purpose")
-	if call.Name == "ui_read" || isShow {
-		return op.uiTool(ctx, call.Name, args)
+	if tool.kind == viewTool {
+		if stringArgument(args, "operation") == "open" {
+			beforeEffect()
+		}
+		return op.uiTool(ctx, args)
 	}
 	var fields []string
-	if call.Name != "history_read" {
+	if tool.kind != historyTool {
 		if raw, exists := args["fields"]; exists {
 			if json.Unmarshal(raw, &fields) != nil {
 				return `{"error":"fields must be an array of saved row fact names"}`, nil
@@ -131,26 +118,20 @@ func (op *operation) toolResult(ctx context.Context, call aimodel.ToolCall) (bod
 	var reply any
 	var r observation.Result
 	var readErr error
-	if call.Name == "history_read" {
+	if tool.kind == historyTool {
 		reply, r, readErr = op.historyTool(ctx, marshal(args))
 		if readErr != nil && !errors.Is(readErr, errReadDenied) {
 			return "", readErr
 		}
-	} else if op.debugEnabled(call.Name) {
-		// Record intent before an operation that can affect the cluster. A failed
-		// durable record prevents execution; failed delivery must never cause retry.
-		if err := op.o.History.SaveToolIntent(op.o.WorkspaceID, op.o.ConversationID, op.o.TurnID, call); err != nil {
-			return "", err
-		}
-		r, readErr = op.debugTool(ctx, call.Name, string(marshal(args)))
 	} else {
-		value, err := op.externalRead(ctx, call.Name, string(marshal(args)))
-		readErr = err
-		var ok bool
-		r, ok = value.(observation.Result)
-		if readErr == nil && !ok {
-			return "", fmt.Errorf("%s returned an unprojected result", call.Name)
+		if tool.kind == runTool && op.o.Debug.Allows(stringArgument(args, "operation")) {
+			// A durable intent must precede dispatch of an active operation.
+			if err := op.o.History.SaveToolIntent(op.o.WorkspaceID, op.o.ConversationID, op.o.TurnID, call); err != nil {
+				return "", err
+			}
+			beforeEffect()
 		}
+		r, readErr = op.dispatchRead(ctx, tool, args)
 	}
 	if readErr != nil {
 		if errors.Is(readErr, errReadDenied) {
@@ -175,11 +156,11 @@ func (op *operation) toolResult(ctx context.Context, call aimodel.ToolCall) (bod
 	}
 	receipt = saved.Ref
 	op.historyAccess.PermitSaved(op.o.ConversationID, saved.Sequence)
-	if ctx.Err() != nil {
-		return "", ctx.Err()
-	}
 	if readErr != nil && !errors.Is(readErr, errReadDenied) {
 		return "", readErr
+	}
+	if ctx.Err() != nil {
+		return "", ctx.Err()
 	}
 	if reply != nil && readErr == nil {
 		safe, err := op.redactJSON(marshal(reply))
@@ -192,43 +173,51 @@ func (op *operation) toolResult(ctx context.Context, call aimodel.ToolCall) (bod
 	}
 	return string(marshal(page)), nil
 }
-func toolArguments(raw json.RawMessage) (map[string]json.RawMessage, error) {
-	d := json.NewDecoder(strings.NewReader(string(raw)))
-	token, err := d.Token()
-	if err != nil || token != json.Delim('{') {
-		return nil, errors.New("arguments must be an object")
-	}
-	args := map[string]json.RawMessage{}
-	for d.More() {
-		token, err = d.Token()
-		name, ok := token.(string)
-		if err != nil || !ok || args[name] != nil {
-			return nil, errors.New("duplicate or invalid argument")
-		}
-		var value json.RawMessage
-		if err = d.Decode(&value); err != nil || string(value) == "null" {
-			return nil, errors.New("invalid argument")
-		}
-		args[name] = value
-	}
-	if _, err = d.Token(); err != nil {
-		return nil, err
-	}
-	if _, err = d.Token(); err != io.EOF {
-		return nil, errors.New("expected one argument object")
-	}
-	return args, nil
-}
 
 func (op *operation) toolBytes() int {
 	return op.deliveryBytes
 }
 
 func (op *operation) redactArguments(raw []byte) ([]byte, error) {
-	// Validate the original object before JSON normalization can discard
-	// duplicate keys or a trailing value.
-	if _, err := toolArguments(raw); err != nil {
+	args, err := op.toolInput(raw)
+	if err != nil {
 		return nil, err
 	}
-	return op.redactJSON(raw)
+	return marshal(args), nil
+}
+
+func (op *operation) toolInput(raw json.RawMessage) (map[string]json.RawMessage, error) {
+	args, err := observation.ParseArguments(raw)
+	if err != nil || len(op.keys) == 0 {
+		return args, err
+	}
+	safe := make(map[string]json.RawMessage, len(args))
+	for name, value := range args {
+		key := op.redact(name)
+		if _, exists := safe[key]; exists {
+			return nil, errors.New("duplicate sanitized argument")
+		}
+		safe[key], err = op.redactJSON(value)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return safe, nil
+}
+
+func (op *operation) dispatchRead(ctx context.Context, tool toolDefinition, args map[string]json.RawMessage) (observation.Result, error) {
+	var connection Connection
+	if tool.connection != "" {
+		id := stringArgument(args, "connection_id")
+		if id == "" {
+			return observation.Result{}, denyRead(errors.New("connection_id must identify a connection in the captured workspace"))
+		}
+		captured, err := op.connection(id, tool.connection)
+		if err != nil {
+			return observation.Result{}, denyRead(err)
+		}
+		connection = captured
+		delete(args, "connection_id")
+	}
+	return tool.read(ctx, connection, args)
 }

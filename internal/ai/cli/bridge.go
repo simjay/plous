@@ -7,6 +7,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -58,11 +59,21 @@ func (b *Bridge) Authorization() string { return "Bearer " + b.token }
 
 func (b *Bridge) Close() { b.cancel(context.Canceled); _ = b.server.Close() }
 func (b *Bridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	b.serveRPC(w, r, false)
+}
+
+const (
+	maxMCPRequestBytes      = 1 << 20
+	maxPendingCancellations = 64
+	toolAccessStopped       = "Plous tool access stopped after a tool failure. Reconnect the MCP client, or close and reopen the hosted session. Do not automatically retry active diagnostics; their remote outcome may be unknown."
+)
+
+func (b *Bridge) serveRPC(w http.ResponseWriter, r *http.Request, keepTransportOpen bool) {
 	if r.URL.Path != "/mcp" || subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte("Bearer "+b.token)) != 1 || r.Header.Get("Origin") != "" {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	if b.ctx.Err() != nil {
+	if !keepTransportOpen && b.ctx.Err() != nil {
 		http.Error(w, "session closed", http.StatusGone)
 		return
 	}
@@ -76,7 +87,7 @@ func (b *Bridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Method  string          `json:"method"`
 		Params  json.RawMessage `json:"params"`
 	}
-	d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	d := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxMCPRequestBytes))
 	if d.Decode(&req) != nil || req.JSONRPC != "2.0" {
 		http.Error(w, "invalid JSON-RPC request", http.StatusBadRequest)
 		return
@@ -96,7 +107,9 @@ func (b *Bridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					identity := canonicalID(p.RequestID)
 					b.mu.Lock()
 					cancel := b.active[identity]
-					if identity != "" && cancel == nil {
+					// HTTP requests can arrive out of order. Retain only a
+					// bounded number of cancellations for unseen identities.
+					if identity != "" && cancel == nil && !b.seen[identity] && len(b.cancelled) < maxPendingCancellations {
 						if b.cancelled == nil {
 							b.cancelled = map[string]bool{}
 						}
@@ -127,16 +140,25 @@ func (b *Bridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if version == "" {
 			version = "1"
 		}
-		result = map[string]any{"protocolVersion": "2025-03-26", "capabilities": map[string]any{"tools": map[string]any{}}, "serverInfo": map[string]string{"name": "plous", "version": version}, "instructions": b.Instructions}
+		protocol := "2025-03-26"
+		if keepTransportOpen {
+			protocol = stdioProtocol(req.Params)
+		}
+		result = map[string]any{"protocolVersion": protocol, "capabilities": map[string]any{"tools": map[string]any{}}, "serverInfo": map[string]string{"name": "plous", "version": version}, "instructions": b.Instructions}
 	case "ping":
 		result = map[string]any{}
 	case "tools/list":
 		list := []any{}
 		for _, t := range b.tools.Definitions() {
-			list = append(list, map[string]any{"name": t.Name, "description": t.Description, "inputSchema": t.Parameters, "annotations": map[string]bool{"readOnlyHint": !t.Mutating, "destructiveHint": t.Mutating}})
+			annotations := map[string]bool{"readOnlyHint": !t.Mutating, "destructiveHint": t.Mutating && !t.NonDestructive}
+			list = append(list, map[string]any{"name": t.Name, "description": t.Description, "inputSchema": t.Parameters, "annotations": annotations})
 		}
 		result = map[string]any{"tools": list}
 	case "tools/call":
+		if b.ctx.Err() != nil {
+			rpcErr = map[string]any{"code": -32000, "message": toolAccessStopped}
+			break
+		}
 		var p struct {
 			Name      string          `json:"name"`
 			Arguments json.RawMessage `json:"arguments"`
@@ -145,18 +167,17 @@ func (b *Bridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			rpcErr = map[string]any{"code": -32602, "message": "invalid tool call"}
 			break
 		}
+		ctx, cancel := context.WithCancel(r.Context())
 		b.mu.Lock()
 		if b.seen[callID] {
 			b.mu.Unlock()
+			cancel()
 			rpcErr = map[string]any{"code": -32600, "message": "tool request identity already used"}
 			break
 		}
 		b.seen[callID] = true
 		b.calls++
 		n := b.calls
-		b.mu.Unlock()
-		ctx, cancel := context.WithCancel(r.Context())
-		b.mu.Lock()
 		if b.active == nil {
 			b.active = map[string]context.CancelFunc{}
 		}
@@ -170,7 +191,8 @@ func (b *Bridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		stop := context.AfterFunc(b.ctx, cancel)
 		var body json.RawMessage
 		err := ctx.Err()
-		if err == nil {
+		dispatched := err == nil
+		if dispatched {
 			body, err = b.tools.Call(ctx, agent.ToolCall{ID: fmt.Sprintf("%s/cli-tool-%d", b.id, n), Name: p.Name, Args: p.Arguments}, 65536)
 		}
 		stop()
@@ -178,12 +200,20 @@ func (b *Bridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		b.mu.Lock()
 		delete(b.active, callID)
 		b.mu.Unlock()
+		if !dispatched && b.ctx.Err() == nil {
+			rpcErr = map[string]any{"code": -32800, "message": "Tool request cancelled before dispatch."}
+			break
+		}
 		if err == nil {
 			err = b.ctx.Err()
 		}
+		if errors.Is(err, agent.ErrRequestCancelled) && b.ctx.Err() == nil {
+			rpcErr = map[string]any{"code": -32800, "message": "Tool request cancelled."}
+			break
+		}
 		if err != nil {
 			b.cancel(err)
-			rpcErr = map[string]any{"code": -32000, "message": "Plous tool access stopped after a tool failure. Reconnect the MCP client, or close and reopen the hosted session. Do not automatically retry active diagnostics; their remote outcome may be unknown."}
+			rpcErr = map[string]any{"code": -32000, "message": toolAccessStopped}
 			break
 		}
 		result = map[string]any{"content": []any{map[string]string{"type": "text", "text": string(body)}}, "isError": false}

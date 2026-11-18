@@ -22,7 +22,7 @@ func TestProjectedEvidenceSurvivesHistoryReadAndRestart(t *testing.T) {
 		step++
 		switch step {
 		case 1:
-			return call("kubernetes_resources_read", `{"purpose":"Observe Pod phase","connection_id":"captured","operation":"get","resource":"pods","name":"checkout","namespace":"payments"}`)
+			return call("kubernetes_read", `{"purpose":"Observe Pod phase","connection_id":"captured","operation":"get","resource":"pods","name":"checkout","namespace":"payments"}`)
 		case 2:
 			var saved struct {
 				Ref string `json:"ref"`

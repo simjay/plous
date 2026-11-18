@@ -1,9 +1,11 @@
 package monitor
 
 import (
+	"strings"
+	"testing"
+
 	kubecommon "github.com/simjay/plous/internal/integrations/kubernetes/common"
 	"github.com/simjay/plous/internal/integrations/observation"
-	"testing"
 )
 
 func TestWorkloadCountsAndReadinessHaveOneDefinition(t *testing.T) {
@@ -14,7 +16,11 @@ func TestWorkloadCountsAndReadinessHaveOneDefinition(t *testing.T) {
 				status = map[string]any{"numberReady": int64(2), "numberAvailable": int64(1), "updatedNumberScheduled": int64(3), "desiredNumberScheduled": int64(4), "observedGeneration": int64(6)}
 			}
 			object := map[string]any{"metadata": map[string]any{"generation": int64(7)}, "spec": map[string]any{"replicas": int64(4)}, "status": status}
-			facts := workloadFacts(kind, object)
+			name, group, _ := strings.Cut(kind, ".")
+			facts := map[string]observation.Value{}
+			if err := projectWorkloads(kubecommon.Resource{Group: group, Name: name, Version: "v1"}, object, facts); err != nil {
+				t.Fatal(err)
+			}
 			for key, want := range map[string]string{"desired_replicas": "4", "unready_replicas": "2", "unavailable_replicas": "3", "generation_observed": "false", "ready_ratio": "2/4"} {
 				if facts[key].String() != want {
 					t.Fatal(key, facts[key])
@@ -36,6 +42,15 @@ func TestWorkloadOmittedZeroAndMissingStatus(t *testing.T) {
 	if f["readyReplicas"].String() != "0" || f["unready_replicas"].String() != "3" {
 		t.Fatal(f)
 	}
+	object["status"].(map[string]any)["readyReplicas"] = "0"
+	object["spec"].(map[string]any)["replicas"] = "3"
+	if err := projectWorkloads(r, object, f); err != nil {
+		t.Fatal(err)
+	}
+	if !f["readyReplicas"].Unknown || !f["desired_replicas"].Unknown || workloadReadyColumn(r.Key()).value(object) != "?/?" {
+		t.Fatal("malformed replica counts were treated as numeric", f)
+	}
+	object["spec"].(map[string]any)["replicas"] = int64(3)
 	delete(object, "status")
 	if err := projectWorkloads(r, object, f); err != nil {
 		t.Fatal(err)

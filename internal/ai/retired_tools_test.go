@@ -13,7 +13,7 @@ func TestRetiredSourceToolsCannotBeAdvertisedOrDispatched(t *testing.T) {
 		}
 	}
 	for name := range retired {
-		if _, err := op.externalRead(t.Context(), name, `{"connection_id":"old","operation":"read","path":"README.md"}`); err == nil {
+		if _, ok := op.tool(name); ok {
 			t.Fatal("retired tool was dispatched", name)
 		}
 	}

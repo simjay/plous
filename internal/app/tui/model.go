@@ -54,8 +54,13 @@ type session struct {
 type autosaveMsg struct{}
 
 type model struct {
-	debugPolicy     kubernetes.DebugPolicy
-	launchDirectory string
+	debugPolicy      kubernetes.DebugPolicy
+	launchDirectory  string
+	monitorRoot      string
+	monitorStates    []monitor.State
+	monitorSelection string
+	alertMonitor     string
+	monitorListErr   bool
 
 	uiDone                                                                  chan struct{}
 	uiStopped                                                               bool
@@ -249,7 +254,7 @@ func newModel(store *workspace.Store, archive *history.Store, version string) (*
 }
 
 func (m *model) Init() tea.Cmd {
-	return tea.Batch(waitUI(m.uiRequests, m.uiDone), autosave(), currentTick(), m.syncCurrent(), m.syncExplore(), m.syncOverview(), m.syncClusters(), m.syncGitOps(), m.syncHelm(), m.syncLoading(), m.syncChatRestore(), m.syncActivity())
+	return tea.Batch(waitUI(m.uiRequests, m.uiDone), autosave(), currentTick(), monitorTick(m.monitorRoot, 0), m.syncCurrent(), m.syncExplore(), m.syncOverview(), m.syncClusters(), m.syncGitOps(), m.syncHelm(), m.syncLoading(), m.syncChatRestore(), m.syncActivity())
 }
 
 func autosave() tea.Cmd {
@@ -399,6 +404,7 @@ func (m *model) selectScope(ws, tool, connection string) {
 	m.active, m.tool, m.connection = ws, tool, connection
 	m.currentRoot = workspace.IsCurrentScope(ws)
 	m.historyView = ""
+	m.alertMonitor = ""
 	m.page = ""
 	m.form = nil
 	m.command = nil

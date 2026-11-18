@@ -48,7 +48,7 @@ func OpenExternalTools(ctx context.Context, o Options) (*ExternalTools, error) {
 	op.o.ConversationID, op.o.TurnID = conversation.ID, turn.Request.ID
 	finish := func(cause error) error {
 		status, detail := "completed", ""
-		if errors.Is(cause, context.Canceled) {
+		if agent.OnlyCancellation(cause, context.Canceled) {
 			status = "cancelled"
 		} else if cause != nil {
 			status, detail = "error", op.redact(cause.Error())
@@ -61,6 +61,7 @@ func OpenExternalTools(ctx context.Context, o Options) (*ExternalTools, error) {
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	session := newToolSession(ctx, op)
+	session.external = true
 	var once sync.Once
 	var saveMu sync.Mutex
 	var saved bool

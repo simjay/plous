@@ -1,4 +1,4 @@
-// Package skills embeds the debugging workflow distributed with Plous.
+// Package skills embeds the agent workflows distributed with Plous.
 package skills
 
 import (
@@ -8,6 +8,9 @@ import (
 
 //go:embed plous-debug/SKILL.md
 var DebugSkill string
+
+//go:embed plous-monitor/SKILL.md
+var MonitorSkill string
 
 func DebugInstructions() string {
 	_, body, _ := strings.Cut(strings.TrimPrefix(DebugSkill, "---\n"), "\n---\n")

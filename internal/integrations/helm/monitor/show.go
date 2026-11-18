@@ -6,8 +6,6 @@ import (
 	"slices"
 )
 
-const ShowHelp = "Open a comparison of two exact retained Helm revisions of one release. revision selects the after revision; compare_revision selects the before revision, matching helm_diff_read. Requires a release name, concrete namespace and two different positive revisions. tab selects values or manifests. Release lists are not supported."
-
 var showArguments = []string{"namespace", "name", "revision", "compare_revision", "tab"}
 var showRequired = []string{"namespace", "name", "revision", "compare_revision"}
 var showTabs = []string{"values", "manifests"}

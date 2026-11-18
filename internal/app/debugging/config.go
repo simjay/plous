@@ -18,13 +18,6 @@ func (c setupClient) launchPrefix() []string {
 
 func (client setupClient) launchArgs(c configuration) []string {
 	args := append(client.launchPrefix(), "--data-dir", c.dataDir)
-	for _, option := range []struct{ flag, value string }{
-		{"--kubeconfig", c.paths}, {"--context", c.context}, {"--namespace", c.namespace},
-	} {
-		if option.value != "" {
-			args = append(args, option.flag, option.value)
-		}
-	}
 	if c.policy.Exec {
 		args = append(args, "--allow-exec")
 	}
@@ -37,6 +30,24 @@ func (client setupClient) launchArgs(c configuration) []string {
 type serverLaunch struct {
 	Command string   `json:"command"`
 	Args    []string `json:"args"`
+}
+
+type configAdapter interface {
+	merge(old []byte, launch serverLaunch, owns func(serverLaunch) bool) ([]byte, error)
+}
+
+// Some clients select a config from several files under the locked directory.
+type configFileSelector interface {
+	selectFile(path string, owns func(serverLaunch) bool) (string, error)
+}
+
+func (c setupClient) configFile(path, executable string) (string, error) {
+	if selector, ok := c.config.(configFileSelector); ok {
+		return selector.selectFile(path, func(previous serverLaunch) bool {
+			return c.manages(previous, executable)
+		})
+	}
+	return path, nil
 }
 
 // Match the generated launcher across config rewrites by the client.
@@ -59,16 +70,9 @@ func (c setupClient) manages(launch serverLaunch, executable string) bool {
 
 func (c setupClient) mergeConfig(old []byte, executable string, args []string) ([]byte, error) {
 	launch := serverLaunch{Command: executable, Args: args}
-	var updated []byte
-	var err error
-	switch c.format {
-	case tomlConfig:
-		updated, err = c.mergeTOMLConfig(old, launch)
-	case openCodeConfig:
-		updated, err = c.mergeOpenCodeConfig(old, launch)
-	default:
-		updated, err = c.mergeJSONConfig(old, launch)
-	}
+	updated, err := c.config.merge(old, launch, func(previous serverLaunch) bool {
+		return c.manages(previous, executable)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("%s configuration: %w", c.kind.Label(), err)
 	}

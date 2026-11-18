@@ -134,14 +134,18 @@ func RedactedManifest(manifest string) string {
 	}
 	return strings.Join(out, "---\n")
 }
+func SensitiveKey(key string) bool {
+	normalized := strings.ToLower(strings.NewReplacer("_", "", "-", "", ".", "").Replace(key))
+	return strings.Contains(normalized, "password") || strings.Contains(normalized, "secret") || strings.Contains(normalized, "token") || strings.Contains(normalized, "credential") || strings.Contains(normalized, "privatekey") || normalized == "apikey" || normalized == "authorization" || normalized == "clientkey" || normalized == "data" || normalized == "stringdata" || normalized == "binarydata" || normalized == "env" || normalized == "args" || normalized == "command" || normalized == "annotations" || normalized == "managedfields" || normalized == "httpheaders" || normalized == "userdata"
+}
+
 func Redact(value any) any {
 	switch v := value.(type) {
 	case map[string]any:
 		result := map[string]any{}
 		kind, _ := v["kind"].(string)
 		for key, child := range v {
-			normalized := strings.ToLower(strings.NewReplacer("_", "", "-", "", ".", "").Replace(key))
-			sensitive := strings.Contains(normalized, "password") || strings.Contains(normalized, "secret") || strings.Contains(normalized, "token") || strings.Contains(normalized, "credential") || strings.Contains(normalized, "privatekey") || normalized == "apikey" || normalized == "authorization" || normalized == "clientkey" || normalized == "data" || normalized == "stringdata" || normalized == "binarydata" || normalized == "env" || normalized == "args" || normalized == "command" || normalized == "annotations" || normalized == "managedfields" || normalized == "httpheaders" || normalized == "userdata" || strings.EqualFold(kind, "Secret") && key != "kind" && key != "apiVersion" && key != "metadata"
+			sensitive := SensitiveKey(key) || strings.EqualFold(kind, "Secret") && key != "kind" && key != "apiVersion" && key != "metadata"
 			if sensitive {
 				result[key] = "[redacted]"
 			} else {

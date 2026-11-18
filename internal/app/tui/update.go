@@ -199,6 +199,9 @@ func (m *model) Update(msg tea.Msg) (next tea.Model, command tea.Cmd) {
 			m.requestCurrent("", false)
 		}
 		return m, currentTick()
+	case monitorStatusMsg:
+		m.monitorStates, m.monitorListErr = msg.states, msg.err != nil
+		return m, monitorTick(m.monitorRoot, 2*time.Second)
 	case autosaveMsg:
 		if m.dirty {
 			if err := m.queueSession(); err != nil {

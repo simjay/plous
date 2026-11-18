@@ -46,8 +46,8 @@ func TestControllerEvidenceUsesSharedParsersAndSurvivesRestart(t *testing.T) {
 	}
 	o.Connections = []Connection{{ConnectionID: "cluster", Tool: "kubernetes", Path: config, Context: "fixture", Namespace: "apps"}}
 	o.Model = &scriptedModel{steps: []*schema.Message{
-		call("argo_resources_read", `{"purpose":"inspect Argo health","connection_id":"cluster","operation":"get","resource":"applications.argoproj.io","name":"web"}`),
-		call("flux_resources_read", `{"purpose":"inspect Flux readiness","connection_id":"cluster","operation":"get","resource":"kustomizations.kustomize.toolkit.fluxcd.io","name":"web"}`), answer("Argo is degraded. Flux reconciliation is suspended and readiness is stale."),
+		call("argo_read", `{"purpose":"inspect Argo health","connection_id":"cluster","operation":"get","resource":"applications.argoproj.io","name":"web"}`),
+		call("flux_read", `{"purpose":"inspect Flux readiness","connection_id":"cluster","operation":"get","resource":"kustomizations.kustomize.toolkit.fluxcd.io","name":"web"}`), answer("Argo is degraded. Flux reconciliation is suspended and readiness is stale."),
 	}}
 	nativeOptions(t, &o)
 	result, err := Run(t.Context(), o)
@@ -86,10 +86,10 @@ func TestToolCatalogMatchesCapturedScope(t *testing.T) {
 		want   []string
 		absent []string
 	}{
-		{Options{}, []string{"history_read"}, []string{"kubernetes_resources_read", "source_files_read", "workspace_read", "argo_resources_read", "flux_resources_read"}},
-		{Options{Connections: []Connection{{Tool: "kubernetes"}, {Tool: "source"}}}, []string{"history_read"}, []string{"kubernetes_resources_read", "source_files_read", "workspace_read", "argo_resources_read", "flux_resources_read"}},
-		{Options{WorkspaceID: "scope", Connections: []Connection{{Tool: "source"}}}, []string{"history_read", "workspace_read"}, []string{"recall", "kubernetes_resources_read", "argo_resources_read", "flux_resources_read"}},
-		{Options{WorkspaceID: "scope", Connections: []Connection{{Tool: "kubernetes"}}}, []string{"kubernetes_resources_read", "kubernetes_logs_read", "kubernetes_usage_read", "argo_resources_read", "flux_resources_read"}, []string{"source_files_read", "recall"}},
+		{Options{}, []string{"history_read"}, []string{"kubernetes_read", "source_files_read", "workspace_read", "argo_read", "flux_read"}},
+		{Options{Connections: []Connection{{Tool: "kubernetes"}, {Tool: "source"}}}, []string{"history_read"}, []string{"kubernetes_read", "source_files_read", "workspace_read", "argo_read", "flux_read"}},
+		{Options{WorkspaceID: "scope", Connections: []Connection{{Tool: "source"}}}, []string{"history_read", "workspace_read"}, []string{"recall", "kubernetes_read", "argo_read", "flux_read"}},
+		{Options{WorkspaceID: "scope", Connections: []Connection{{Tool: "kubernetes"}}}, []string{"kubernetes_read", "argo_read", "flux_read"}, []string{"source_files_read", "recall"}},
 	} {
 		names := map[string]bool{}
 		for _, tool := range ToolDefinitions(test.o) {
@@ -107,8 +107,16 @@ func TestToolCatalogMatchesCapturedScope(t *testing.T) {
 		}
 	}
 	op := &operation{o: Options{WorkspaceID: "scope", Connections: []Connection{{ConnectionID: "cluster", Tool: "kubernetes", TargetCaptured: true}}}}
-	for _, tool := range []string{"argo_resources_read", "flux_resources_read"} {
-		if _, err := op.externalRead(t.Context(), tool, `{"connection_id":"cluster","operation":"get","resource":"secrets"}`); err == nil || strings.Contains(err.Error(), "captured connection is unavailable") {
+	for _, tool := range []string{"argo_read", "flux_read"} {
+		definition, available := op.tool(tool)
+		if !available {
+			t.Fatal(tool, "missing")
+		}
+		args, err := op.toolInput([]byte(`{"connection_id":"cluster","operation":"list","resource":"secrets"}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := op.dispatchRead(t.Context(), definition, args); err == nil || strings.Contains(err.Error(), "captured connection is unavailable") {
 			t.Fatal("invalid controller request reached acquisition", err)
 		}
 	}

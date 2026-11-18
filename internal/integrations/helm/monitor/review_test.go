@@ -66,7 +66,7 @@ func TestHelmReadExecutorMasksValuesAndManifestAtCapturedRevision(t *testing.T) 
 		t.Fatal(err)
 	}
 	for _, operation := range []string{"values", "manifest"} {
-		result, err := executor.Execute(context.Background(), Command{Operation: operation, Name: "shop", Revision: 2})
+		result, err := executor.Execute(context.Background(), Command{Operation: "get", View: operation, Name: "shop", Revision: 2})
 		if err != nil {
 			t.Fatal(err)
 		}

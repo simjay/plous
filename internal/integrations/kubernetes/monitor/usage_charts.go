@@ -62,13 +62,13 @@ func StatusCharts(r kubecommon.Resource, object unstructured.Unstructured) []Det
 	default:
 		return nil
 	}
-	facts := workloadFacts(r.Key(), o)
-	ready, current, unready := facts["ready_replicas"], facts["current_replicas"], facts["current_unready_replicas"]
-	if ready.Number == nil || current.Number == nil || unready.Number == nil {
+	counts := readWorkload(workloadFields(r.Key()), o)
+	ready, current, unready := counts.ready, counts.current, counts.currentUnready()
+	if unready == nil {
 		return nil
 	}
-	section := DetailSection{Title: "Workload readiness", Bars: []DetailBar{{Label: "Ready / current", Detail: fmt.Sprintf("%d / %d · %d not ready · desired %s", *ready.Number, *current.Number, *unready.Number, facts["desired_replicas"].String()), Value: new(float64(*ready.Number)), Total: new(float64(*current.Number))}}, Fields: []DetailField{{Label: "Basis", Value: "Reported controller status; desired replicas are a separate target."}}}
-	if observed := facts["generation_observed"]; observed.Boolean != nil && !*observed.Boolean {
+	section := DetailSection{Title: "Workload readiness", Bars: []DetailBar{{Label: "Ready / current", Detail: fmt.Sprintf("%d / %d · %d not ready · desired %s", *ready, *current, *unready, formatReplicaCount(counts.desired, "unknown")), Value: new(float64(*ready)), Total: new(float64(*current))}}, Fields: []DetailField{{Label: "Basis", Value: "Reported controller status; desired replicas are a separate target."}}}
+	if observed := counts.generationObserved(); observed != nil && !*observed {
 		section.Fields = append(section.Fields, DetailField{Label: "Status", Value: "Controller has not observed the latest specification yet."})
 	}
 	return []DetailSection{section}

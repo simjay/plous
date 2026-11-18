@@ -12,6 +12,7 @@ import (
 	"time"
 
 	helmcommon "github.com/simjay/plous/internal/integrations/helm/common"
+	kubernetes "github.com/simjay/plous/internal/integrations/kubernetes/monitor"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/release"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -229,9 +230,8 @@ func (g sdkGetter) ToRESTConfig() (*rest.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	if c.ExecProvider != nil {
-		c.ExecProvider.StdinUnavailable = true
-		c.ExecProvider.StdinUnavailableMessage = "Authenticate outside Plous, then refresh."
+	if err := kubernetes.PrepareExecCredentials(c); err != nil {
+		return nil, err
 	}
 	c.Timeout = 30 * time.Second
 	c.Wrap(func(rt http.RoundTripper) http.RoundTripper {

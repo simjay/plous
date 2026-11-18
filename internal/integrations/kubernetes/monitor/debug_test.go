@@ -24,7 +24,7 @@ func TestActiveDiagnosticsDoNotFollowAPIRedirects(t *testing.T) {
 		http.Redirect(w, r, foreign.URL+"/unexpected", http.StatusTemporaryRedirect)
 	})
 	client.Namespace = "shop"
-	r, err := client.Debug(t.Context(), "kubernetes_diagnostic_run", DebugCommand{Namespace: "shop", Test: "dns", Target: "payments", TimeoutSeconds: 1}, DebugPolicy{Image: "fixture"}, "captured")
+	r, err := client.Debug(t.Context(), "diagnostic", DebugCommand{Namespace: "shop", Test: "dns", Target: "payments", TimeoutSeconds: 1}, DebugPolicy{Image: "fixture"}, "captured")
 	if err != nil || r.Validate() != nil || foreignRequests.Load() != 0 || r.Facts["exit_code"].String() != "unknown" {
 		t.Fatal("active diagnostic escaped the configured API endpoint", err, foreignRequests.Load(), r.Facts)
 	}
@@ -35,24 +35,28 @@ func TestDebugPolicyRejectsDisabledScopeAndArgumentOverrides(t *testing.T) {
 		tool, input string
 		policy      DebugPolicy
 	}{
-		{"kubernetes_exec_run", `{"namespace":"shop","name":"pod","uid":"uid","container":"app","command":["true"]}`, DebugPolicy{}},
-		{"kubernetes_exec_run", `{"namespace":"other","name":"pod","uid":"uid","container":"app","command":["true"]}`, DebugPolicy{Exec: true}},
-		{"kubernetes_exec_run", `{"namespace":"shop","name":"pod","uid":"uid","container":"app","command":["true"],"test":"http"}`, DebugPolicy{Exec: true}},
-		{"kubernetes_diagnostic_run", `{"namespace":"shop","test":"http","target":"http://payments/"}`, DebugPolicy{}},
-		{"kubernetes_diagnostic_run", `{"namespace":"shop","test":"http","target":"file:///etc/passwd"}`, DebugPolicy{Image: "test"}},
-		{"kubernetes_diagnostic_run", `{"namespace":"shop","test":"http","target":"http://user:password@payments/"}`, DebugPolicy{Image: "test"}},
-		{"kubernetes_diagnostic_run", `{"namespace":"shop","test":"dns","target":"-exec"}`, DebugPolicy{Image: "test"}},
-		{"kubernetes_diagnostic_run", `{"namespace":"shop","test":"tcp","target":"payments","port":70000}`, DebugPolicy{Image: "test"}},
-		{"kubernetes_diagnostic_run", `{"namespace":"shop","test":"dns","target":"payments","image":"override"}`, DebugPolicy{Image: "test"}},
-		{"kubernetes_diagnostic_run", `{"namespace":"shop","test":"dns","target":"payments","command":["sh"]}`, DebugPolicy{Image: "test"}},
-		{"kubernetes_diagnostic_run", `{"namespace":"shop","test":"dns","target":"payments","timeout_seconds":121}`, DebugPolicy{Image: "test"}},
+		{"exec", `{"namespace":"shop","name":"pod","uid":"uid","container":"app","command":["true"]}`, DebugPolicy{}},
+		{"exec", `{"namespace":"other","name":"pod","uid":"uid","container":"app","command":["true"]}`, DebugPolicy{Exec: true}},
+		{"exec", `{"namespace":"shop","name":"pod","uid":"uid","container":"app","command":["true"],"test":"http"}`, DebugPolicy{Exec: true}},
+		{"diagnostic", `{"namespace":"shop","test":"http","target":"http://payments/"}`, DebugPolicy{}},
+		{"diagnostic", `{"namespace":"shop","test":"http","target":"file:///etc/passwd"}`, DebugPolicy{Image: "test"}},
+		{"diagnostic", `{"namespace":"shop","test":"http","target":"http://user:password@payments/"}`, DebugPolicy{Image: "test"}},
+		{"diagnostic", `{"namespace":"shop","test":"dns","target":"-exec"}`, DebugPolicy{Image: "test"}},
+		{"diagnostic", `{"namespace":"shop","test":"tcp","target":"payments","port":70000}`, DebugPolicy{Image: "test"}},
+		{"diagnostic", `{"namespace":"shop","test":"dns","target":"payments","image":"override"}`, DebugPolicy{Image: "test"}},
+		{"diagnostic", `{"namespace":"shop","test":"dns","target":"payments","command":["sh"]}`, DebugPolicy{Image: "test"}},
+		{"diagnostic", `{"namespace":"shop","test":"dns","target":"payments","timeout_seconds":121}`, DebugPolicy{Image: "test"}},
+		{"exec", `{"namespace":"shop","name":"pod","uid":"uid","container":"app","command":["true"],"test":""}`, DebugPolicy{Exec: true}},
+		{"exec", `{"namespace":"shop","name":"pod","uid":"uid","container":"app","command":["true"],"timeout_seconds":0}`, DebugPolicy{Exec: true}},
+		{"diagnostic", `{"namespace":"shop","test":"dns","target":"payments","name":""}`, DebugPolicy{Image: "test"}},
+		{"diagnostic", `{"namespace":"shop","test":"dns","target":"payments","port":0}`, DebugPolicy{Image: "test"}},
 		{"unknown", `{"namespace":"shop"}`, DebugPolicy{Image: "test"}},
 	} {
-		if _, err := DecodeDebug(tc.tool, tc.input, tc.policy, "shop"); err == nil {
+		if _, err := decodeDebugJSON(tc.tool, tc.input, tc.policy, "shop"); err == nil {
 			t.Fatalf("accepted %s: %s", tc.tool, tc.input)
 		}
 	}
-	command, err := DecodeDebug("kubernetes_diagnostic_run", `{"namespace":"shop","test":"http","target":"http://payments/health?q=a%20b"}`, DebugPolicy{Image: "test"}, "shop")
+	command, err := decodeDebugJSON("diagnostic", `{"namespace":"shop","test":"http","target":"http://payments/health?q=a%20b"}`, DebugPolicy{Image: "test"}, "shop")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +90,7 @@ func TestDebugExecRecordsNonzeroExitAndBoundsCombinedOutput(t *testing.T) {
 		_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 	})
 	client.Namespace = "shop"
-	r, err := client.Debug(t.Context(), "kubernetes_exec_run", DebugCommand{Namespace: "shop", Name: "pod", UID: "uid", Container: "app", Command: []string{"curl", "http://payments/health"}, TimeoutSeconds: 5}, DebugPolicy{Exec: true}, "captured")
+	r, err := client.Debug(t.Context(), "exec", DebugCommand{Namespace: "shop", Name: "pod", UID: "uid", Container: "app", Command: []string{"curl", "http://payments/health"}, TimeoutSeconds: 5}, DebugPolicy{Exec: true}, "captured")
 	if err != nil || r.Validate() != nil || r.Facts["exit_code"].String() != "22" || r.Facts["output_bytes"].String() != "65536" || r.Coverage.Complete {
 		t.Fatalf("wrong exec observation: exit=%s output_bytes=%s complete=%t error=%s; %v", r.Facts["exit_code"].String(), r.Facts["output_bytes"].String(), r.Coverage.Complete, r.Facts["error"].String(), err)
 	}
@@ -154,7 +158,7 @@ func TestDiagnosticJobOwnsLifecycleAndPreservesTestFailure(t *testing.T) {
 				}
 			})
 			client.Namespace = "shop"
-			r, err := client.Debug(t.Context(), "kubernetes_diagnostic_run", DebugCommand{Namespace: "shop", Test: "http", Target: "http://payments/health", TimeoutSeconds: 1}, DebugPolicy{Image: "configured-image"}, "captured")
+			r, err := client.Debug(t.Context(), "diagnostic", DebugCommand{Namespace: "shop", Test: "http", Target: "http://payments/health", TimeoutSeconds: 1}, DebugPolicy{Image: "configured-image"}, "captured")
 			if err != nil || r.Validate() != nil || job == nil {
 				t.Fatalf("diagnostic failed: %+v %v", r, err)
 			}
@@ -172,4 +176,12 @@ func TestDiagnosticJobOwnsLifecycleAndPreservesTestFailure(t *testing.T) {
 			}
 		})
 	}
+}
+
+func decodeDebugJSON(operation, input string, policy DebugPolicy, namespace string) (DebugCommand, error) {
+	args, err := observation.ParseArguments([]byte(input))
+	if err != nil {
+		return DebugCommand{}, err
+	}
+	return DecodeDebug(operation, args, policy, namespace)
 }

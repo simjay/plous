@@ -23,14 +23,16 @@ func TestChatContextPinsTaskAndScopeWithoutReadingLegacyHistory(t *testing.T) {
 	m.settings.Agent = ai.DefaultConfig()
 	m.settings.Agent.Model = "gpt-5.4-mini"
 	m.settings.Agent.Instructions = "Keep answers concise."
-	messages, metadata := m.chatMessages("  next question  ", false)
+	options := m.assistantOptions()
+	messages := m.chatMessages(options, "  next question  ", false)
+	metadata := options.ScopeContext
 	if !strings.Contains(metadata, "Payments") || len(messages) != 2 || !strings.Contains(messages[0].Text, "Keep answers concise.") || !strings.Contains(messages[0].Text, metadata) {
 		t.Fatalf("unexpected context: %#v, %q", messages, metadata)
 	}
 	if messages[1].Role != "user" || messages[1].Text != "  next question  " || strings.Contains(messages[0].Text, "first question") {
 		t.Fatalf("task or history boundary changed: %#v", messages)
 	}
-	preview, _ := m.chatMessages("  next question  ", true)
+	preview := m.chatMessages(m.assistantOptions(), "  next question  ", true)
 	if !reflect.DeepEqual(messages, preview) {
 		t.Fatal("inactive preview must match the outgoing request")
 	}
@@ -93,8 +95,11 @@ func TestContextMeterUsesOnlyCurrentConversation(t *testing.T) {
 	m.run = &appchat.ChatRun{Chat: first}
 	createWorkspace(t, m, "Second")
 	selectChatConnection(t, m)
-	messages, metadata := m.chatMessages("", false)
-	want := agent.Estimate(agent.PreviewMessages(agent.Instructions, metadata, "")) + agent.EstimateTools(agent.ToolDefinitions(agent.Options{UI: m.uiTools(m.assistantConnections()), Store: m.store, WorkspaceID: m.conversationScope(), Connections: m.assistantConnections()}))
+	m.monitorRoot = t.TempDir()
+	options := m.assistantOptions()
+	messages := m.chatMessages(options, "", false)
+	metadata := options.ScopeContext
+	want := agent.Estimate(agent.PreviewMessages(agent.Instructions, metadata, "")) + agent.EstimateTools(agent.ToolDefinitions(agent.Options{UI: m.uiTools(m.assistantConnections()), Store: m.store, WorkspaceID: m.conversationScope(), Connections: m.assistantConnections(), Monitor: monitor.ReadTool{Root: m.monitorRoot}}))
 	if got, _ := m.chatContextUsage(); got != want || len(messages) != 2 || !strings.Contains(metadata, "Second") {
 		t.Fatal("another conversation's active request leaked into the counter")
 	}
@@ -188,7 +193,7 @@ func TestAssistantNamespaceIsPageContextOnly(t *testing.T) {
 				var context struct {
 					Viewing struct{ Namespace string }
 				}
-				if err := json.Unmarshal([]byte(m.contextText()), &context); err != nil || context.Viewing.Namespace != want {
+				if err := json.Unmarshal([]byte(m.assistantOptions().ScopeContext), &context); err != nil || context.Viewing.Namespace != want {
 					t.Fatal("page hint lost the namespace selection", context, err)
 				}
 				if m.assistantScopeLabel() != name || !reflect.DeepEqual(m.assistantConnections(), connections) {
@@ -220,7 +225,7 @@ func TestAssistantCapturesVisibleResourceScopeWithoutBodies(t *testing.T) {
 	if scope.Namespace != "visible-ns" {
 		t.Fatalf("scope=%+v", scope)
 	}
-	text := m.contextText()
+	text := m.assistantOptions().ScopeContext
 	if !strings.Contains(text, "visible-filter") || !strings.Contains(text, m.explore.Detail.GetName()) || strings.Contains(text, "must-not-enter-context") {
 		t.Fatal(text)
 	}
@@ -228,7 +233,7 @@ func TestAssistantCapturesVisibleResourceScopeWithoutBodies(t *testing.T) {
 	if got := m.assistantPageContext(); got.Namespace != "" {
 		t.Fatal("hidden Explore state changed scope")
 	}
-	if strings.Contains(m.contextText(), "visible-filter") {
+	if strings.Contains(m.assistantOptions().ScopeContext, "visible-filter") {
 		t.Fatal("hidden page leaked")
 	}
 }
@@ -237,7 +242,7 @@ func TestContextPreviewUsesNativeMessagesInsteadOfRenderedTurns(t *testing.T) {
 	m, _ := testModel(t)
 	c := m.chat()
 	c.Turns = []history.Turn{{Sequence: 1, Request: history.Request{ID: "a", Prompt: "old question"}, Response: history.Response{Status: "completed", Text: "old answer"}}, {Sequence: 2, Request: history.Request{ID: "b", Prompt: "new question"}, Response: history.Response{Status: "completed", Text: "new answer"}}}
-	msgs, _ := m.chatMessages("next", false)
+	msgs := m.chatMessages(m.assistantOptions(), "next", false)
 	all := ""
 	for _, msg := range msgs {
 		all += msg.Text
@@ -265,7 +270,7 @@ func TestConnectionSelectionBoundsInventoryConversationAndDraft(t *testing.T) {
 	if len(captured) != 2 || captured[0].Context != "staging" || captured[1].Context != "staging" {
 		t.Fatal("captured sibling connection", captured)
 	}
-	text := m.contextText()
+	text := m.assistantOptions().ScopeContext
 	if strings.Contains(text, "staging") || strings.Contains(text, "/private") || strings.Contains(text, "private-token") || !strings.Contains(text, "production") {
 		t.Fatal(text)
 	}

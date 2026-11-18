@@ -102,7 +102,7 @@ current-context: fixture
 	}
 	// Mutating the caller's selected connection cannot change the captured one.
 	o.Connections[0].ConnectionID = "other"
-	call := agent.ToolCall{ID: "native-1", Name: "kubernetes_resources_read", Args: json.RawMessage(`{"purpose":"Read captured pods","connection_id":"east","operation":"get","resource":"pods"}`)}
+	call := agent.ToolCall{ID: "native-1", Name: "kubernetes_read", Args: json.RawMessage(`{"purpose":"Read captured pods","connection_id":"east","operation":"list","resource":"pods"}`)}
 	reply, err := session.Call(t.Context(), call, 65536)
 	if err != nil || !strings.Contains(string(reply), "record:") {
 		t.Fatalf("missing saved receipt: %s %v", reply, err)

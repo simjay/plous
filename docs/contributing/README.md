@@ -59,6 +59,7 @@ Give each rule one owner. Add an abstraction only when it removes duplication or
 | --- | --- |
 | Calculate facts once | Integrations own workload readiness, measurements, budgets and quota accounting. Tables, Describe, charts and tool projections consume those facts. |
 | Preserve meaning until display | Keep identity, units, source/collection times, coverage and unknown values typed. Formatting never drives arithmetic or numeric sorting. |
+| Group public tools by domain and authority | Extend the owning tool with typed operations. The [agent tool guide](ai-assistant.md#agent-tool-design) explains schema and dispatch ownership. |
 | Enforce agent authority once | The host tool session captures scope, serializes calls, saves evidence before delivery and closes access with the turn. MCP transports that contract. |
 | Keep human actions explicit | The TUI calls shared Go logic directly. Its separate save path validates the exact draft and target. Shared facts do not grant agents write access. |
 | Resolve input ownership once | Root composition selects the active panel or overlay. Its controller owns local input and retained state. Mouse and keyboard actions use the same guards. |

@@ -29,6 +29,11 @@ test('preserves the literal contents of every guide’s fenced examples', async 
 });
 
 test('keeps compatibility bookmarks and places interactive examples where readers need them', () => {
+  const index = findPage('docs/').body;
+  const explore = findPage('docs/guides/navigation/').body;
+  assert.match(index, /Monitor cluster health[^\n]+#monitor-cluster-health/);
+  assert.match(explore, /## Monitor cluster health[^]*#monitors/);
+  assert.match(findPage('docs/reference/configuration/').body, /id="monitor-watches"[^]*## Monitors/);
   const tutorial = findPage('docs/guides/investigate-restarting-pod/').body;
   assert.match(tutorial, /id="1-create-the-example"[^]*## 1\. Create the example/);
   const quickstart = findPage('docs/getting-started/').body;

@@ -13,6 +13,66 @@
   --vp-c-brand-soft: #7da6ff24;
 }
 
+.VPDoc.has-sidebar {
+  padding-top: 24px;
+}
+
+@media (min-width: 768px) {
+  .VPDoc.has-sidebar {
+    padding-top: 40px;
+  }
+}
+
+.vp-doc h2 {
+  margin-top: 32px;
+  padding-top: 20px;
+  letter-spacing: normal;
+}
+
+.vp-doc h2 .header-anchor {
+  top: 20px;
+}
+
+.vp-doc h3 {
+  margin-top: 24px;
+  letter-spacing: normal;
+}
+
+.vp-doc h3 + ul {
+  margin-top: 8px;
+}
+
+.vp-doc table tr {
+  border-top: 0;
+  transition: none;
+}
+
+.vp-doc tbody tr:nth-child(even) {
+  background: transparent;
+}
+
+.vp-doc th,
+.vp-doc td {
+  border-width: 0 0 1px;
+  padding: 8px 12px;
+  line-height: 20px;
+  vertical-align: top;
+}
+
+.vp-doc th {
+  font-weight: 600;
+  color: var(--vp-c-text-1);
+}
+
+.VPSidebar .VPSidebarItem.level-0 > .item > .text {
+  font-weight: 600;
+}
+
+.VPSidebar .VPSidebarItem.level-1.is-active > .item > .indicator {
+  left: -12px;
+  background: var(--vp-c-brand-1);
+}
+
 .workspace-preview {
   margin: 32px 0;
 }
@@ -34,7 +94,7 @@
 }
 
 .VPDocAsideOutline .outline-link {
-  padding-block: 6px;
+  padding-block: 4px;
   line-height: 20px;
   white-space: normal;
   overflow-wrap: anywhere;
@@ -46,7 +106,7 @@
   min-height: 36px;
   padding: 4px 8px;
   border: 1px solid var(--vp-c-divider);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--vp-c-bg);
   color: var(--vp-c-text-1);
   font-size: 13px;
@@ -111,6 +171,8 @@
 }
 
 .version-picker:focus-visible,
+.VPSidebar a:focus-visible,
+.vp-doc a:focus-visible,
 .guide-tabs :focus-visible {
   outline: 2px solid var(--vp-c-brand-1);
   outline-offset: 2px;

@@ -125,7 +125,7 @@ func TestProjectionComparesExplicitRetainedRevisions(t *testing.T) {
 		})
 	}
 	for _, input := range []string{`{"operation":"compare","name":"shop","compare_revision":1}`, `{"operation":"compare","name":"shop","revision":1,"compare_revision":1}`, `{"operation":"compare","name":"shop","revision":3,"compare_revision":0}`, `{"operation":"values","name":"shop","revision":3,"compare_revision":1}`} {
-		c, err := DecodeCommand(input)
+		c, err := decodeCommandJSON(input)
 		if err == nil {
 			err = ValidateRead(c, fixtureConfig())
 		}

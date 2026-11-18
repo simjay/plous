@@ -1,45 +1,38 @@
 # Debug on Kubernetes with your coding agent
 
-Use `plous-debug` to inspect workloads, events, and logs from the coding agent you already use.
+Use `plous-debug` to investigate a Kubernetes symptom from your coding agent. The agent reads cluster evidence, checks the relevant code or configuration, and proposes a fix for you to review and apply.
 
 ## Install
 
-[Install Plous v0.0.5 or later](../getting-started/installation.md), then run your agent's setup command.
-
-| Coding agent | Setup command |
-| --- | --- |
-| Antigravity CLI | `plous setup agy` |
-| Claude Code | `plous setup claude` |
-| Codex | `plous setup codex` |
-| Cursor Agent | `plous setup cursor` |
-| Gemini CLI | `plous setup gemini` |
-| Grok Build | `plous setup grok` |
-| OpenCode | `plous setup opencode` |
+[Choose your coding agent](../guides/ai-chat.md#choose-an-agent) for its setup command and instructions for invoking `plous-debug`.
 
 ## Start in your repository
 
-1. **Reconnect your agent.** Open your repository and follow its trust prompts. If it asks for MCP approval, review `plous_debug`.
-2. **Load the skill.** In Codex, type `$plous-debug`. In Claude Code, Grok Build, or Antigravity CLI, use `/plous-debug`. In the other clients, ask your agent to use `plous-debug`.
-3. **Confirm the target.** Ask “Which Kubernetes context and default namespace is Plous using?” By default, each call follows the current context in the agent’s kubeconfig.
+1. Reopen your agent so it loads the skills and MCP server. If the client asks for MCP approval, review `plous_debug`.
+2. Invoke `plous-debug` and describe the symptom. The skill checks the Kubernetes context and namespace before reading resources.
 
-If the target is wrong or tools are missing, see [connection troubleshooting](../mcp/setup.md#troubleshoot-the-connection).
+See [connection troubleshooting](../mcp/setup.md#troubleshoot-the-connection) if the target is wrong or tools are missing.
 
 ## Follow an incident from cluster to code
 
-> Checkout started returning 502s in staging/shop after the last rollout. Confirm the cluster, then check checkout Pods, events, and logs. Separate what you observed from the likely cause.
+> Checkout started returning 502s in staging/shop after the last rollout. Diagnose the failure, show the evidence, and tell me what to change.
 
-If the logs show a timeout at port `8081` and the payments Service exposes `8080`, ask the agent to trace where the checkout configuration gets its port. After you deploy a fix, ask it to confirm the intended image is running and check fresh logs.
+**Diagnosis.** Checkout in `staging/shop` is likely calling the wrong payments port after the rollout.
+
+**Evidence**
+
+- **Checkout container log** shows `dial tcp payments:8081: i/o timeout` (14:32 UTC, `record:…`).
+- **Payments Service in `shop`** exposes only port `8080` (14:33 UTC, `record:…`).
+- **`charts/checkout/values.yaml:42`** sets `payments.port` to `8081`. That matches the failed connection in the log.
+
+**Proposed fix.** Update `payments.port` to `8080` if that is the intended Service port. After deployment, repeat the checkout request that returned 502.
+
+The example abbreviates the record IDs. In the same MCP session, ask “Show me the Service evidence” to reopen that observation.
 
 When logs leave a question open, [enable active diagnostics](../mcp/active-diagnostics.md) to run a test from a specific container or a temporary Job. This requires explicit flags and Kubernetes permissions.
 
 ## What setup installs
 
-Setup installs the [skill instructions](../../skills/plous-debug/SKILL.md) and registers local cluster tools over MCP. Your agent keeps its usual model, sign-in, and repository tools. For Claude Code or Codex [inside Plous](../guides/ai-chat.md#run-claude-code-or-codex), Plous connects the tools itself.
+Setup installs [plous-debug](../../skills/plous-debug/SKILL.md) and [plous-monitor](plous-monitor.md) and registers one local MCP server for their cluster tools. For Claude Code or Codex in the Plous panel, Plous connects the tools when it opens the CLI.
 
-To pin a context instead of following kubeconfig, supply its name during setup and reconnect:
-
-```sh
-plous setup codex --context staging --namespace shop
-```
-
-See [MCP setup and troubleshooting](../mcp/setup.md) for manual config, launch options, [installed files and removal](../mcp/setup.md#installed-files-and-removal), and saved evidence. Practice with [a restarting Pod](../guides/investigate-restarting-pod.md) in a disposable cluster.
+See [MCP setup](../mcp/setup.md) for changing targets, upgrades, removal, and saved evidence. To try an investigation in a disposable cluster, use the [restarting Pod exercise](../guides/investigate-restarting-pod.md).

@@ -138,14 +138,14 @@ func clusterFixture(t *testing.T, o *ai.Options) *atomic.Int32 {
 	return calls
 }
 
-const readPods = `{"purpose":"Count unready Pods","connection_id":"cluster","operation":"get","resource":"pods"}`
+const readPods = `{"purpose":"Count unready Pods","connection_id":"cluster","operation":"list","resource":"pods"}`
 
 func TestProjectedAgentPersistenceFollowupAndSavedSources(t *testing.T) {
 	o := newFixture(t)
 	calls := clusterFixture(t, &o)
 	original := "How many Pods are not ready?\n  Preserve this original text: 한글\r\n"
 	start(t, &o, original)
-	o.Model = &scriptModel{t: t, steps: []func([]*schema.Message) (*schema.Message, error){tool("kubernetes_resources_read", readPods), func(input []*schema.Message) (*schema.Message, error) {
+	o.Model = &scriptModel{t: t, steps: []func([]*schema.Message) (*schema.Message, error){tool("kubernetes_read", readPods), func(input []*schema.Message) (*schema.Message, error) {
 		var delivered struct {
 			Ref         string
 			Observation observation.Result
@@ -230,7 +230,7 @@ func TestHistoryCalculationsShareTurnBudget(t *testing.T) {
 			o := newFixture(t)
 			calls := clusterFixture(t, &o)
 			start(t, &o, "Inspect Pods")
-			o.Model = &scriptModel{t: t, steps: []func([]*schema.Message) (*schema.Message, error){tool("kubernetes_resources_read", readPods), reply("Two Pods were unready.")}}
+			o.Model = &scriptModel{t: t, steps: []func([]*schema.Message) (*schema.Message, error){tool("kubernetes_read", readPods), reply("Two Pods were unready.")}}
 			run(t, o)
 			evidence, err := o.History.TurnEvidence(t.Context(), o.WorkspaceID, o.ConversationID, o.TurnID)
 			if err != nil || len(evidence) != 1 {

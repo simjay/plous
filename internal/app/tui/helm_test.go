@@ -153,7 +153,7 @@ func TestHelmDraftDoesNotLeakIntoSessionOrContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(data), "do-not-persist") || strings.Contains(m.contextText(), "do-not-persist") {
+	if strings.Contains(string(data), "do-not-persist") || strings.Contains(m.assistantOptions().ScopeContext, "do-not-persist") {
 		t.Fatal("secret leaked")
 	}
 	var s session

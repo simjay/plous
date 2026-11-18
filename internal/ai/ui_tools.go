@@ -9,70 +9,90 @@ import (
 	"github.com/simjay/plous/internal/ai/history"
 	helm "github.com/simjay/plous/internal/integrations/helm/monitor"
 	kubernetes "github.com/simjay/plous/internal/integrations/kubernetes/monitor"
+	"github.com/simjay/plous/internal/integrations/observation"
 )
 
-type showTool struct {
-	Name, Owner, Description string
-	Schema                   func() map[string]any
-	Validate                 func(map[string]json.RawMessage) (string, error)
+const viewHelp = "Read the current Plous view with get, or open a destination: resource, resource_list, pod_logs, helm_comparison or evidence. Opening preserves focus and edits. Use read tools for evidence."
+
+type viewDestination struct {
+	name, owner, view string
+	schema            func() map[string]any
+	validate          func(map[string]json.RawMessage) (string, error)
 }
 
-func showTools() []showTool {
-	return []showTool{
-		{"kubernetes_show", "kubernetes", kubernetes.ShowHelp, kubernetes.ShowSchema, kubernetes.ValidateShow},
-		{"helm_show", "helm", helm.ShowHelp, helm.ShowSchema, helm.ValidateShow},
-		{"history_show", "", history.ShowHelp, history.ShowSchema, history.ValidateShow},
-	}
+var viewDestinations = []viewDestination{
+	{"resource", "kubernetes", "resource", func() map[string]any { return kubernetes.ShowSchema("resource") }, kubernetes.ValidateShow},
+	{"resource_list", "kubernetes", "list", func() map[string]any { return kubernetes.ShowSchema("list") }, kubernetes.ValidateShow},
+	{"pod_logs", "kubernetes", "logs", func() map[string]any { return kubernetes.ShowSchema("logs") }, kubernetes.ValidateShow},
+	{"helm_comparison", "helm", "", helm.ShowSchema, helm.ValidateShow},
+	{"evidence", "", "", history.ShowSchema, history.ValidateShow},
 }
 
-func showDefinition(name string) (showTool, bool) {
-	for _, definition := range showTools() {
-		if definition.Name == name {
-			return definition, true
+func (op *operation) viewSchema() map[string]any {
+	variants := []observation.OperationVariant{operationVariant("get", map[string]any{
+		"properties": map[string]any{}, "required": []string{},
+	})}
+	for _, destination := range viewDestinations {
+		if destination.owner != "" && !op.hasTool(destination.owner) {
+			continue
 		}
-	}
-	return showTool{}, false
-}
-
-func uiToolOwner(name string) string {
-	definition, _ := showDefinition(name)
-	return definition.Owner
-}
-
-func uiDefinitions() []agent.Tool {
-	purpose := map[string]any{"type": "string", "minLength": 1}
-	result := []agent.Tool{{Name: "ui_read", Description: "Read the current Plous view, selection, filters, focus and available destinations within this session's captured scope. Returns no resource bodies or editor contents.", Parameters: marshal(map[string]any{"type": "object", "properties": map[string]any{"purpose": purpose}, "required": []string{"purpose"}, "additionalProperties": false})}}
-	for _, tool := range showTools() {
-		schema := tool.Schema()
+		schema := destination.schema()
 		properties := schema["properties"].(map[string]any)
-		properties["purpose"] = purpose
-		required := append(schema["required"].([]string), "purpose")
-		if tool.Owner != "" {
-			properties["connection_id"] = map[string]any{"type": "string", "minLength": 1, "maxLength": 1024}
+		required := append(schema["required"].([]string), "destination")
+		properties["destination"] = map[string]any{"const": destination.name}
+		if destination.owner != "" {
+			properties["connection_id"] = op.connectionParameter(destination.owner)
 			required = append(required, "connection_id")
 		}
+		if destination.name == "pod_logs" {
+			delete(properties, "resource")
+			required = []string{"name", "namespace", "container", "destination", "connection_id"}
+		}
 		schema["required"] = required
-		description := tool.Description + " Opens the main panel without moving keyboard focus. Only opened confirms presentation; blocked or failed did not open it. Use read tools for facts."
-		result = append(result, agent.Tool{Name: tool.Name, Description: description, Parameters: marshal(schema)})
+		variants = append(variants, operationVariant("open", schema))
 	}
-	return result
+	return observation.OperationSchema(nil, variants)
 }
 
-func (op *operation) uiTool(ctx context.Context, name string, args map[string]json.RawMessage) (string, error) {
+func (op *operation) uiTool(ctx context.Context, args map[string]json.RawMessage) (string, error) {
 	feedback := func(reason string) (string, error) {
 		return string(marshal(agent.UIResult{Status: "blocked", Reason: reason})), nil
 	}
 	var result agent.UIResult
 	var err error
-	if name == "ui_read" {
+	original := marshal(args)
+	operation := stringArgument(args, "operation")
+	delete(args, "operation")
+	switch operation {
+	case "get":
 		if len(args) != 0 {
-			return feedback("ui_read accepts only purpose")
+			return feedback("view get accepts no destination or view arguments")
 		}
 		result, err = op.o.UI.Read(ctx)
-	} else {
-		tool, ok := showDefinition(name)
-		if !ok {
-			return feedback("unsupported presentation tool")
+	case "open":
+		name := stringArgument(args, "destination")
+		delete(args, "destination")
+		var destination viewDestination
+		for _, candidate := range viewDestinations {
+			if candidate.name == name {
+				destination = candidate
+				break
+			}
+		}
+		if destination.name == "" || destination.owner != "" && !op.hasTool(destination.owner) {
+			return feedback("unsupported destination in captured scope")
+		}
+		if _, exists := args["view"]; exists {
+			return feedback("select a destination instead of a view")
+		}
+		if destination.view != "" {
+			args["view"] = marshal(destination.view)
+		}
+		if name == "pod_logs" {
+			if _, exists := args["resource"]; exists {
+				return feedback("pod_logs does not accept resource")
+			}
+			args["resource"] = marshal("pods")
 		}
 		var q agent.ViewRequest
 		if err = decode(string(marshal(args)), &q); err != nil {
@@ -86,13 +106,13 @@ func (op *operation) uiTool(ctx context.Context, name string, args map[string]js
 			}
 			input[key] = value
 		}
-		if tool.Owner != "" {
+		if destination.owner != "" {
 			if q.ConnectionID == "" {
 				return feedback("connection_id is required")
 			}
 			delete(input, "connection_id")
 		}
-		q.View, err = tool.Validate(input)
+		q.View, err = destination.validate(input)
 		if err != nil {
 			return feedback(err.Error())
 		}
@@ -111,7 +131,7 @@ func (op *operation) uiTool(ctx context.Context, name string, args map[string]js
 				return "", err
 			}
 		} else {
-			if _, err = op.connection(q.ConnectionID, tool.Owner); err != nil {
+			if _, err = op.connection(q.ConnectionID, destination.owner); err != nil {
 				return feedback(err.Error())
 			}
 		}
@@ -119,6 +139,8 @@ func (op *operation) uiTool(ctx context.Context, name string, args map[string]js
 			return feedback("UI result needs a larger delivery allowance")
 		}
 		result, err = op.o.UI.Show(ctx, q)
+	default:
+		return feedback("view requires get or open")
 	}
 	if err != nil {
 		return "", err
@@ -130,5 +152,5 @@ func (op *operation) uiTool(ctx context.Context, name string, args map[string]js
 	if len(body) > op.toolBytes() {
 		return feedback("UI result exceeds the delivery allowance")
 	}
-	return string(body), op.o.History.SaveUIResult(op.o.WorkspaceID, op.o.ConversationID, op.o.TurnID, name, marshal(args), body)
+	return string(body), op.o.History.SaveUIResult(op.o.WorkspaceID, op.o.ConversationID, op.o.TurnID, "plous_view", original, body)
 }

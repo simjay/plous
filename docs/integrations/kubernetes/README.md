@@ -20,6 +20,8 @@ Changing or refreshing the path clears pending selections. **Already added** mar
 
 Setup reads the displayed file without connecting or running authentication helpers. Opening a saved connection connects through that context. Neither step edits kubeconfig.
 
+Kubernetes and Helm use the credential helper configured for the selected context. Plous gives each helper invocation 20 seconds and stops running helpers when it closes. If a helper requires interactive sign-in, authenticate in a separate terminal before refreshing the connection.
+
 ## Explore resources
 
 Type `:pods` and press Enter. Choose a connection if prompted. Check the context and namespace in the header.

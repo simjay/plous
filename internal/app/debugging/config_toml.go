@@ -7,12 +7,13 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 	"github.com/pelletier/go-toml/v2/unstable"
-	"github.com/simjay/plous/internal/ai/agent"
 )
 
 const tomlMCPServers = "mcp_servers"
 
-func (c setupClient) mergeTOMLConfig(old []byte, launch serverLaunch) ([]byte, error) {
+type tomlConfig struct{ forwardKubeconfig bool }
+
+func (c tomlConfig) merge(old []byte, launch serverLaunch, owns func(serverLaunch) bool) ([]byte, error) {
 	var settings map[string]any
 	if toml.Unmarshal(old, &settings) != nil {
 		return nil, errors.New("existing config is not valid TOML")
@@ -23,7 +24,7 @@ func (c setupClient) mergeTOMLConfig(old []byte, launch serverLaunch) ([]byte, e
 	}
 	entry, ok := servers[serverName].(map[string]any)
 	previous := tomlServerLaunch(entry)
-	if servers[serverName] != nil && (!ok || !c.manages(previous, launch.Command)) {
+	if servers[serverName] != nil && (!ok || !owns(previous)) {
 		return nil, unmanagedServerError()
 	}
 
@@ -34,7 +35,7 @@ func (c setupClient) mergeTOMLConfig(old []byte, launch serverLaunch) ([]byte, e
 	if !slices.Equal(previous.Args, launch.Args) {
 		fields["args"] = launch.Args
 	}
-	if c.kind == agent.Codex && entry == nil {
+	if c.forwardKubeconfig && entry == nil {
 		fields["env_vars"] = []string{"KUBECONFIG"}
 	}
 	if len(fields) == 0 {

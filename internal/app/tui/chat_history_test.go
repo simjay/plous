@@ -55,7 +55,7 @@ func TestHistoryWindowEvictsMessagesWithoutChangingActiveContext(t *testing.T) {
 	if len(c.Turns) > appchat.ChatCacheTurns || !c.Older || c.Newer {
 		t.Fatalf("unexpected recent window: %d %v %v", len(c.Turns), c.Older, c.Newer)
 	}
-	messages, _ := m.chatMessages("Next question", false)
+	messages := m.chatMessages(m.assistantOptions(), "Next question", false)
 	*m.draft() = textview.NewField("Unsent draft")
 	m.chatTranscript(40, 15)
 	m.scrollChat("home")
@@ -68,7 +68,7 @@ func TestHistoryWindowEvictsMessagesWithoutChangingActiveContext(t *testing.T) {
 			t.Fatal("visited pages accumulated in memory")
 		}
 	}
-	after, _ := m.chatMessages("Next question", false)
+	after := m.chatMessages(m.assistantOptions(), "Next question", false)
 	if fmt.Sprint(messages) != fmt.Sprint(after) || m.draft().Text != "Unsent draft" {
 		t.Fatal("transcript navigation changed model context or draft")
 	}

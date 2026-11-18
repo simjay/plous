@@ -8,33 +8,22 @@ import (
 	"github.com/simjay/plous/internal/ai/agent"
 )
 
-type configFormat uint8
-
-const (
-	jsonConfig configFormat = iota
-	jsoncConfig
-	openCodeConfig
-	tomlConfig
-)
-
 type setupClient struct {
-	kind          agent.Kind
-	command       string
-	configPath    string
-	skillDir      string
-	format        configFormat
-	mcpType       string
-	kubeconfigEnv string
+	kind       agent.Kind
+	command    string
+	configPath string
+	skillDir   string
+	config     configAdapter
 }
 
 var setupClients = [...]setupClient{
-	{kind: agent.Codex, command: "codex", configPath: ".codex/config.toml", skillDir: ".agents/skills", format: tomlConfig},
-	{kind: agent.ClaudeCode, command: "claude", configPath: ".claude.json", skillDir: ".claude/skills", mcpType: "stdio"},
-	{kind: agent.OpenCode, command: "opencode", configPath: ".config/opencode/opencode.json", skillDir: ".agents/skills", format: openCodeConfig},
-	{kind: agent.GrokBuild, command: "grok", configPath: ".grok/config.toml", skillDir: ".grok/skills", format: tomlConfig},
-	{kind: agent.Antigravity, command: "agy", configPath: ".gemini/config/mcp_config.json", skillDir: ".gemini/skills"},
-	{kind: agent.Cursor, command: "cursor", configPath: ".cursor/mcp.json", skillDir: ".agents/skills", format: jsoncConfig, mcpType: "stdio", kubeconfigEnv: "${KUBECONFIG:-}"},
-	{kind: agent.GeminiCLI, command: "gemini", configPath: ".gemini/settings.json", skillDir: ".gemini/skills", format: jsoncConfig},
+	{kind: agent.Codex, command: "codex", configPath: ".codex/config.toml", skillDir: ".agents/skills", config: tomlConfig{forwardKubeconfig: true}},
+	{kind: agent.ClaudeCode, command: "claude", configPath: ".claude.json", skillDir: ".claude/skills", config: jsonConfig{mcpType: "stdio"}},
+	{kind: agent.OpenCode, command: "opencode", configPath: ".config/opencode/opencode.json", skillDir: ".agents/skills", config: openCodeConfig{}},
+	{kind: agent.GrokBuild, command: "grok", configPath: ".grok/config.toml", skillDir: ".grok/skills", config: tomlConfig{}},
+	{kind: agent.Antigravity, command: "agy", configPath: ".gemini/config/mcp_config.json", skillDir: ".gemini/skills", config: jsonConfig{}},
+	{kind: agent.Cursor, command: "cursor", configPath: ".cursor/mcp.json", skillDir: ".agents/skills", config: jsonConfig{allowComments: true, mcpType: "stdio", kubeconfigEnv: "${KUBECONFIG:-}"}},
+	{kind: agent.GeminiCLI, command: "gemini", configPath: ".gemini/settings.json", skillDir: ".gemini/skills", config: jsonConfig{allowComments: true}},
 }
 
 func findSetupClient(name string) (setupClient, bool) {

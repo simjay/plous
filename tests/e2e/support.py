@@ -22,6 +22,10 @@ FIXTURE = ROOT / "tests/fixtures/kubeconfig.yaml"
 ANSI = re.compile(rb"\x1b\][^\x07]*(?:\x07|\x1b\\)|\x1b\[[0-?]*[ -/]*[@-~]")
 
 
+def debug_skill_body():
+    return (ROOT / "skills/plous-debug/SKILL.md").read_text().split("\n---\n", 1)[1].strip()
+
+
 class Terminal:
     def __init__(self, data_dir, kubeconfig, width=120, height=30, env_overrides=None, command_prefix=None, stderr=None, cwd=None):
         self.master, self.slave = pty.openpty()

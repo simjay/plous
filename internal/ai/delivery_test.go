@@ -50,7 +50,7 @@ func deliveryPods(w http.ResponseWriter, count int, next string) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"apiVersion": "v1", "kind": "PodList", "metadata": map[string]any{"resourceVersion": "1", "continue": next}, "items": rows})
 }
 func deliveryRead() aimodel.ToolCall {
-	return aimodel.ToolCall{ID: "live", Name: "kubernetes_resources_read", Args: json.RawMessage(`{"purpose":"List names","connection_id":"east","operation":"get","resource":"pods","fields":[]}`)}
+	return aimodel.ToolCall{ID: "live", Name: "kubernetes_read", Args: json.RawMessage(`{"purpose":"List names","connection_id":"east","operation":"list","resource":"pods","fields":[]}`)}
 }
 
 func TestDeliveryUsesSameSavedPageForMainAndHistory(t *testing.T) {
@@ -63,7 +63,7 @@ func TestDeliveryUsesSameSavedPageForMainAndHistory(t *testing.T) {
 		}
 		deliveryPods(w, 109, "")
 	})
-	body, err := op.toolResult(t.Context(), deliveryRead())
+	body, err := op.toolResult(t.Context(), deliveryRead(), func() {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +140,7 @@ func TestInterruptedProjectionSurvivesRestart(t *testing.T) {
 				w.WriteHeader(http.StatusForbidden)
 				fmt.Fprint(w, `{"kind":"Status","apiVersion":"v1","status":"Failure","reason":"Forbidden","code":403,"message":"private fixture credential"}`)
 			})
-			_, err := op.toolResult(ctx, deliveryRead())
+			_, err := op.toolResult(ctx, deliveryRead(), func() {})
 			if kind == "cancelled" && !errors.Is(err, context.Canceled) || kind == "invalid" && err == nil || (kind == "denied" || kind == "partial") && err != nil {
 				t.Fatal(kind, err)
 			}

@@ -6,7 +6,7 @@ export const groups = [
   ]},
   {label: 'Use Plous', items: [
     ['Explore clusters', 'guides/navigation'],
-    ['Assistant in Plous', 'guides/ai-chat'],
+    ['Agent setup', 'guides/ai-chat'],
     ['Investigate a restarting Pod', 'guides/investigate-restarting-pod'],
   ]},
   {label: 'Reference', items: [

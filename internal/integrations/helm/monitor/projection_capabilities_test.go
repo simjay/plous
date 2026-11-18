@@ -40,7 +40,11 @@ func TestHelmProjectionExplainsRecordedFieldsAndChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 	for operation, want := range map[string]string{"status": "progress deadline exceeded", "manifest": "shop:v2", "hooks": "pre-upgrade", "compare": "/spec/replicas"} {
-		r, err := projector.Execute(t.Context(), Command{Operation: operation, Name: "shop"})
+		command := Command{Operation: "get", View: operation, Name: "shop"}
+		if operation == "compare" {
+			command.Operation, command.View = operation, ""
+		}
+		r, err := projector.Execute(t.Context(), command)
 		if err != nil {
 			t.Fatal(operation, err)
 		}
@@ -81,7 +85,7 @@ func TestHelmValueAcquisitionPreservesIntegerPrecision(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := projector.Execute(t.Context(), Command{Operation: "values", Name: "shop", Revision: 1})
+	r, err := projector.Execute(t.Context(), Command{Operation: "get", View: "values", Name: "shop", Revision: 1})
 	if err != nil {
 		t.Fatal(err)
 	}

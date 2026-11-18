@@ -38,6 +38,7 @@ else:
 Path('fixture-cwd').write_text(str(Path.cwd()))
 Path('fixture-pid').write_text(str(os.getpid()))
 Path('fixture-args.json').write_text(json.dumps(args))
+Path('fixture-instructions').write_text(instructions)
 with Path('fixture-launches.jsonl').open('a') as launches:
     launches.write(json.dumps(args) + '\n')
 failure = Path('fixture-failure.json')
@@ -105,7 +106,7 @@ try:
             if text == 'count helm releases':
                 captured = json.loads(instructions.split('Captured connection and page:\n', 1)[1])
                 connection = next(c for c in captured['connections'] if c['tool'] == 'helm')
-                result = rpc('tools/call', {'name': 'helm_releases_read', 'arguments': {
+                result = rpc('tools/call', {'name': 'helm_read', 'arguments': {
                     'purpose': 'Count installed releases across namespaces', 'operation': 'list',
                     'connection_id': connection['connection_id'], 'namespace': '*'}})
                 delivery = json.loads(result['content'][0]['text'])

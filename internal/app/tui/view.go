@@ -94,8 +94,8 @@ func (m *model) render() string {
 	widths := m.panelWidths()
 	height := m.height - 2
 	header := ui.BrandStyle.Render(" plous")
-	label := ui.Muted.Render("v" + m.version + " ")
-	header += strings.Repeat(" ", m.width-lipgloss.Width(header)-lipgloss.Width(label)) + label
+	label := textview.MouseScope(m.monitorHeader(), "header") + ui.Muted.Render("v"+m.version+" ")
+	header += strings.Repeat(" ", max(0, m.width-lipgloss.Width(header)-lipgloss.Width(label))) + label
 	bodyHeight := height - 4
 	visible := []string{}
 	if m.panelVisible(0) {
@@ -152,7 +152,7 @@ func (m *model) tabs(width int, edge lipgloss.Style) string {
 		label := " " + name + strings.Repeat(" ", max(1, innerWidth-ansi.StringWidth(name)-len(shortcut)-2)) + shortcut + " "
 		style := ui.Muted
 		bottom := edge.Render("┴" + strings.Repeat("─", innerWidth) + "┴")
-		if m.mode == i {
+		if m.mode == i && m.page != monitorsPage {
 			style = ui.TitleStyle
 			bottom = edge.Render("╯") + strings.Repeat(" ", innerWidth) + edge.Render("╰")
 		}
@@ -204,13 +204,16 @@ func (m *model) commandBox(width int) string {
 }
 
 func (m *model) mainBody(width, height int) string {
+	if m.page == monitorsPage {
+		return m.monitorsBody(width, height)
+	}
 	if m.presentedDocumentVisible() {
 		return m.uiDocument.model.View(width, height, ui.WorkspaceTheme())
 	}
 	if m.overviewVisible() {
 		return m.overviewBody(width, height)
 	}
-	if m.mode == 2 && m.current() != nil && m.page == "" && m.form == nil && m.detail == "" {
+	if m.mode == 2 && (m.current() != nil || m.activityUI.Filter == activity.Alerts) && m.page == "" && m.form == nil && m.detail == "" {
 		return m.activityBody(width, height)
 	}
 
@@ -227,7 +230,9 @@ func (m *model) mainBody(width, height int) string {
 		return m.exploreBody(width, height)
 	}
 	scope := "Start here"
-	if w := m.current(); w != nil {
+	if m.mode == 2 && m.page == "" && m.activityUI.Filter == activity.Alerts && m.detail != "" {
+		scope = "Alerts"
+	} else if w := m.current(); w != nil {
 		scope = w.Name
 		if m.tool != "" {
 			scope += " / " + appsettings.ToolNames[m.tool]
@@ -266,9 +271,9 @@ func (m *model) viewContent(width, height int) string {
 			}
 		}
 		body = ui.RemovedStyle.Bold(true).Render("Remove "+ui.OneLine(name)+"?") + "\n" + ui.ChoiceList([]string{"Cancel", "Remove from workspace"}, m.cursor, width, available-1, ui.SettingsChoiceLine)
-	case m.currentRoot && m.current() == nil:
+	case m.currentRoot && m.current() == nil && m.detail == "":
 		body = m.currentBody(width, available)
-	case m.current() == nil:
+	case m.current() == nil && m.detail == "":
 		body = ui.EmptyState("Welcome to Plous", "Organize your tools and connections in a workspace.", "Enter  Create Workspace\ncc     Start a conversation", available)
 		if m.mode == 1 {
 			body = m.welcomeBody(width, available)
@@ -434,11 +439,23 @@ func (m *model) hint() string {
 		}
 		return "↑↓ fields · Enter next/activate · Esc cancel"
 	}
+	if m.page == monitorsPage {
+		return "↑↓ Select monitor · Enter Alerts · Esc Back"
+	}
 	if m.page == "settings" {
 		return "↑↓ select · Enter open · Esc close"
 	}
 	if m.page != "" {
 		return "↑↓ select/scroll · Enter open · Esc back"
+	}
+	if m.mode == 2 && m.activityUI.Filter == activity.Alerts {
+		if m.detail != "" {
+			return "/ Find · ↑↓ Scroll · Esc Alerts"
+		}
+		if m.alertMonitor != "" {
+			return "↑↓ Select · Enter Details · / Search · Esc Monitors"
+		}
+		return "↑↓ Select · Enter Details · / Search · :4 Monitors"
 	}
 	if m.current() == nil {
 		return "Enter New Workspace · ss Settings · hh Help"
@@ -518,6 +535,9 @@ func (m *model) footerContext() string {
 	}
 	if m.exploreVisible() && m.explore != nil && m.explore.Resource.Name != "" {
 		return monitor.ResourceTitle(m.explore.Resource)
+	}
+	if m.page == monitorsPage {
+		return "Monitors"
 	}
 	return modes[m.mode]
 }
@@ -779,7 +799,7 @@ func (m *model) loadingVisible() bool {
 	if m.run != nil && m.run.Chat == m.chat() && !m.rightHidden && !m.chat().History && !m.chat().Models {
 		return true
 	}
-	if m.mode == 2 && m.page == "" && (m.activityUI.Pending || m.activityUI.Load != nil) {
+	if m.mode == 2 && m.page == "" && m.activityUI.Filter != activity.Alerts && (m.activityUI.Pending || m.activityUI.Load != nil) {
 		return true
 	}
 

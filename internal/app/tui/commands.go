@@ -42,6 +42,7 @@ var applicationCommands = []commandDefinition{
 	{"I", "charts"},
 	{"W", "chartrange"},
 	{"P", "chartlatest"},
+	{"j", "alerts"},
 }
 
 // Resolve exact, case-sensitive aliases without interpreting resource names as prefixes.
@@ -74,7 +75,7 @@ func (m *model) execute(command string) bool {
 	if m.chatSourcesVisible() {
 		switch canonicalCommand(command) {
 		case "help", "quit", "stopchat", "readreply":
-		case "chat", "newchat", "openchat", "settings", "sidebar", "aiinteraction", "1", "2", "3":
+		case "chat", "newchat", "openchat", "settings", "sidebar", "aiinteraction", "1", "2", "3", "4", "alerts":
 			m.closeChatSources()
 		default:
 			m.status = "Close Sources before using this command."
@@ -136,19 +137,11 @@ func (m *model) execute(command string) bool {
 	}
 	switch command {
 	case "1", "2", "3":
-		m.closeHelp()
-		m.closeSettings()
-		m.focus = 1
-		m.mode = int(command[0] - '1')
-		if m.mode == 2 && m.activityUI.Error != "" {
-			m.loadHistory()
-		}
-		m.page = ""
-		m.detail = ""
-		if m.mode == 2 {
-			m.restoreActivitySearch()
-		}
-		m.status = ""
+		m.openMode(int(command[0] - '1'))
+	case "4":
+		m.openMonitors()
+	case "alerts":
+		m.openAlerts("")
 	case "review":
 		if m.form != nil || m.settingsOverlay != nil || !m.openActivityReview() {
 			m.status = "Open an Activity entry to view its changes."
@@ -224,6 +217,20 @@ func (m *model) execute(command string) bool {
 		}
 	}
 	return false
+}
+
+func (m *model) openMode(mode int) {
+	m.closeHelp()
+	m.closeSettings()
+	m.focus, m.mode = 1, mode
+	if mode == 2 && m.activityUI.Error != "" {
+		m.loadHistory()
+	}
+	m.page, m.detail, m.alertMonitor = "", "", ""
+	if mode == 2 {
+		m.restoreActivitySearch()
+	}
+	m.status = ""
 }
 
 var navigationShortcuts = []struct{ key, command, label string }{

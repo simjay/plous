@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/simjay/plous/internal/app/monitor"
 	"github.com/simjay/plous/internal/ui"
 	"github.com/simjay/plous/internal/workspace"
 )
@@ -17,18 +18,21 @@ const (
 	PlousActions
 	WorkspaceChanges
 	HelmHistory
+	Alerts
 )
 
 func (f Filter) String() string {
-	return []string{"All activity", "Plous actions", "Workspace changes", "Observed Helm history"}[int(f)%4]
+	return []string{"All activity", "Plous actions", "Workspace changes", "Observed Helm history", "Alerts"}[int(f)]
 }
 
 type ActivityEntry struct {
-	Change       *workspace.Change
-	Operation    *workspace.Operation
-	Observations []*workspace.Operation
-	At           time.Time
-	SourceTime   bool
+	Alert                                         *monitor.Alert
+	MonitorName, MonitorContext, MonitorNamespace string
+	Change                                        *workspace.Change
+	Operation                                     *workspace.Operation
+	Observations                                  []*workspace.Operation
+	At                                            time.Time
+	SourceTime                                    bool
 }
 
 func sourceTime(value string) (time.Time, bool) {
@@ -70,6 +74,9 @@ func (e *ActivityEntry) prepareObservations() {
 }
 
 func (e ActivityEntry) Category() Filter {
+	if e.Alert != nil {
+		return Alerts
+	}
 	if e.Change != nil {
 		return WorkspaceChanges
 	}
@@ -80,6 +87,9 @@ func (e ActivityEntry) Category() Filter {
 }
 
 func (e ActivityEntry) Label() string {
+	if e.Alert != nil {
+		return ui.OneLine(e.Alert.Kind + "/" + e.Alert.Name + " · " + e.Alert.Signal)
+	}
 	if e.Change != nil {
 		return ChangeTitle(*e.Change)
 	}
@@ -91,6 +101,9 @@ func (e ActivityEntry) Label() string {
 }
 
 func (e ActivityEntry) Outcome() string {
+	if e.Alert != nil {
+		return e.Alert.State
+	}
 	if e.Change != nil {
 		return "saved"
 	}
@@ -101,6 +114,9 @@ func (e ActivityEntry) Outcome() string {
 }
 
 func (e ActivityEntry) Metadata() string {
+	if e.Alert != nil {
+		return ui.OneLine(e.MonitorName + " · " + e.MonitorContext + "/" + e.MonitorNamespace)
+	}
 	if e.Change != nil {
 		return fmt.Sprintf("Workspace · r%d", e.Change.Revision)
 	}
@@ -134,6 +150,17 @@ func (e ActivityEntry) SearchText() string {
 }
 
 func (e ActivityEntry) Preview() string {
+	if e.Alert != nil {
+		item := e.Alert
+		lines := []string{monitor.AlertLabel(*item), "", e.Metadata(), "Status: " + item.State,
+			"First observed: " + item.FirstSeen.Local().Format(time.RFC3339),
+			"Last observed: " + item.LastSeen.Local().Format(time.RFC3339),
+			"Alert: " + item.ID}
+		if !item.WorsenedAt.IsZero() {
+			lines = append(lines, "Last worsened: "+item.WorsenedAt.Local().Format(time.RFC3339))
+		}
+		return ui.Plain(strings.Join(lines, "\n"))
+	}
 	if e.Change != nil {
 		return ChangeDetail(*e.Change)
 	}

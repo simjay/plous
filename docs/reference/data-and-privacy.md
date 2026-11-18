@@ -12,7 +12,7 @@ The default directory is `~/.plous/`. To use a separate profile:
 plous --data-dir "$HOME/plous-profiles/learning"
 ```
 
-Use that path again to reopen the same profile. Only one Plous process can open it at a time.
+Use that path again to reopen the same profile. One TUI can open a profile at a time. Monitor processes can share its data directory.
 
 Profiles separate saved data. They do not isolate the clusters they connect to. Native agents also keep their own storage outside the Plous profile.
 
@@ -28,6 +28,7 @@ Profiles separate saved data. They do not isolate the clusters they connect to. 
 | Session preferences | Panel visibility, tree folds, selected conversations, drafts |
 | Browsing preferences | Resource type, namespace, applied filters, sorting, selected Helm release |
 | Helm Activity | Operation outcomes and observed revision metadata, without values or manifests |
+| Monitors | Target settings, check times, coverage, and saved alerts |
 
 Open searches, unfinished forms, and unsaved resource edits are temporary.
 
@@ -90,6 +91,14 @@ Explicit actions can copy or export data:
 Clipboard reads require an explicit Paste action. Plous does not separately archive clipboard contents.
 
 Agent resource reads block Secret objects and redact known credential fields and patterns. Logs, command output, and other application text can still contain secrets.
+
+## Monitor data
+
+Each monitor saves its settings, check times, coverage, and alerts in `~/.plous/monitor/NAME/watch.json` by default. Plous builds the list from those directories and uses each monitor's lock to check whether it is running. Alerts remain available after a monitor stops.
+
+Each monitor retains all open alerts and up to 200 closed alerts. `stop` preserves the saved settings and alerts. Confirming `remove` deletes them and frees the name. The lock file remains to coordinate concurrent commands. See the [monitor workflow](../guides/navigation.md#monitor-cluster-health).
+
+Scheduled checks contact Kubernetes. If you ask an agent to review an alert, its provider can receive the saved evidence the agent reads.
 
 ## Helm data
 

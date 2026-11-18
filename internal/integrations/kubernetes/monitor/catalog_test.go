@@ -112,11 +112,13 @@ func TestDiscoveryIncludesResourcesMissingFromPreferredVersion(t *testing.T) {
 		case "/apis/example.io/v1":
 			reply(w, metav1.APIResourceList{APIResources: []metav1.APIResource{
 				{Name: "widgets", Kind: "Widget", Namespaced: true, Verbs: []string{"get", "list", "watch"}},
+				{Name: "reports", Kind: "Report", Namespaced: true, Verbs: []string{"get"}},
 			}})
 		case "/apis/example.io/v2", "/apis/example.io/v2beta1", "/apis/example.io/v1beta1":
 			reply(w, metav1.APIResourceList{APIResources: []metav1.APIResource{
 				{Name: "widgets", Kind: "Widget", Verbs: []string{"list"}},
 				{Name: "gadgets", Kind: "Gadget", Namespaced: true, Verbs: []string{"list"}},
+				{Name: "reports", Kind: "Report", Namespaced: true, Verbs: []string{"list"}},
 				{Name: "gadgets/status", Kind: "Gadget", Verbs: []string{"list"}},
 				{Name: "reviews", Kind: "Review", Verbs: []string{"create"}},
 			}})
@@ -126,12 +128,16 @@ func TestDiscoveryIncludesResourcesMissingFromPreferredVersion(t *testing.T) {
 		}
 	})
 	resources, warning, err := client.Discover(context.Background())
-	if err != nil || warning != "" || len(resources) != 2 {
+	if err != nil || warning != "" || len(resources) != 3 {
 		t.Fatalf("resources = %#v, warning = %q, err = %v", resources, warning, err)
 	}
 	widgets, ok := Find(resources, "widgets.example.io")
 	if !ok || widgets.Version != "v1" || !widgets.Namespaced || !slices.Contains(widgets.Verbs, "watch") {
 		t.Fatalf("preferred version's metadata lost: %#v", widgets)
+	}
+	reports, ok := Find(resources, "reports.example.io")
+	if !ok || reports.Version != "v2" {
+		t.Fatalf("preferred version without list hid a listable version: %#v", reports)
 	}
 	gadgets, ok := Find(resources, "gadgets.example.io")
 	if !ok || gadgets.Version != "v2" {

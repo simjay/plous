@@ -25,4 +25,8 @@ func TestCancellationBeforeDispatchDoesNotRunTool(t *testing.T) {
 	if tools.calls.Load() != 0 || !strings.Contains(response.Body.String(), `"error"`) {
 		t.Fatal("cancelled request reached tool execution", response.Body.String(), tools.calls.Load())
 	}
+	response = request(`{"jsonrpc":"2.0","id":"later","method":"tools/call","params":{"name":"history_read","arguments":{}}}`)
+	if tools.calls.Load() != 1 || !strings.Contains(response.Body.String(), `"result"`) {
+		t.Fatal("cancellation before dispatch revoked tool access", response.Body.String(), tools.calls.Load())
+	}
 }

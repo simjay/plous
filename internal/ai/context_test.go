@@ -3,11 +3,13 @@ package ai
 import (
 	"context"
 	"encoding/json"
-	"github.com/cloudwego/eino/schema"
-	aimodel "github.com/simjay/plous/internal/ai/model"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/cloudwego/eino/schema"
+	aimodel "github.com/simjay/plous/internal/ai/model"
+	"github.com/simjay/plous/skills"
 )
 
 func TestPromptAndToolsUseProjectedHistory(t *testing.T) {
@@ -18,7 +20,11 @@ func TestPromptAndToolsUseProjectedHistory(t *testing.T) {
 	if names["bash"] || names["history"] || !names["history_read"] || names["recall"] {
 		t.Fatal(names)
 	}
-	text := string(marshal(PreviewMessages(Instructions, "captured", "question")))
+	messages := PreviewMessages(Instructions, "captured", "question")
+	if !strings.Contains(messages[0].Text, skills.DebugInstructions()) {
+		t.Fatal("the built-in assistant prompt is missing the shared debugging skill")
+	}
+	text := string(marshal(messages))
 	if strings.Contains(text, "active.md") || strings.Contains(text, "bash") || !strings.Contains(text, "projected facts") {
 		t.Fatal(text)
 	}

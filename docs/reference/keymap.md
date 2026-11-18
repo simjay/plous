@@ -19,6 +19,7 @@ Use these shortcuts while navigating. Text fields, the composer, and editable do
 | `Alt+Left` / `Alt+Right` | Move between visible panels. |
 | `Ctrl+]` | Toggle focus between the assistant and the previous panel. In captured Exec, open output review. |
 | `11` / `22` / `33` | Open Overview, Explore, or Activity. |
+| `:4` | Open running monitors. |
 | `/` | Search the focused panel. |
 | `Esc` | Close the current search, input, or detail view. |
 | `:` | Open the command box. |
@@ -60,6 +61,7 @@ These commands work from navigation. In a text field, colon is ordinary text.
 | `:H` | `:openchat` | Open conversation history in the current scope. |
 | `:A` | `:readreply` | Open the selected finished answer in the wider Markdown viewer. |
 | `:X` | `:stopchat` | Stop the running reply, including one in another workspace. |
+| `:j` | `:alerts` | Open Activity alerts for all saved monitors. |
 | `:p` | `:restoreprompt` | Restore the last sent message into an empty draft for editing. Does not send it. |
 | `:b` | `:sidebar` | Toggle the left panel. |
 | `:i` | `:aiinteraction` | Cycle right-panel size and visibility. |
@@ -68,6 +70,8 @@ These commands work from navigation. In a text field, colon is ordinary text.
 | `:q` | `:quit` | Save and exit Plous. In the focused editable document, `:q` closes that document. |
 
 `:1`, `:2`, and `:3` select Overview, Explore, and Activity. They have no word aliases.
+
+Use `:4` to open Monitors. Press Enter on a monitor to open its alerts in Activity. Esc returns to Monitors from that filtered list. Use [monitor commands](configuration.md#monitors) to start and stop processes.
 
 Esc cancels the command box. Alt+Left / Alt+Right leaves and resumes its draft. A new colon or completed double-key shortcut from another panel replaces it. Pasted commands are ignored.
 
@@ -559,4 +563,4 @@ Use `cc` to enter typing. Pasted or restored commands stay literal.
 
 In Sources, arrows choose and Enter opens details or saved content. Esc returns through each layer without making a new cluster request. Alt+Left / Alt+Right keeps your reading position.
 
-See [AI chat](../guides/ai-chat.md) for setup and history.
+See [agent setup](../guides/ai-chat.md#choose-an-agent) and [conversation controls](../guides/plous-agent.md#manage-conversations).

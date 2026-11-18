@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	helmcommon "github.com/simjay/plous/internal/integrations/helm/common"
+	"github.com/simjay/plous/internal/integrations/observation"
 )
 
 type runnerFunc func(context.Context, Config, []string, string) ([]byte, error)
@@ -69,13 +70,22 @@ func TestHelmPolicyRejectsWritesAndEscapesBeforeDispatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, input := range []string{`{"operation":"rollback","name":"shop"}`, `{"operation":"install","name":"shop"}`, `{"operation":"test","name":"shop"}`, `{"operation":"list","namespace":"other"}`, `{"operation":"values","name":"--post-renderer=evil"}`, `{"operation":"list","flags":["--all-namespaces"]}`, `{"operation":"list","operation":"install"}`, `{"Operation":"list"}`, `{"operation":"list","name":"shop"}`, `{"operation":"history","name":"shop","revision":1}`} {
-		cmd, err := DecodeCommand(input)
+	for _, input := range []string{`{"operation":"rollback","name":"shop"}`, `{"operation":"install","name":"shop"}`, `{"operation":"test","name":"shop"}`, `{"operation":"list","namespace":"other"}`, `{"operation":"values","name":"--post-renderer=evil"}`, `{"operation":"list","flags":["--all-namespaces"]}`, `{"operation":"list","operation":"install"}`, `{"Operation":"list"}`, `{"operation":"list","name":"shop"}`, `{"operation":"history","name":"shop","revision":1}`, `{"operation":"history","name":"shop","revision":0}`} {
+		cmd, err := decodeCommandJSON(input)
 		if err == nil {
 			_, err = e.Execute(context.Background(), cmd)
 		}
 		if err == nil {
 			t.Errorf("accepted %s", input)
+		}
+	}
+	for _, command := range []Command{
+		{Operation: "upgrade", Name: "shop"},
+		{Operation: "list", View: "status"},
+		{Operation: "history", Name: "shop", CompareRevision: new(1)},
+	} {
+		if _, err := e.Execute(t.Context(), command); err == nil {
+			t.Errorf("accepted typed command %#v", command)
 		}
 	}
 	if calls != 0 {
@@ -263,4 +273,12 @@ func TestHelmRealLocalChartPreview(t *testing.T) {
 	if !strings.Contains(p.Manifest, "replicas: 2") || !strings.Contains(p.Manifest, "name: fixture") {
 		t.Fatal(p.Manifest)
 	}
+}
+
+func decodeCommandJSON(input string) (Command, error) {
+	args, err := observation.ParseArguments([]byte(input))
+	if err != nil {
+		return Command{}, err
+	}
+	return DecodeCommand(args)
 }

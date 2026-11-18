@@ -20,9 +20,9 @@ For a separate profile:
 plous --data-dir "$HOME/plous-profiles/testing"
 ```
 
-Profiles have separate settings, credentials, workspaces, and conversations. They can still connect to the same cluster. Only one process can open a profile at a time.
+Profiles have separate settings, credentials, workspaces, and conversations. They can still connect to the same cluster. Only one TUI can open the same workspace data at a time.
 
-For agents outside Plous, see [plous-debug setup](../agent-skills/plous-debug.md) or [MCP setup](../mcp/setup.md).
+For agents outside Plous, find your client in the [agent directory](../guides/ai-chat.md#choose-an-agent).
 
 ## Settings
 
@@ -55,6 +55,58 @@ Plous notices external context changes but does not switch an open view. Selecti
 
 Authentication uses the referenced kubeconfig and its plugins. Plous does not copy those credentials. See [connection setup](../integrations/kubernetes/README.md#connect-a-cluster).
 
+<a name="monitor-watches"></a>
+
+## Monitors
+
+Each monitor has a unique name, one Kubernetes context, and a namespace. Names allow 1 to 63 lowercase letters, digits, or hyphens and must start and end with a letter or digit. See the [monitor workflow](../guides/navigation.md#monitor-cluster-health).
+
+| Start option | Purpose |
+| --- | --- |
+| `--context NAME`, `--namespace NAME` | Required when creating a monitor or changing its scope. |
+| `--deployment NAME`, `--daemonset NAME`, `--service NAME` | Repeat to select up to 32 named targets. With no targets, check every Deployment in the namespace. |
+| `--every DURATION` | Set the interval from 1 to 60 minutes. Default `5m`. |
+| `--kubeconfig PATH` | Use a different kubeconfig. |
+| `--replace` | Approve replacing a stopped monitor's scope and clearing its saved alerts. |
+
+Services are included when selected with `--service`. All monitor commands accept `--data-dir PATH` to use a different [data directory](data-and-privacy.md#data-directory-and-profiles).
+
+Plous applies these rules to Kubernetes status with zero model calls.
+
+| Alert | Opens when |
+| --- | --- |
+| Stalled rollout | A Deployment reports `ProgressDeadlineExceeded` for its current rollout |
+| Low availability | Two consecutive checks find `Available=False` on a Deployment or a DaemonSet availability deficit beyond its rolling-update allowance |
+| Container crash loop | Two consecutive checks find `CrashLoopBackOff` for an owned container |
+| No ready endpoints | Two consecutive EndpointSlice checks find zero ready endpoints for a selected Service |
+
+Incomplete reads show coverage gaps and preserve alerts that depend on the missing data.
+
+Pod logs are read on demand. If an application emits errors while Kubernetes still reports it as ready, the scheduled status checks can miss the problem. Use the Pod's Logs view or [plous-debug](../agent-skills/plous-debug.md) to inspect the affected container, including its previous instance after a restart.
+
+<a name="manage-watches"></a>
+
+### Manage monitors
+
+| Command | Result |
+| --- | --- |
+| `plous monitor list` | Show saved monitors and whether they are running |
+| `plous monitor status payments` | Show scope, the last complete check, the next scheduled check, and open alerts |
+| `plous monitor stop payments` | Stop this monitor and wait for shutdown |
+| `plous monitor start payments` | Resume this monitor with its saved settings |
+| `plous monitor start payments --every 10m` | Resume with a different interval and keep the saved scope and alerts |
+| `plous monitor remove payments` | Delete a stopped monitor's saved settings and alerts after confirmation |
+
+Changing a stopped monitor's scope shows both scopes and asks for replacement confirmation. Enter cancels. Confirmation clears its saved alerts. `--replace` supplies approval for scripts.
+
+`stop` waits up to five seconds for shutdown and reports an error if the wait times out. After it succeeds, `remove` or a replacement can follow immediately. See [retention and cleanup](data-and-privacy.md#monitor-data).
+
+### Scheduling and coverage
+
+Each monitor runs in its own foreground process and prints alert and coverage changes. It checks immediately, then repeats on its interval. When a check finds no objects and reports a coverage gap, Plous backs off to a maximum of one hour between retries. The next check time includes that backoff. A check is overdue if it is still outstanding 30 seconds after its scheduled time. Earlier monitor processes can show **Next check unknown** until restarted with the current build.
+
+For unattended use, configure your operating system's process supervisor to run `plous monitor start NAME` with access to its kubeconfig. The supervisor starts and can restart the process. Plous runs the checks while the process is up. Time spent offline is a gap in coverage. See [saved monitor data](data-and-privacy.md#monitor-data).
+
 ## AI connections
 
 Configure OpenAI or Anthropic under **Application → Agent → Plous → Add provider connection**. Saving a provider does not switch the active agent.
@@ -65,7 +117,7 @@ Claude Code and Codex use their own authentication and model settings. Edit **En
 
 Provider options include a display name, API proxy, environment variable for the key, and custom instructions. A saved key takes precedence over an environment reference. Proxies require HTTPS except on loopback.
 
-See [AI setup](../guides/ai-chat.md), [credentials](data-and-privacy.md#credentials), and [active diagnostics](../mcp/active-diagnostics.md).
+See [Plous agent setup](../guides/plous-agent.md), [credentials](data-and-privacy.md#credentials), and [active diagnostics](../mcp/active-diagnostics.md).
 
 ## Agent runtime configuration
 

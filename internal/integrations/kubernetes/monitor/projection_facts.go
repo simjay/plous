@@ -28,15 +28,9 @@ func projectedValue(o map[string]any, path ...string) observation.Value {
 		return observation.Text(v)
 	case bool:
 		return observation.Boolean(v)
-	case float64:
-		if v == float64(int64(v)) {
-			return observation.Number(int64(v))
-		}
-		return observation.Unknown()
-	case int64:
-		return observation.Number(v)
-	case int:
-		return observation.Number(int64(v))
+	}
+	if n := reportedInteger(value); n != nil {
+		return observation.Number(*n)
 	}
 	return observation.Unknown()
 }

@@ -242,14 +242,14 @@ func (o *Overview) addObject(r kubecommon.Resource, object unstructured.Unstruct
 			warn(reason, severity, at)
 		}
 	case "deployments.apps", "statefulsets.apps", "daemonsets.apps":
-		facts := workloadFacts(r.Key(), m)
-		seen := facts["generation_observed"]
-		previousGeneration := seen.Boolean != nil && !*seen.Boolean
+		counts := readWorkload(workloadFields(r.Key()), m)
+		seen := counts.generationObserved()
+		previousGeneration := seen != nil && !*seen
 		if previousGeneration {
 			warn("Awaiting controller status for current generation", 1, time.Time{})
-		} else if unready := facts["unready_replicas"]; unready.Number != nil && *unready.Number > 0 {
-			warn(fmt.Sprintf("%d desired replicas not ready", *unready.Number), 1, time.Time{})
-		} else if facts["ready_replicas"].Unknown {
+		} else if unready := replicaShortfall(counts.desired, counts.ready); unready != nil && *unready > 0 {
+			warn(fmt.Sprintf("%d desired replicas not ready", *unready), 1, time.Time{})
+		} else if counts.ready == nil {
 			warn("Workload readiness not reported", 1, time.Time{})
 		}
 		var latest map[string]any

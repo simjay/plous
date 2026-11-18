@@ -8,7 +8,7 @@ import (
 	"io"
 	"net/http"
 	"reflect"
-	"regexp"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -16,10 +16,7 @@ import (
 	kubecommon "github.com/simjay/plous/internal/integrations/kubernetes/common"
 	"github.com/simjay/plous/internal/integrations/observation"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	kjson "k8s.io/apimachinery/pkg/util/json"
-	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/rest"
 )
 
@@ -45,7 +42,7 @@ func NewProjector(client *Client, scope CommandScope, projections ...ResourcePro
 	if scope.Namespace == "" {
 		scope.Namespace = client.Namespace
 	}
-	if err := ValidateRead(Command{Operation: "get", Resource: "pods"}, scope); err != nil {
+	if err := ValidateRead(Command{Operation: "list", Resource: "pods"}, scope); err != nil {
 		return nil, err
 	}
 	config := rest.CopyConfig(client.config)
@@ -79,20 +76,30 @@ func guardedREST(config *rest.Config) (rest.Interface, error) {
 }
 
 func (e *Projector) Execute(ctx context.Context, command Command) (result observation.Result, err error) {
-	result = observation.New("kubernetes/"+command.Resource, command.Operation, time.Now().UTC())
+	operation := command.Operation
+	if operation == "list" {
+		operation = "get" // Retain compatibility with saved collection observations.
+	}
+	result = observation.New("kubernetes/"+command.Resource, operation, time.Now().UTC())
 	result.Connection, result.Namespace = e.scope.ConnectionID, e.scope.Namespace
 	result.Selection = map[string]string{"resource": command.Resource, "name": command.Name, "label_selector": command.LabelSelector, "field_selector": command.FieldSelector}
 	defer func() {
-		if ctx.Err() != nil {
+		if err == nil && ctx.Err() != nil {
 			err = ctx.Err()
 		}
 		err = result.FinishRead(err)
-		if command.Operation != "logs" && command.Operation != "usage" {
+		if command.Operation != "logs" && command.Operation != "usage" && command.Operation != "discover" {
 			collectionFacts(&result, command.Resource)
 		}
 	}()
 	if err := ValidateRead(command, e.scope); err != nil {
 		return result, err
+	}
+	if len(command.Paths) > 0 {
+		paths := slices.Clone(command.Paths)
+		slices.Sort(paths)
+		selection, _ := json.Marshal(paths)
+		result.Selection["paths"] = string(selection)
 	}
 	command.Namespace = e.scope.Namespace
 	if command.MaxBytes == 0 {
@@ -107,16 +114,12 @@ func (e *Projector) Execute(ctx context.Context, command Command) (result observ
 		}
 		return e.logs(ctx, command, result)
 	}
-	resource, err := e.discoverResource(ctx, command.Resource)
+	if command.Operation == "discover" {
+		return e.projectCatalog(ctx, command.Query, result)
+	}
+	resource, err := e.resolveResource(ctx, command.Resource, command.APIVersion, command.Operation)
 	if err != nil {
 		return result, err
-	}
-	verb := "get"
-	if command.Name == "" {
-		verb = "list"
-	}
-	if !resource.Supports(verb, "") {
-		return result, &observation.ReadFailure{Message: "Kubernetes resource does not support the requested read"}
 	}
 	if !resource.Namespaced || command.Namespace == "*" {
 		command.Namespace = ""
@@ -190,6 +193,7 @@ func (e *Projector) Execute(ctx context.Context, command Command) (result observ
 					break
 				}
 			}
+			e.projectPaths(o, row.Facts, command.Paths)
 			if command.Name != "" && row.Identity.Name != command.Name || resource.Namespaced && e.scope.Namespace != "*" && row.Identity.Namespace != command.Namespace {
 				return result, errors.New("Kubernetes returned an object outside the requested identity")
 			}
@@ -249,33 +253,31 @@ func collectionFacts(result *observation.Result, resource string) {
 	}
 }
 
-// Discovery is limited to the requested API group rather than the full cluster.
-func (e *Projector) discoverResource(ctx context.Context, identity string) (kubecommon.Resource, error) {
-	name, group, _ := strings.Cut(identity, ".")
-	version := "v1"
-	path := "/api/v1"
-	if group != "" {
-		var apiGroup metav1.APIGroup
-		if err := readAgentJSON(ctx, e.client.Get().AbsPath("/apis/"+group), 128*1024, &apiGroup); err != nil {
-			return kubecommon.Resource{}, err
-		}
-		gv, err := schema.ParseGroupVersion(apiGroup.PreferredVersion.GroupVersion)
-		if err != nil || gv.Group != group || len(validation.IsDNS1123Label(gv.Version)) != 0 {
-			return kubecommon.Resource{}, errors.New("Kubernetes returned invalid API discovery")
-		}
-		version = gv.Version
-		path = "/apis/" + group + "/" + version
+func (e *Projector) readDiscovery(ctx context.Context, path, accept string, target any) error {
+	request := e.client.Get().AbsPath(path)
+	if accept != "" {
+		request.SetHeader("Accept", accept)
 	}
-	var list metav1.APIResourceList
-	if err := readAgentJSON(ctx, e.client.Get().AbsPath(path), 256*1024, &list); err != nil {
+	return readAgentJSON(ctx, request, maxAgentResponseBytes, target)
+}
+
+func (e *Projector) discoverResource(ctx context.Context, identity string) (kubecommon.Resource, error) {
+	return e.resolveResource(ctx, identity, "", "")
+}
+
+func (e *Projector) resolveResource(ctx context.Context, identity, version, verb string) (kubecommon.Resource, error) {
+	catalog, err := discoverCatalog(ctx, e.readDiscovery, identity)
+	if err != nil {
 		return kubecommon.Resource{}, err
 	}
-	for _, item := range list.APIResources {
-		if item.Name == name {
-			return kubecommon.Resource{Group: group, Version: version, Name: name, Kind: item.Kind, Namespaced: item.Namespaced, Verbs: append([]string(nil), item.Verbs...)}, nil
-		}
+	if resource, ok := catalog.Resolve(identity, version, verb); ok {
+		return resource, nil
 	}
-	return kubecommon.Resource{}, &observation.ReadFailure{Message: "resource identity was not found in Kubernetes API discovery; use a listed API resource name"}
+	message := "Kubernetes discovery did not find the requested resource, version and read verb"
+	if len(catalog.Missing) > 0 {
+		message += "; discovery was incomplete"
+	}
+	return kubecommon.Resource{}, &observation.ReadFailure{Message: message}
 }
 
 func projectedReadError(ctx context.Context, err error) error {
@@ -289,14 +291,9 @@ func projectedReadError(ctx context.Context, err error) error {
 }
 
 func readAgentJSON(ctx context.Context, request *rest.Request, limit int64, target any) error {
-	stream, err := request.MaxRetries(0).Stream(ctx)
+	body, err := readAgentBytes(ctx, request, limit, 20*time.Second)
 	if err != nil {
-		return projectedReadError(ctx, err)
-	}
-	defer stream.Close()
-	body, err := io.ReadAll(io.LimitReader(stream, limit+1))
-	if err != nil {
-		return projectedReadError(ctx, err)
+		return err
 	}
 	if int64(len(body)) > limit {
 		return errors.New("Kubernetes response exceeded the read limit; request fewer resources")
@@ -305,6 +302,21 @@ func readAgentJSON(ctx context.Context, request *rest.Request, limit int64, targ
 		return errors.New("Kubernetes returned an invalid JSON response")
 	}
 	return nil
+}
+
+func readAgentBytes(ctx context.Context, request *rest.Request, limit int64, timeout time.Duration) ([]byte, error) {
+	requestCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	stream, err := request.MaxRetries(0).Stream(requestCtx)
+	if err != nil {
+		return nil, projectedReadError(ctx, err)
+	}
+	defer stream.Close()
+	body, err := io.ReadAll(io.LimitReader(stream, limit+1))
+	if err != nil {
+		return nil, projectedReadError(ctx, err)
+	}
+	return body, nil
 }
 
 func (e *Projector) logs(ctx context.Context, command Command, result observation.Result) (observation.Result, error) {
@@ -321,14 +333,9 @@ func (e *Projector) logs(ctx context.Context, command Command, result observatio
 	if command.SinceSeconds != 0 {
 		request.Param("sinceSeconds", fmt.Sprint(command.SinceSeconds))
 	}
-	stream, err := request.MaxRetries(0).Stream(ctx)
+	body, err := readAgentBytes(ctx, request, int64(command.MaxBytes), 30*time.Second)
 	if err != nil {
-		return result, projectedReadError(ctx, err)
-	}
-	defer stream.Close()
-	body, err := io.ReadAll(io.LimitReader(stream, int64(command.MaxBytes)+1))
-	if err != nil {
-		return result, projectedReadError(ctx, err)
+		return result, err
 	}
 	truncated := len(body) >= command.MaxBytes
 	if len(body) > command.MaxBytes {
@@ -361,59 +368,6 @@ func (e *Projector) logs(ctx context.Context, command Command, result observatio
 func encodedSize(value any) int {
 	body, _ := json.Marshal(value)
 	return len(body)
-}
-
-var credentialAssignment = regexp.MustCompile(`(?i)((?:password|passwd|token|secret|api[_-]?key|authorization|credential|client[_-]?key|access[_-]?key)["']?\s*[=:]\s*)(?:"[^"\n]*"|'[^'\n]*'|[^\s,;]+)`)
-var authorizationCredential = regexp.MustCompile(`(?i)\b(Bearer|Basic)\s+[^\s"',;]+`)
-var jwtCredential = regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]+\b`)
-var privateKeyMaterial = regexp.MustCompile(`(?s)-----BEGIN [^-]*PRIVATE KEY-----.*?(?:-----END [^-]*PRIVATE KEY-----|$)`)
-var credentialURL = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.-]*://)[^\s/@]+:[^\s/@]+@`)
-
-func (e *Projector) sanitizeText(value string) string {
-	for _, credential := range e.credentials {
-		if credential != "" {
-			value = strings.ReplaceAll(value, credential, "[redacted]")
-		}
-	}
-	value = privateKeyMaterial.ReplaceAllString(value, "[redacted private key]")
-	value = authorizationCredential.ReplaceAllString(value, "${1} [redacted]")
-	value = jwtCredential.ReplaceAllString(value, "[redacted token]")
-	value = credentialAssignment.ReplaceAllString(value, `${1}"[redacted]"`)
-	return credentialURL.ReplaceAllString(value, "${1}[redacted]@")
-}
-
-func (e *Projector) sanitize(value any) any {
-	switch item := value.(type) {
-	case map[string]any:
-		if kind, _ := item["kind"].(string); strings.EqualFold(kind, "Secret") {
-			return map[string]any{"kind": "Secret", "redacted": true}
-		}
-		result := make(map[string]any, len(item))
-		for key, child := range item {
-			normalized := strings.ToLower(strings.NewReplacer("_", "", "-", "", ".", "").Replace(key))
-			switch normalized {
-			case "data", "binarydata", "stringdata", "annotations", "managedfields", "env", "command", "args", "userdata":
-				result[key] = "[redacted]"
-				continue
-			}
-			if strings.Contains(normalized, "password") || strings.Contains(normalized, "credential") || strings.Contains(normalized, "privatekey") || normalized == "token" || normalized == "accesstoken" || normalized == "refreshtoken" || normalized == "apikey" || normalized == "accesskey" || normalized == "clientkey" || normalized == "clientcertificate" || normalized == "authorization" || normalized == "secret" {
-				result[key] = "[redacted]"
-				continue
-			}
-			result[key] = e.sanitize(child)
-		}
-		return result
-	case []any:
-		result := make([]any, len(item))
-		for i, child := range item {
-			result[i] = e.sanitize(child)
-		}
-		return result
-	case string:
-		return e.sanitizeText(item)
-	default:
-		return value
-	}
 }
 
 func (e *Projector) Namespace() string { return e.scope.Namespace }

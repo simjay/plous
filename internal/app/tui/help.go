@@ -262,8 +262,12 @@ func (m *model) mainHelp() helpview.Section {
 	if s := m.activePanelSearch(1); s != nil && !s.finished {
 		return helpview.Search("Find / filter", "Finish search / open selection")
 	}
+	if m.page == monitorsPage {
+		return helpview.New("Monitors", helpview.Key("select", "↑↓", "Select monitor"),
+			helpview.Key("alerts", "Enter", "Open saved alerts"), helpview.Key("back", "Esc", "Return to the previous view"))
+	}
 	if m.mode == 2 && m.page == "" {
-		if m.activityReview != nil {
+		if m.activityReviewVisible() {
 			return m.activityReview.Comparison.Help("Activity comparison (read only)", "", "Return to saved summary")
 		}
 		state := appactivity.HelpContext{Detail: m.detail != "", LoadError: m.activityUI.Error != ""}
@@ -356,7 +360,7 @@ func globalHelpSection() helpview.Section {
 	for _, command := range []struct{ name, label string }{{"settings", "Settings"}, {"help", "Help"}, {"sidebar", "Sidebar"}, {"aiinteraction", "AI panel"}, {"fullscreen", "Fullscreen"}} {
 		s.Add("", helpview.Command(command.name, navigationBinding(command.name), command.label))
 	}
-	s.Add("", helpview.Command("quit", ":quit", "Save and exit"))
+	s.Add("", helpview.Command("4", ":4", "Monitors"), helpview.Command("quit", ":quit", "Save and exit"))
 	return s
 }
 

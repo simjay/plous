@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"github.com/simjay/plous/internal/integrations/observation"
 	"strings"
 	"testing"
 )
@@ -10,21 +11,13 @@ func agentTestScope() CommandScope {
 }
 
 func TestAgentCommandPolicy(t *testing.T) {
-	for _, definition := range commandDefinitions {
-		command := Command{Operation: definition.Operation, Resource: "pods"}
-		access, err := Classify(command)
-		if err != nil || access != definition.Access {
-			t.Fatalf("classify %q: access=%q err=%v", definition.Operation, access, err)
-		}
-		if access == AccessWrite && ValidateRead(command, agentTestScope()) == nil {
-			t.Fatalf("write %q was allowed", definition.Operation)
-		}
-	}
 	for _, command := range []Command{
-		{Operation: "get", Resource: "pods"},
+		{Operation: "discover", Query: "pods"},
+		{Operation: "usage", Resource: "pods", Name: "web"},
+		{Operation: "list", Resource: "pods"},
 		{Operation: "get", Resource: "deployments.apps", Name: "web"},
-		{Operation: "get", Resource: "events", FieldSelector: "involvedObject.name=web"},
-		{Operation: "describe", Resource: "pods", Name: "web", Namespace: "shop"},
+		{Operation: "list", Resource: "events", FieldSelector: "involvedObject.name=web"},
+		{Operation: "get", Resource: "pods", Name: "web", Namespace: "shop"},
 		{Operation: "logs", Resource: "pods", Name: "web", Container: "app", TailLines: 20},
 	} {
 		if err := ValidateRead(command, agentTestScope()); err != nil {
@@ -46,7 +39,7 @@ func TestAgentCommandPolicy(t *testing.T) {
 		{Operation: "get", Resource: "pods", MaxBytes: -1},
 		{Operation: "get", Resource: "pods", Name: "web", FieldSelector: "status.phase=Failed"},
 		{Operation: "get", Resource: "pods", Container: "app"},
-		{Operation: "describe", Resource: "pods"},
+		{Operation: "get", Resource: "pods"},
 		{Operation: "logs", Resource: "pods", Name: "web"},
 		{Operation: "logs", Resource: "pods", Name: "web", Container: "app", TailLines: MaxAgentLines + 1},
 	} {
@@ -55,7 +48,7 @@ func TestAgentCommandPolicy(t *testing.T) {
 		}
 	}
 	for _, scope := range []CommandScope{{}, {ConnectionID: "x", Context: "y"}, {ConnectionID: "x", Context: "y", Namespace: "bad/namespace"}} {
-		if ValidateRead(Command{Operation: "get", Resource: "pods"}, scope) == nil {
+		if ValidateRead(Command{Operation: "list", Resource: "pods"}, scope) == nil {
 			t.Errorf("invalid scope allowed: %#v", scope)
 		}
 	}
@@ -73,18 +66,26 @@ func TestAgentCommandDecoderRejectsAmbiguousInput(t *testing.T) {
 		`{"operation":"get","resource":"pods","scope":{"context":"other"}}`,
 		strings.Repeat("x", 16385),
 	} {
-		if _, err := DecodeCommand(input); err == nil {
+		if _, err := decodeCommandJSON(input); err == nil {
 			t.Errorf("unsafe input accepted: %s", input[:min(len(input), 120)])
 		}
 	}
-	command, err := DecodeCommand(`{"operation":"get","resource":"pods"}`)
+	command, err := decodeCommandJSON(`{"operation":"get","resource":"pods"}`)
 	if err != nil || command.Resource != "pods" {
 		t.Fatalf("valid command: %#v %v", command, err)
 	}
 	definitions := ReadCommands()
 	definitions[0].Operation = "apply"
 	definitions[0].Arguments[0] = "raw"
-	if ReadCommands()[0].Operation != "get" || ReadCommands()[0].Arguments[0] != "resource" {
+	if ReadCommands()[0].Operation != "list" || ReadCommands()[0].Arguments[0] != "resource" {
 		t.Fatal("caller modified command registry")
 	}
+}
+
+func decodeCommandJSON(input string) (Command, error) {
+	args, err := observation.ParseArguments([]byte(input))
+	if err != nil {
+		return Command{}, err
+	}
+	return DecodeCommand(args)
 }

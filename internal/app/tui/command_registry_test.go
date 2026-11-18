@@ -93,7 +93,7 @@ func TestDocumentCommandOwnership(t *testing.T) {
 
 // Check the text users see against the same registries that dispatch commands.
 func TestDisplayedColonCommandsAreRegistered(t *testing.T) {
-	known := map[string]bool{"1": true, "2": true, "3": true, "wq": true, "q!": true, "undo": true, "redo": true, "U": true}
+	known := map[string]bool{"1": true, "2": true, "3": true, "4": true, "wq": true, "q!": true, "undo": true, "redo": true, "U": true}
 	for _, command := range applicationCommands {
 		known[command.key], known[command.name] = true, true
 	}

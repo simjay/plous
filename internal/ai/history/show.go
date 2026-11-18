@@ -6,8 +6,6 @@ import (
 	"slices"
 )
 
-const ShowHelp = "Open saved evidence by ref and optional offset within the captured history scope."
-
 var showArguments = []string{"ref", "offset"}
 
 func ShowSchema() map[string]any {

@@ -4,6 +4,8 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -20,13 +22,42 @@ import (
 
 func (m *model) activityBody(width, height int) string {
 	entries := m.activityEntries()
-	header := ui.Muted.Render(ui.Clipped(ui.OneLine(m.current().Name), width)) + "\n"
+	header := ""
+	if w := m.current(); w != nil && m.activityUI.Filter != activity.Alerts {
+		header = ui.Muted.Render(ui.Clipped(ui.OneLine(w.Name), width)) + "\n"
+	}
 	header += m.activityTypeControls(width) + "\n"
 	scope := "All connections"
 	if c := m.currentConnection(); c != nil {
 		scope = "Connection: " + c.Name + " · Workspace: all"
 	} else if m.tool != "" {
 		scope = "Tool: " + m.tool + " · Workspace: all"
+	}
+	if m.activityUI.Filter == activity.Alerts {
+		states := m.alertStates()
+		switch len(states) {
+		case 0:
+			scope = "No saved monitors"
+		case 1:
+			state := states[0]
+			scope = state.Name + " · " + state.Context + "/" + state.Namespace
+			if !state.Running {
+				scope += " · stopped"
+			}
+		default:
+			scope = fmt.Sprintf("%d monitors", len(states))
+		}
+		if m.monitorListErr {
+			header += "Some monitor records are unavailable.\n"
+		}
+		for _, state := range states {
+			for _, key := range slices.Sorted(maps.Keys(state.Coverage)) {
+				if strings.Count(header, "\n") >= max(2, height/3) {
+					break
+				}
+				header += ui.Clipped(ui.OneLine(state.Name+" / "+key+": "+state.Coverage[key]), width) + "\n"
+			}
+		}
 	}
 	noun := "entries"
 	if len(entries) == 1 {
@@ -36,10 +67,10 @@ func (m *model) activityBody(width, height int) string {
 	if m.searches[1] != nil {
 		header += m.searchBar(1, width, "Search activity") + "\n"
 	}
-	if m.activityUI.Pending || m.activityUI.Load != nil {
+	if m.activityUI.Filter != activity.Alerts && (m.activityUI.Pending || m.activityUI.Load != nil) {
 		header += ui.Muted.Render(m.loading("Loading activity…")) + "\n"
 	}
-	if m.activityUI.Error != "" {
+	if m.activityUI.Filter != activity.Alerts && m.activityUI.Error != "" {
 		header += ui.Clipped(ui.MouseCommand(ui.ShortcutStyle.Render("g Retry"), "refresh")+"  "+ui.MouseCommand(ui.ShortcutStyle.Render("d Error details"), "describe"), width) + "\n"
 		header += ui.RemovedStyle.Render(ui.Clipped(ui.OneLine(m.activityUI.Error), width)) + "\n"
 	}
@@ -52,7 +83,7 @@ func (m *model) activityBody(width, height int) string {
 		if m.searches[1] != nil {
 			message = "No matching activity.\n" + ui.MouseAction(ui.ShortcutStyle.Render("Esc Clear search"), "esc")
 		}
-		if m.activityUI.Pending || m.activityUI.Load != nil || m.activityUI.Error != "" {
+		if m.activityUI.Filter != activity.Alerts && (m.activityUI.Pending || m.activityUI.Load != nil || m.activityUI.Error != "") {
 			message = ""
 		}
 		return ui.StyledView(header+message, width, height)
@@ -77,7 +108,7 @@ func (m *model) activityBody(width, height int) string {
 
 func (m *model) activityTypeControls(width int) string {
 	controls := []string{ui.Muted.Render("Type")}
-	for filter := activity.All; filter <= activity.HelmHistory; filter++ {
+	for filter := activity.All; int(filter) < m.activityFilterCount(); filter++ {
 		label := filter.String()
 		style := ui.Muted
 		if filter == m.activityUI.Filter {
@@ -88,7 +119,8 @@ func (m *model) activityTypeControls(width int) string {
 	if row := strings.Join(controls, "  "); ansi.StringWidth(row) <= width {
 		return row
 	}
-	previous, next := (int(m.activityUI.Filter)+3)%4, (int(m.activityUI.Filter)+1)%4
+	count := m.activityFilterCount()
+	previous, next := (int(m.activityUI.Filter)+count-1)%count, (int(m.activityUI.Filter)+1)%count
 	return ui.MouseTarget(ui.ShortcutStyle.Render("‹"), fmt.Sprintf("activity-type/%d", previous)) + " " +
 		ui.Selected.Render(ui.Clipped(m.activityUI.Filter.String(), max(1, width-4))) + " " +
 		ui.MouseTarget(ui.ShortcutStyle.Render("›"), fmt.Sprintf("activity-type/%d", next))
@@ -103,7 +135,11 @@ func (m *model) cycleActivityType(step int) {
 	if search := m.searches[1]; search != nil && search.kind == "activity" {
 		m.restoreActivityPosition(search)
 	}
-	m.activityUI.Filter = activity.Filter((int(m.activityUI.Filter) + step + 4) % 4)
+	count := m.activityFilterCount()
+	m.activityUI.Filter = activity.Filter((int(m.activityUI.Filter) + step + count) % count)
+	if m.activityUI.Filter != activity.Alerts {
+		m.alertMonitor = ""
+	}
 	m.rebaseActivitySearch(m.searches[1])
 	m.setActivityPosition(0)
 	for i, entry := range m.activityEntries() {
@@ -359,7 +395,7 @@ func (m *model) rebaseActivitySearch(s *panelSearch) {
 	if s == nil || s.kind != "activity" || s.scope != m.activityKey()+"/" {
 		return
 	}
-	entries := m.activityUI.Entries(m.active, m.tool, m.connection, "")
+	entries := m.activityEntriesFor("")
 	s.cursor = min(max(0, s.cursor), max(0, len(entries)-1))
 	for i, entry := range entries {
 		if entry.Identity() == s.activityIdentity {
@@ -385,6 +421,46 @@ func (m *model) activityEntries() []activity.ActivityEntry {
 		query = search.input.Text
 	} else if search := m.activityListSearch; search != nil && search.scope == m.viewKey()+"/" {
 		query = search.input.Text
+	}
+	return m.activityEntriesFor(query)
+}
+
+func (m *model) alertStates() []monitor.State {
+	if m.alertMonitor == "" {
+		return m.monitorStates
+	}
+	for i, state := range m.monitorStates {
+		if state.Name == m.alertMonitor {
+			return m.monitorStates[i : i+1]
+		}
+	}
+	return nil
+}
+
+func (m *model) activityEntriesFor(query string) []activity.ActivityEntry {
+	if m.activityUI.Filter == activity.Alerts {
+		var entries []activity.ActivityEntry
+		query = strings.ToLower(strings.TrimSpace(query))
+		for _, state := range m.alertStates() {
+			for i := range state.Alerts {
+				item := &state.Alerts[i]
+				at := item.FirstSeen
+				if !item.ClosedAt.IsZero() {
+					at = item.ClosedAt
+				}
+				entry := activity.ActivityEntry{Alert: item, MonitorName: state.Name, MonitorContext: state.Context, MonitorNamespace: state.Namespace, At: at}
+				if strings.Contains(strings.ToLower(entry.SearchText()), query) {
+					entries = append(entries, entry)
+				}
+			}
+		}
+		slices.SortFunc(entries, func(a, b activity.ActivityEntry) int {
+			if order := b.At.Compare(a.At); order != 0 {
+				return order
+			}
+			return strings.Compare(a.Identity(), b.Identity())
+		})
+		return entries
 	}
 	return m.activityUI.Entries(m.active, m.tool, m.connection, query)
 }
@@ -431,6 +507,9 @@ func (m *model) activityReleaseUnavailable(op *workspace.Operation) string {
 
 func (m *model) updateActivityRecordDetail() {
 	m.detail = m.activityRecord.Detail(m.activityObservations)
+	if m.activityRecord.Alert != nil {
+		return
+	}
 	if reason := m.activityReleaseUnavailable(m.operationDetail); reason != "" {
 		m.detail += "\n\n" + reason
 	}
@@ -460,4 +539,11 @@ func (m *model) openOperationRelease() {
 		h.Pending = "detail"
 	}
 	m.rememberHelm(h)
+}
+
+func (m *model) activityFilterCount() int {
+	if len(m.monitorStates) != 0 || m.monitorListErr || m.activityUI.Filter == activity.Alerts {
+		return int(activity.Alerts) + 1
+	}
+	return int(activity.HelmHistory) + 1
 }

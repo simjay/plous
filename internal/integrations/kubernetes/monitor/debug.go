@@ -48,18 +48,17 @@ func (b *debugOutput) snapshot() (string, bool) {
 }
 
 func (c *Client) Debug(ctx context.Context, tool string, command DebugCommand, policy DebugPolicy, connection string) (r observation.Result, err error) {
-	r = observation.New("kubernetes.debug.v1", tool, time.Now().UTC())
+	operation := "kubernetes_" + tool + "_run"
+	r = observation.New("kubernetes.debug.v1", operation, time.Now().UTC())
 	r.Connection, r.Namespace = connection, command.Namespace
 	r.Selection = map[string]string{"test": command.Test, "target": command.Target, "port": strconv.Itoa(command.Port), "pod": command.Name, "uid": command.UID, "container": command.Container}
-	raw, _ := json.Marshal(command)
-	command, err = DecodeDebug(tool, string(raw), policy, c.Namespace)
-	if err != nil {
+	if err = command.validate(tool, policy, c.Namespace); err != nil {
 		r.Outcome = "denied"
 		r.Facts["error"] = observation.Text(err.Error())
 		return r, nil
 	}
 	r.Facts["timeout_seconds"] = observation.Number(int64(command.TimeoutSeconds))
-	if tool == "kubernetes_exec_run" {
+	if tool == "exec" {
 		args, _ := json.Marshal(command.Command)
 		hash := sha256.Sum256(args)
 		r.Selection["command_sha256"] = hex.EncodeToString(hash[:])
@@ -78,7 +77,7 @@ func (c *Client) Debug(ctx context.Context, tool string, command DebugCommand, p
 		return r, err
 	}
 	c = &Client{target: c.target, config: config, Namespace: c.Namespace, rest: rawClient, dynamic: dynamic.New(rawClient)}
-	if tool == "kubernetes_diagnostic_run" {
+	if tool == "diagnostic" {
 		return c.diagnostic(ctx, command, policy, r)
 	}
 	var output debugOutput

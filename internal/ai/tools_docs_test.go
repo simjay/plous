@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/simjay/plous/internal/app/monitor"
 	kubernetes "github.com/simjay/plous/internal/integrations/kubernetes/monitor"
 )
 
@@ -24,12 +25,12 @@ func TestDocumentedToolsMatchRegisteredCapabilities(t *testing.T) {
 	}
 	inventory, _, _ = strings.Cut(inventory, "\n\n")
 	documented := map[string]bool{}
-	for _, match := range regexp.MustCompile("`([a-z]+(?:_[a-z]+)*_(?:read|show|run))`").FindAllStringSubmatch(inventory, -1) {
+	for _, match := range regexp.MustCompile("`([a-z]+(?:_[a-z]+)*_(?:read|view|run))`").FindAllStringSubmatch(inventory, -1) {
 		documented[match[1]] = true
 	}
 	registered := map[string]bool{}
 	for _, tool := range ToolDefinitions(Options{
-		WorkspaceID: "docs",
+		WorkspaceID: "docs", Monitor: monitor.ReadTool{},
 		Connections: []Connection{{Tool: "kubernetes", ConnectionID: "cluster", Namespace: "default"}, {Tool: "helm", ConnectionID: "cluster/helm"}},
 		Debug:       kubernetes.DebugPolicy{Exec: true, Image: "fixture"},
 		UI:          &testUI{},

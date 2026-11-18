@@ -153,9 +153,25 @@ func (m *model) mouseItem(kind, value string, double bool) tea.Cmd {
 	case "resource-types":
 		m.browseExploreResources()
 
+	case "monitors":
+		m.execute("4")
+
+	case "monitor":
+		if m.page == monitorsPage {
+			for _, state := range m.monitorStates {
+				if state.Running && state.Name == value {
+					m.monitorSelection = state.Name
+					if double {
+						m.openAlerts(state.Name)
+					}
+					break
+				}
+			}
+		}
+
 	case "activity-type":
 		if m.mode == 2 && m.page == "" && m.detail == "" && m.form == nil && m.settingsOverlay == nil {
-			if filter, err := strconv.Atoi(value); err == nil && filter >= 0 && filter <= int(activity.HelmHistory) {
+			if filter, err := strconv.Atoi(value); err == nil && filter >= 0 && filter < m.activityFilterCount() {
 				m.cycleActivityType(filter - int(m.activityUI.Filter))
 			}
 		}

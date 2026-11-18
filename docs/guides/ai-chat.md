@@ -1,59 +1,44 @@
-# Use the assistant in Plous
+# Use an agent with Plous
 
-The right panel can run Plous, Claude Code, or Codex. Select a cluster, open **Settings → Application → Agent** with `ss`, then choose and save your agent.
+Run an agent beside your cluster views in Plous, or [connect your coding agent over MCP](../agent-skills/plous-debug.md) to investigate from your repository.
 
-| Agent | What you need |
+## Choose an agent
+
+| Agent and setup | Where it runs |
 | --- | --- |
-| Plous | An API key from OpenAI or Anthropic |
-| Claude Code | An installed and authenticated `claude` CLI |
-| Codex | An installed and authenticated `codex` CLI |
-
-Use [plous-debug](../agent-skills/plous-debug.md) if you want to stay in your coding agent outside Plous.
-
-## Connect the Plous agent
-
-1. Choose **Plous → Add provider connection** under **Agent**.
-2. Select a vendor, enter its API key, and save the connection.
-3. Save the agent choice and press `cc` to start typing.
-
-To choose a model, type `/model` as the whole message and press Enter. Choose from the configured connections. This selection applies across workspaces. See [provider settings](../reference/configuration.md#ai-connections) and [data and privacy](../reference/data-and-privacy.md#ai-requests) for how keys and requests are handled.
+| [Plous](plous-agent.md) | Assistant panel. Requires an OpenAI or Anthropic API key. |
+| [Claude Code](../agent-skills/clients/claude.md) | Assistant panel or standalone MCP |
+| [Codex](../agent-skills/clients/codex.md) | Assistant panel or standalone MCP |
+| [Antigravity CLI](../agent-skills/clients/agy.md) | Standalone MCP |
+| [Cursor Agent](../agent-skills/clients/cursor.md) | Standalone MCP |
+| [Gemini CLI](../agent-skills/clients/gemini.md) | Standalone MCP |
+| [Grok Build](../agent-skills/clients/grok.md) | Standalone MCP |
+| [OpenCode](../agent-skills/clients/opencode.md) | Standalone MCP |
 
 ## Run Claude Code or Codex
 
-Save your CLI as the selected agent, check the cluster in the header, then press `cc` to enter its terminal. Plous supplies debugging instructions and cluster tools automatically. The CLI keeps its own sign-in, model settings, and conversations. It starts in the directory where you launched Plous.
+The panel starts the CLI in the directory where you launched Plous. The CLI uses its own sign-in, model settings, and conversation storage. Plous connects its tools automatically.
 
-Use **Entry command** for an executable or wrapper such as `celai codex`. Plous starts it directly. The wrapper must forward launch arguments.
+- **Move between panels.** Press `Ctrl+]` to return to the previous panel or press it again to focus the terminal. `Alt+Left` and `Alt+Right` cycle through panels. Hiding the assistant leaves the session running.
+- **Interrupt or exit.** `Ctrl+C` in the terminal goes to the CLI. To exit Plous, press `Ctrl+]` first, then `Ctrl+C`.
+- **Change clusters.** Press `Ctrl+]` and close the session with `:X`. Select the new cluster and press `cc` to open a session there.
 
-- **Leave or return to the terminal:** Press Ctrl+] or move to another panel with Alt+Left or Alt+Right. Hiding the panel leaves the session running.
-- **Interrupt or quit:** Ctrl+C in the terminal goes to the CLI. Press Ctrl+] first, then Ctrl+C to exit Plous.
-- **Change clusters:** Leave the terminal with Ctrl+], close it with `:X`, select the new cluster, and press `cc` to start a session for that cluster.
-
-If the CLI fails to open, check its entry command, PATH, and native sign-in. For tool compatibility or startup errors, see [assistant troubleshooting](../reference/troubleshooting.md#ai-chat-will-not-send) and [MCP connection details](../reference/mcp.md#mcp-connection-details).
+If the terminal fails to open, check the CLI’s sign-in, PATH, and **Entry command**. The agent’s setup page shows its default command. See [assistant troubleshooting](../reference/troubleshooting.md#ai-chat-will-not-send).
 
 ## Investigate a workload
 
-Check the assistant header, then select a Pod or name its namespace and workload in your request.
+Check the cluster in the assistant header. Select a Pod or name the namespace and workload in your request.
 
-> Why is this Pod restarting? Check its status, recent events, and the failing container’s logs. Tell me what you observed and what still needs checking.
+> Why is the checkout Pod restarting in staging/shop? Check its status, recent events, and the failing container’s logs. Tell me what you found and what still needs checking.
 
-Ask “Open the failing container’s logs in Plous” to inspect the result yourself. Use Alt+Left to move from the assistant to main. Finish any open form or editor if it blocks the requested view.
+To inspect the result yourself, ask “Open the failing container’s logs in Plous.” Press Alt+Left to move from the assistant to the main panel. An unfinished form or editor can block a view change.
 
-A Plous reply uses the cluster selected when it starts. A native session keeps the cluster it opened with. Reads can span namespaces allowed by your Kubernetes credentials. [Tool permissions](../reference/mcp.md#scope-and-delivery) and [active diagnostics](../mcp/active-diagnostics.md) explain what the agent can access.
+The built-in agent captures the selected cluster at the start of each reply. A native session keeps its starting cluster until you close it. Reads can span namespaces allowed by your Kubernetes credentials. See [tool permissions](../reference/mcp.md#scope-and-delivery) and [active diagnostics](../mcp/active-diagnostics.md).
 
 ## Inspect a reply’s sources
 
-For Plous chat, press Esc to leave typing, use `[` and `]` to choose a reply, then press Enter for **Sources**. It opens the saved observation, including its timestamp and any missing data. Opening a live view can fetch newer data.
+In built-in Plous chat, press Esc to leave typing, select a reply with `[` or `]`, and press Enter to open **Sources**. It shows the saved observation, its timestamp, and any gaps. Use [Plous chat controls](plous-agent.md#manage-conversations) to navigate conversations.
 
-For a native session, close it with `:X`, select **Plous** in Settings, and open history with `:H`. Choose **Claude Code tool evidence** or **Codex tool evidence** for that cluster. Plous saves tool results. Native prompts and replies stay with the CLI.
+To read a native session’s tool evidence, close it with `:X`, select **Plous** in Settings, and open history with `:H`. Choose **Claude Code tool evidence** or **Codex tool evidence** for the cluster. The CLI keeps its prompts and replies.
 
-## Manage conversations
-
-| Key | Action in Plous chat |
-| --- | --- |
-| `cc` | Start typing. Enter sends, Shift+Enter adds a newline, and Esc keeps the draft. |
-| `:C` / `:H` | Start a new conversation or open history |
-| `:X` | Stop a response |
-| `:A` | Open the wider reply reader |
-| `:p` | Restore the last prompt into an empty draft |
-
-Moving panels leaves the response running. Drafts and conversations are saved per cluster connection. See [assistant controls](../reference/keymap.md#ai-assistant) or try the [restarting Pod exercise](investigate-restarting-pod.md).
+Standalone MCP uses its own [evidence profile](../mcp/setup.md#saved-evidence).

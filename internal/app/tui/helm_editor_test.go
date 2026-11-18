@@ -135,7 +135,7 @@ func TestHelmRevealedResourceStaysOutOfAssistantContext(t *testing.T) {
 	if h.Document == nil || !strings.Contains(h.Document.Text(), "private-content") {
 		t.Fatal("explicit reveal did not expose the selected resource to the user")
 	}
-	if strings.Contains(m.contextText(), "private-content") {
+	if strings.Contains(m.assistantOptions().ScopeContext, "private-content") {
 		t.Fatal("revealed resource leaked into automatic assistant context")
 	}
 }

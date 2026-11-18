@@ -570,8 +570,8 @@ class ChatTests(unittest.TestCase):
             return {"purpose": "Read the shop Pod phase", "connection_id": targets["kubernetes"], "operation": "get", "resource": "pods", "name": "shop", "namespace": "apps"}
 
         self.stream_steps = [
-            {"tool": "kubernetes_resources_read", "arguments": target},
-            {"tool": "helm_releases_read", "arguments": lambda _: {"purpose": "Read the deployed shop chart version", "connection_id": targets["helm"], "operation": "metadata", "name": "shop", "namespace": "apps", "revision": 2}},
+            {"tool": "kubernetes_read", "arguments": target},
+            {"tool": "helm_read", "arguments": lambda _: {"purpose": "Read the deployed shop chart version", "connection_id": targets["helm"], "operation": "get", "view": "metadata", "name": "shop", "namespace": "apps", "revision": 2}},
             {"text": "Cross-tool investigation complete."},
         ]
         app.send(":c\rCompare the shop Pod and its Helm release\r")

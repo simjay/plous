@@ -62,12 +62,6 @@ func (op *operation) embeddingProvider() (journal.EmbedFunc, string, error) {
 	return nil, "", errors.New("configured embedding connection does not exist")
 }
 
-func historyDefinitions() []aimodel.Tool {
-	parameters := journal.ReadSchema()
-	parameters["properties"].(map[string]any)["purpose"] = map[string]any{"type": "string", "minLength": 1}
-	parameters["required"] = append(parameters["required"].([]string), "purpose")
-	return []aimodel.Tool{{Name: "history_read", Description: journal.ReadHelp, Parameters: marshal(parameters)}}
-}
 func (op *operation) historyTool(ctx context.Context, args json.RawMessage) (any, observation.Result, error) {
 	r := observation.New("history.read.v1", "history", time.Now().UTC())
 	r.Facts["meaning"] = observation.Text("selected saved evidence; observation times belong to original references")

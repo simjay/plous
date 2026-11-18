@@ -236,7 +236,7 @@ func TestGitOpsAssistantHintUsesCapturedKubernetesIdentity(t *testing.T) {
 	if page.Tool != "kubernetes" || page.ConnectionID != m.connection || page.Resource != "applications.argoproj.io" || page.Name != "payments" || page.Namespace != "argocd" {
 		t.Fatalf("wrong read target: %+v", page)
 	}
-	if strings.Contains(m.contextText(), "private-controller-body") {
+	if strings.Contains(m.assistantOptions().ScopeContext, "private-controller-body") {
 		t.Fatal("controller body entered automatic context")
 	}
 	m.savedConnection().Tool = "helm"

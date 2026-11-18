@@ -94,12 +94,13 @@ func groupOf(version string) string {
 	return ""
 }
 
+var podTargetResources = []string{
+	"pods", "deployments.apps", "statefulsets.apps", "daemonsets.apps",
+	"replicasets.apps", "replicationcontrollers", "jobs.batch", "cronjobs.batch",
+}
+
 func HasPodTargets(r kubecommon.Resource) bool {
-	switch r.Key() {
-	case "pods", "deployments.apps", "statefulsets.apps", "daemonsets.apps", "replicasets.apps", "replicationcontrollers", "jobs.batch", "cronjobs.batch":
-		return true
-	}
-	return false
+	return slices.Contains(podTargetResources, r.Key())
 }
 
 func RunningContainers(object unstructured.Unstructured) []string {

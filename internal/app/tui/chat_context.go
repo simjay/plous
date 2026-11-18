@@ -5,20 +5,31 @@ import (
 	"fmt"
 	"strings"
 
-	agent "github.com/simjay/plous/internal/ai"
+	"github.com/simjay/plous/internal/ai"
 	backend "github.com/simjay/plous/internal/ai/agent"
-	ai "github.com/simjay/plous/internal/ai/model"
+	aimodel "github.com/simjay/plous/internal/ai/model"
 	appchat "github.com/simjay/plous/internal/app/chat"
+	"github.com/simjay/plous/internal/app/monitor"
 	gitops "github.com/simjay/plous/internal/integrations/gitops/common"
 	"github.com/simjay/plous/internal/ui"
 )
 
-func (m *model) chatMessages(draft string, preview bool) ([]ai.Message, string) {
-	contextText := m.contextText()
-	system := agent.Instructions
-	if m.settings.Agent.Instructions != "" {
-		system += "\n\n" + m.settings.Agent.Instructions
+func (m *model) contextText(connections []ai.Connection) string {
+	if m.savedConnection() == nil {
+		return ""
 	}
+	// Capture identities and filters only; resource bodies are retrieved through tools.
+	value := struct {
+		Workspace   string                `json:"workspace"`
+		Revision    uint64                `json:"revision"`
+		Connections []ai.Connection       `json:"connections"`
+		Viewing     appchat.AssistantPage `json:"viewing"`
+	}{m.current().Name, m.current().Revision, connections, m.assistantPageContext()}
+	data, _ := json.MarshalIndent(value, "", "  ")
+	return string(data)
+}
+
+func (m *model) chatMessages(options ai.Options, draft string, preview bool) []aimodel.Message {
 	c := m.chat()
 	response := ""
 	if preview && m.run != nil && m.run.Chat == c && len(c.Turns) > 0 {
@@ -30,22 +41,38 @@ func (m *model) chatMessages(draft string, preview bool) ([]ai.Message, string) 
 			draft, response = t.Request.Prompt, t.Response.Text
 		}
 	}
-	messages := agent.PreviewMessages(system, contextText, draft)
+	messages := ai.PreviewMessages(options.System, options.ScopeContext, draft)
 	if len(c.Messages) > 0 {
-		recent, err := ai.Prepare(c.Messages, nil)
+		recent, err := aimodel.Prepare(c.Messages, nil)
 		if err == nil {
 			previewMessages := messages[:1:1]
 			for _, message := range recent.Messages {
 				data, _ := json.Marshal(message)
-				previewMessages = append(previewMessages, ai.Message{Role: string(message.Role), Text: string(data)})
+				previewMessages = append(previewMessages, aimodel.Message{Role: string(message.Role), Text: string(data)})
 			}
 			messages = append(previewMessages, messages[len(messages)-1])
 		}
 	}
 	if response != "" {
-		messages = append(messages, ai.Message{Role: "assistant", Text: response})
+		messages = append(messages, aimodel.Message{Role: "assistant", Text: response})
 	}
-	return messages, contextText
+	return messages
+}
+
+func (m *model) assistantOptions() ai.Options {
+	connections := m.assistantConnections()
+	options := ai.Options{
+		Debug: m.debugPolicy, UI: m.uiTools(connections), Connections: connections,
+		Store: m.store, History: m.history, WorkspaceID: m.conversationScope(),
+		Agent: m.settings.MainAgent.Effective(), System: ai.Instructions, ScopeContext: m.contextText(connections),
+	}
+	if instructions := m.settings.Agent.Instructions; instructions != "" {
+		options.System += "\n\n" + instructions
+	}
+	if m.monitorRoot != "" {
+		options.Monitor = monitor.ReadTool{Root: m.monitorRoot}
+	}
+	return options
 }
 
 func (m *model) chatContextUsage() (used, limit int) {
@@ -55,12 +82,13 @@ func (m *model) chatContextUsage() (used, limit int) {
 	if m.run != nil && m.run.Chat == m.chat() && m.run.ContextLimit > 0 {
 		return m.run.ContextUsed, m.run.ContextLimit
 	}
-	model, ok := ai.LookupModel(m.settings.Agent.Provider, m.settings.Agent.Model)
+	model, ok := aimodel.LookupModel(m.settings.Agent.Provider, m.settings.Agent.Model)
 	if !ok {
 		return 0, 0
 	}
-	messages, _ := m.chatMessages(m.draft().Text, true)
-	return appchat.EstimateTokens(messages) + agent.EstimateTools(agent.ToolDefinitions(agent.Options{Debug: m.debugPolicy, UI: m.uiTools(m.assistantConnections()), Store: m.store, WorkspaceID: m.conversationScope(), Connections: m.assistantConnections()})), model.ContextWindow
+	options := m.assistantOptions()
+	messages := m.chatMessages(options, m.draft().Text, true)
+	return appchat.EstimateTokens(messages) + ai.EstimateTools(ai.ToolDefinitions(options)), model.ContextWindow
 }
 
 func (m *model) chatContextLine(width int) string {
@@ -160,11 +188,11 @@ func assistantPageNamespace(namespace string) string {
 	return namespace
 }
 
-func (m *model) assistantConnections() []agent.Connection {
+func (m *model) assistantConnections() []ai.Connection {
 	selected := m.savedConnection()
 	if selected == nil || !monitorCluster(selected.Tool) || m.historyView != "" {
 		return nil
 	}
-	captured := agent.Connection{TargetCaptured: true, Target: selected.Target, ConnectionID: selected.ID, Name: selected.Name, Tool: selected.Tool, Path: selected.Settings["kubeconfig"], Context: selected.Settings["context"], Namespace: selected.Settings["namespace"], Driver: m.helmDriver(m.active, *selected)}
-	return agent.ClusterConnections(captured)
+	captured := ai.Connection{TargetCaptured: true, Target: selected.Target, ConnectionID: selected.ID, Name: selected.Name, Tool: selected.Tool, Path: selected.Settings["kubeconfig"], Context: selected.Settings["context"], Namespace: selected.Settings["namespace"], Driver: m.helmDriver(m.active, *selected)}
+	return ai.ClusterConnections(captured)
 }

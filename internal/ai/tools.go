@@ -4,166 +4,100 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
-	aimodel "github.com/simjay/plous/internal/ai/model"
-
+	"github.com/simjay/plous/internal/ai/agent"
+	"github.com/simjay/plous/internal/ai/history"
 	argo "github.com/simjay/plous/internal/integrations/argo/monitor"
 	flux "github.com/simjay/plous/internal/integrations/flux/monitor"
-	helmtool "github.com/simjay/plous/internal/integrations/helm/monitor"
-	kubernetes "github.com/simjay/plous/internal/integrations/kubernetes/monitor"
+	helm "github.com/simjay/plous/internal/integrations/helm/monitor"
+	kube "github.com/simjay/plous/internal/integrations/kubernetes/monitor"
 	"github.com/simjay/plous/internal/integrations/observation"
-
 	"github.com/simjay/plous/internal/workspace"
 )
 
 type toolDefinition struct {
-	Owner       string
-	Name        string
-	Description string
-	Operations  []string
-	Schema      func() map[string]any
+	name, connection, description string
+	schema                        func() map[string]any
+	read                          func(context.Context, Connection, map[string]json.RawMessage) (observation.Result, error)
+	kind                          toolKind
 }
 
-func externalDefinitions() []toolDefinition {
-	definitions := []toolDefinition{
-		{"kubernetes", "kubernetes_resources_read", kubernetes.ResourcesHelp, kubernetes.ReadOperations("kubernetes_resources_read"), func() map[string]any { return kubernetes.ReadSchema("kubernetes_resources_read") }},
-		{"kubernetes", "kubernetes_logs_read", kubernetes.LogsHelp, kubernetes.ReadOperations("kubernetes_logs_read"), func() map[string]any { return kubernetes.ReadSchema("kubernetes_logs_read") }},
-		{"kubernetes", "kubernetes_usage_read", kubernetes.UsageHelp, kubernetes.ReadOperations("kubernetes_usage_read"), func() map[string]any { return kubernetes.ReadSchema("kubernetes_usage_read") }},
-		{"helm", "helm_releases_read", helmtool.ReleasesHelp, helmtool.ReadOperations("helm_releases_read"), func() map[string]any { return helmtool.ReadSchema("helm_releases_read") }},
-		{"helm", "helm_configuration_read", helmtool.ConfigurationHelp, helmtool.ReadOperations("helm_configuration_read"), func() map[string]any { return helmtool.ReadSchema("helm_configuration_read") }},
-		{"helm", "helm_diff_read", helmtool.CompareHelp, helmtool.ReadOperations("helm_diff_read"), func() map[string]any { return helmtool.ReadSchema("helm_diff_read") }},
-		{"kubernetes", "argo_resources_read", argo.ReadHelp, argo.ReadOperations(), argo.ReadSchema},
-		{"kubernetes", "flux_resources_read", flux.ReadHelp, flux.ReadOperations(), flux.ReadSchema},
-		{"workspace", "workspace_read", workspace.ReadHelp, workspace.ReadOperations(), workspace.ReadSchema},
-	}
+type toolKind int
 
-	return definitions
-}
+const (
+	readTool toolKind = iota
+	historyTool
+	runTool
+	viewTool
+)
 
-func (d toolDefinition) parameters() map[string]any {
-	parameters := d.Schema()
-	properties := parameters["properties"].(map[string]any)
-	required := parameters["required"].([]string)
-	properties["purpose"] = map[string]any{"type": "string", "minLength": 1, "description": "What you are looking for in this result"}
-	properties["fields"] = observation.FieldsSchema()
-	required = append(required, "purpose")
-	if d.Owner != "workspace" {
-		properties["connection_id"] = map[string]any{"type": "string", "minLength": 1, "description": "Exact ID in the captured connection inventory"}
-		required = append(required, "connection_id")
-	}
-	parameters["required"] = required
-	return parameters
-}
-
-func (op *operation) definitions() []toolDefinition {
-	var result []toolDefinition
-	for _, d := range externalDefinitions() {
-		if op.hasTool(d.Owner) || d.Name == "workspace_read" && op.o.WorkspaceID != "" {
-			result = append(result, d)
+func (op *operation) tools() []toolDefinition {
+	result := []toolDefinition{{name: "history_read", description: history.ReadHelp, schema: history.ReadSchema, kind: historyTool}}
+	if op.hasTool("kubernetes") {
+		result = append(result,
+			toolDefinition{"kubernetes_read", "kubernetes", kube.ReadHelp, kube.ReadSchema, op.readKubernetes, readTool},
+			toolDefinition{"argo_read", "kubernetes", argo.ReadHelp, argo.ReadSchema, op.kubernetesReader(argo.ValidateRead), readTool},
+			toolDefinition{"flux_read", "kubernetes", flux.ReadHelp, flux.ReadSchema, op.kubernetesReader(flux.ValidateRead), readTool},
+		)
+		if op.o.Monitor != nil {
+			result = append(result, toolDefinition{"monitor_read", "kubernetes", op.o.Monitor.Description(), op.o.Monitor.Schema, op.readMonitor, readTool})
 		}
+		if len(op.o.Debug.Operations()) > 0 {
+			result = append(result, toolDefinition{
+				name: "kubernetes_run", connection: "kubernetes", kind: runTool, read: op.debugTool,
+				description: kube.RunHelp, schema: op.runSchema,
+			})
+		}
+	}
+	if op.hasTool("helm") {
+		result = append(result, toolDefinition{"helm_read", "helm", helm.ReadHelp, helm.ReadSchema, op.readHelm, readTool})
+	}
+	if op.o.WorkspaceID != "" {
+		result = append(result, toolDefinition{name: "workspace_read", description: workspace.ReadHelp, schema: workspace.ReadSchema, read: op.readWorkspace})
+	}
+	if op.o.UI != nil {
+		result = append(result, toolDefinition{name: "plous_view", description: viewHelp, schema: op.viewSchema, kind: viewTool})
 	}
 	return result
 }
 
-func (op *operation) externalRead(ctx context.Context, name, input string) (any, error) {
-	var definition *toolDefinition
-	for _, d := range externalDefinitions() {
-		if d.Name == name {
-			definition = &d
-			break
+func (op *operation) tool(name string) (toolDefinition, bool) {
+	for _, tool := range op.tools() {
+		if tool.name == name {
+			return tool, true
 		}
 	}
-	if definition == nil {
-		return nil, denyRead(errors.New("tool is unavailable in the captured workspace"))
-	}
-	input, err := definition.prepareInput(input)
-	if err != nil {
-		return nil, denyRead(err)
-	}
-
-	switch name {
-	case "kubernetes_resources_read", "kubernetes_logs_read", "kubernetes_usage_read":
-		return op.readKubernetes(ctx, input)
-	case "argo_resources_read", "flux_resources_read":
-		_, args, err := connectionCommand(input)
-		if err != nil {
-			return nil, denyRead(err)
-		}
-		command, err := kubernetes.DecodeCommand(args)
-		if err == nil {
-			if name == "argo_resources_read" {
-				err = argo.ValidateRead(command)
-			} else {
-				err = flux.ValidateRead(command)
-			}
-		}
-		if err != nil {
-			return nil, denyRead(err)
-		}
-		return op.readKubernetes(ctx, input)
-	case "helm_releases_read", "helm_configuration_read", "helm_diff_read":
-		return op.readHelm(ctx, input)
-	case "workspace_read":
-		if op.o.WorkspaceID == "" {
-			return nil, denyRead(errors.New("General chat has no connection tools"))
-		}
-		var q struct {
-			Operation string `json:"operation"`
-			Cursor    string `json:"cursor"`
-			Limit     int    `json:"limit"`
-		}
-		if err := decode(input, &q); err != nil {
-			return nil, denyRead(err)
-		}
-		return op.records.Project(ctx, workspace.Query{Source: q.Operation, Cursor: q.Cursor, Limit: q.Limit})
-	}
-	return nil, denyRead(errors.New("tool is unavailable in the captured workspace"))
+	return toolDefinition{}, false
 }
 
-func (op *operation) toolDefinitions() []aimodel.Tool {
-	var result []aimodel.Tool
-	if op.hasTool("kubernetes") {
-		for _, name := range []string{"kubernetes_exec_run", "kubernetes_diagnostic_run"} {
-			if !op.debugEnabled(name) {
-				continue
-			}
-			parameters := kubernetes.DebugSchema(name)
-			properties := parameters["properties"].(map[string]any)
-			properties["purpose"] = map[string]any{"type": "string", "minLength": 1}
-			properties["connection_id"] = op.connectionParameter("kubernetes")
+func (op *operation) toolDefinitions() []agent.Tool {
+	var result []agent.Tool
+	for _, tool := range op.tools() {
+		parameters := tool.schema()
+		properties := parameters["properties"].(map[string]any)
+		properties["purpose"] = map[string]any{"type": "string", "minLength": 1}
+		required := append(parameters["required"].([]string), "purpose")
+		if tool.connection != "" {
+			properties["connection_id"] = op.connectionParameter(tool.connection)
+			required = append(required, "connection_id")
+		}
+		if tool.kind == readTool || tool.kind == runTool {
 			properties["fields"] = observation.FieldsSchema()
-			parameters["required"] = append(parameters["required"].([]string), "purpose", "connection_id")
-			description := kubernetes.ExecHelp
-			if name == "kubernetes_diagnostic_run" {
-				description = kubernetes.DiagnosticHelp
-			}
-			result = append(result, aimodel.Tool{Name: name, Description: description, Parameters: marshal(parameters), Mutating: true})
 		}
-	}
-	for _, d := range op.definitions() {
-		parameters := d.parameters()
-		if d.Owner != "workspace" {
-			parameters["properties"].(map[string]any)["connection_id"] = op.connectionParameter(d.Owner)
-		}
-		result = append(result, aimodel.Tool{Name: d.Name, Description: d.Description, Parameters: marshal(parameters)})
-	}
-	result = append(result, historyDefinitions()...)
-	if op.o.UI != nil {
-		for _, definition := range uiDefinitions() {
-			if owner := uiToolOwner(definition.Name); owner == "" || op.hasTool(owner) {
-				result = append(result, definition)
-			}
-		}
+		parameters["required"] = required
+		result = append(result, agent.Tool{
+			Name: tool.name, Description: tool.description, Parameters: marshal(parameters),
+			Mutating: tool.kind == runTool || tool.kind == viewTool, NonDestructive: tool.kind == viewTool,
+		})
 	}
 	return result
 }
 
 func (op *operation) connectionParameter(owner string) map[string]any {
-	var ids []string
-	var descriptions []string
+	var ids, descriptions []string
 	for _, c := range op.o.Connections {
 		if c.Tool == owner && c.ConnectionID != "" {
 			ids = append(ids, c.ConnectionID)
@@ -176,24 +110,32 @@ func (op *operation) connectionParameter(owner string) map[string]any {
 	return map[string]any{"type": "string", "enum": ids, "description": strings.Join(descriptions, " | ")}
 }
 
-func (d toolDefinition) prepareInput(input string) (string, error) {
-	fields, err := toolArguments([]byte(input))
-	if err != nil {
-		return "", err
+func (op *operation) readWorkspace(ctx context.Context, _ Connection, args map[string]json.RawMessage) (observation.Result, error) {
+	var q struct {
+		Operation string `json:"operation"`
+		Cursor    string `json:"cursor"`
+		Limit     int    `json:"limit"`
 	}
-	operations := d.Operations
-	if len(operations) == 1 {
-		if _, supplied := fields["operation"]; supplied {
-			return "", fmt.Errorf("%s does not accept operation", d.Name)
-		}
-		fields["operation"] = marshal(operations[0])
-		input = string(marshal(fields))
-	} else {
-		var operation string
-		if json.Unmarshal(fields["operation"], &operation) != nil || !slices.Contains(operations, operation) {
-			return "", fmt.Errorf("%s supports %s", d.Name, strings.Join(operations, " or "))
-		}
+	if err := decode(string(marshal(args)), &q); err != nil {
+		return observation.Result{}, denyRead(err)
 	}
+	if !slices.Contains(workspace.ReadOperations(), q.Operation) {
+		return observation.Result{}, denyRead(errors.New("workspace_read requires workspace or activity"))
+	}
+	return op.records.Project(ctx, workspace.Query{Source: q.Operation, Cursor: q.Cursor, Limit: q.Limit})
+}
 
-	return input, nil
+func stringArgument(args map[string]json.RawMessage, key string) string {
+	var value string
+	_ = json.Unmarshal(args[key], &value)
+	return value
+}
+
+func operationVariant(operation string, schema map[string]any) observation.OperationVariant {
+	properties := schema["properties"].(map[string]any)
+	arguments := slices.Collect(maps.Keys(properties))
+	properties["operation"] = map[string]any{"const": operation}
+	delete(schema, "type")
+	delete(schema, "additionalProperties")
+	return observation.OperationVariant{Operation: operation, Arguments: arguments, Schema: schema}
 }

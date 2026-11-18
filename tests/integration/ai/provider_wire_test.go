@@ -40,7 +40,7 @@ func TestNativeProviderWireDirectRead(t *testing.T) {
 				switch calls.Add(1) {
 				case 1:
 					raw, _ := json.Marshal(request["tools"])
-					for _, name := range []string{"history_read", "kubernetes_resources_read", "purpose", "connection_id", "resource"} {
+					for _, name := range []string{"history_read", "kubernetes_read", "purpose", "connection_id", "resource"} {
 						if !strings.Contains(string(raw), name) {
 							t.Error("missing full main tool schema", name)
 						}
@@ -48,7 +48,7 @@ func TestNativeProviderWireDirectRead(t *testing.T) {
 					if strings.Contains(string(raw), `"name":"recall"`) || strings.Contains(string(raw), `"name":"investigate"`) || strings.Contains(string(raw), `"bash"`) {
 						t.Error("retired investigator exposed")
 					}
-					writeNamedWireToolCall(w, provider, "kubernetes_resources_read", "read-1", `{"purpose":"Read checkout phase","connection_id":"captured","operation":"get","resource":"pods","name":"checkout","namespace":"payments"}`)
+					writeNamedWireToolCall(w, provider, "kubernetes_read", "read-1", `{"purpose":"Read checkout phase","connection_id":"captured","operation":"get","resource":"pods","name":"checkout","namespace":"payments"}`)
 				case 2:
 					raw, _ := json.Marshal(request["messages"])
 					if !strings.Contains(string(raw), "Running") {

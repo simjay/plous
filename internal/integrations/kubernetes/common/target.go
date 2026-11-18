@@ -38,17 +38,26 @@ func loadConfiguration(paths string) (*clientcmdapi.Config, string, error) {
 		return nil, "", err
 	}
 	rules.Precedence = resolved
+	configPaths := strings.Join(resolved, string(os.PathListSeparator))
+	found := false
 	for _, path := range rules.Precedence {
 		// Validate bounded input without surfacing parser excerpts or credentials.
-		if _, err = readContexts(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if _, err = readContexts(path); errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
 			return nil, "", err
 		}
+		found = true
+	}
+	if !found {
+		return nil, "", fmt.Errorf("No kubeconfig files found in %q. Choose an existing kubeconfig path.", configPaths)
 	}
 	raw, err := rules.Load()
 	if err != nil {
-		return nil, "", errors.New("Cannot load kubeconfig. Check its paths and YAML configuration.")
+		return nil, "", fmt.Errorf("Cannot load kubeconfig from %q. Check the Kubernetes config structure.", configPaths)
 	}
-	return raw, strings.Join(resolved, string(os.PathListSeparator)), nil
+	return raw, configPaths, nil
 }
 
 // NormalizeConfigPaths anchors explicitly supplied relative paths without loading credentials.
@@ -101,18 +110,21 @@ func ResolveTarget(paths, name, namespace string) (*Target, error) {
 		name = raw.CurrentContext
 	}
 	if name == "" {
-		return nil, errors.New("No current context is configured. Choose a context or kubeconfig.")
+		return nil, fmt.Errorf("No current context is configured in kubeconfig %q. Choose a named context or another kubeconfig.", paths)
 	}
 	c := raw.Contexts[name]
-	if c == nil || raw.Clusters[c.Cluster] == nil {
-		return nil, errors.New("The selected context or its cluster is missing. Choose a context or refresh kubeconfig.")
+	if c == nil {
+		return nil, fmt.Errorf("Context %q was not found in kubeconfig %q.", name, paths)
+	}
+	if raw.Clusters[c.Cluster] == nil {
+		return nil, fmt.Errorf("Context %q references a missing cluster %q in kubeconfig %q.", name, c.Cluster, paths)
 	}
 	raw.CurrentContext = name
 	if err = clientcmdapi.MinifyConfig(raw); err != nil {
-		return nil, errors.New("Cannot resolve the selected context's configuration.")
+		return nil, fmt.Errorf("Cannot resolve context %q. Check its user and cluster references in kubeconfig %q.", name, paths)
 	}
 	if err = clientcmdapi.FlattenConfig(raw); err != nil {
-		return nil, errors.New("Cannot read the selected context's certificate files.")
+		return nil, fmt.Errorf("Cannot read certificate or key files for context %q. Check the paths and permissions in kubeconfig %q.", name, paths)
 	}
 	if namespace == "" {
 		namespace = c.Namespace
@@ -123,14 +135,14 @@ func ResolveTarget(paths, name, namespace string) (*Target, error) {
 	cluster := raw.Clusters[c.Cluster]
 	endpoint, err := url.Parse(cluster.Server)
 	if err != nil || endpoint.Host == "" {
-		return nil, errors.New("The selected context has an invalid API endpoint.")
+		return nil, fmt.Errorf("Context %q has an invalid API endpoint in kubeconfig %q.", name, paths)
 	}
 	endpoint.User, endpoint.RawQuery, endpoint.Fragment = nil, "", ""
 	proxy := ""
 	if cluster.ProxyURL != "" {
 		parsed, err := url.Parse(cluster.ProxyURL)
 		if err != nil || parsed.Host == "" {
-			return nil, errors.New("The selected context has an invalid proxy endpoint.")
+			return nil, fmt.Errorf("Context %q has an invalid proxy endpoint in kubeconfig %q.", name, paths)
 		}
 		parsed.User, parsed.RawQuery, parsed.Fragment = nil, "", ""
 		proxy = parsed.String()

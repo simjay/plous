@@ -44,7 +44,7 @@ func (d durableTools) Call(ctx context.Context, c agent.ToolCall, n int) (json.R
 	return body, nil
 }
 
-func TestProductionToolsAndMCPAgreeOnUsageAndSavedEvidence(t *testing.T) {
+func TestProductionToolsAndMCPAgreeOnSavedEvidence(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX fixture launcher")
 	}
@@ -61,7 +61,7 @@ func TestProductionToolsAndMCPAgreeOnUsageAndSavedEvidence(t *testing.T) {
 	if err = os.WriteFile(executable, []byte("#!/bin/sh\nexec "+quote(python)+" "+quote(script)+" \"$@\"\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	for _, condition := range []string{"complete", "stale", "denied", "closed"} {
+	for _, condition := range []string{"complete", "stale", "denied", "closed", "custom-field"} {
 		t.Run(condition, func(t *testing.T) {
 			var calls atomic.Int32
 			now := time.Now().UTC().Add(-time.Second)
@@ -73,6 +73,14 @@ func TestProductionToolsAndMCPAgreeOnUsageAndSavedEvidence(t *testing.T) {
 				calls.Add(1)
 				var body any
 				switch r.URL.Path {
+				case "/apis/example.test":
+					body = json.RawMessage(`{"name":"example.test","preferredVersion":{"groupVersion":"example.test/v1"},"versions":[{"groupVersion":"example.test/v2"}]}`)
+				case "/apis/example.test/v1":
+					body = json.RawMessage(`{"resources":[]}`)
+				case "/apis/example.test/v2":
+					body = json.RawMessage(`{"resources":[{"name":"gadgets","kind":"Gadget","namespaced":true,"verbs":["get"]}]}`)
+				case "/apis/example.test/v2/namespaces/payments/gadgets/app":
+					body = json.RawMessage(`{"apiVersion":"example.test/v2","kind":"Gadget","metadata":{"name":"app","namespace":"payments","uid":"gadget-uid","resourceVersion":"1"},"spec":{"minReady":3,"token":"fixture-secret"}}`)
 				case "/api/v1":
 					deliveryDiscovery(w)
 					return
@@ -93,7 +101,11 @@ func TestProductionToolsAndMCPAgreeOnUsageAndSavedEvidence(t *testing.T) {
 			})
 			session := newToolSession(t.Context(), op)
 			defer session.Close()
-			args := map[string]any{"purpose": "Measure current Pod", "connection_id": "east", "resource": "pods", "name": "app"}
+			args := map[string]any{"purpose": "Measure current Pod", "operation": "usage", "connection_id": "east", "resource": "pods", "name": "app"}
+			if condition == "custom-field" {
+				args["operation"], args["resource"] = "get", "gadgets.example.test"
+				args["paths"] = []string{"/spec/minReady", "/spec/token"}
+			}
 			if condition == "denied" {
 				args["connection_id"] = "other"
 			}
@@ -101,12 +113,12 @@ func TestProductionToolsAndMCPAgreeOnUsageAndSavedEvidence(t *testing.T) {
 				session.Close()
 			}
 			tools := durableTools{session, t, op}
-			direct, err := tools.Call(t.Context(), agent.ToolCall{ID: "direct", Name: "kubernetes_usage_read", Args: marshal(args)}, 65536)
+			direct, err := tools.Call(t.Context(), agent.ToolCall{ID: "direct", Name: "kubernetes_read", Args: marshal(args)}, 65536)
 			if err != nil && condition != "closed" {
 				t.Fatal(err)
 			}
 			var terminalOutput bytes.Buffer
-			native, err := cli.StartTerminal(t.Context(), cli.TerminalOptions{Kind: agent.ClaudeCode, Path: executable, Directory: t.TempDir(), StateDirectory: t.TempDir(), ID: op.o.TurnID, Tools: tools, Width: 80, Height: 24, Input: strings.NewReader(string(marshal(map[string]any{"name": "kubernetes_usage_read", "arguments": args})) + "\n"), Output: &terminalOutput})
+			native, err := cli.StartTerminal(t.Context(), cli.TerminalOptions{Kind: agent.ClaudeCode, Path: executable, Directory: t.TempDir(), StateDirectory: t.TempDir(), ID: op.o.TurnID, Tools: tools, Width: 80, Height: 24, Input: strings.NewReader(string(marshal(map[string]any{"name": "kubernetes_read", "arguments": args})) + "\n"), Output: &terminalOutput})
 			if err == nil {
 				err = native.Wait()
 			}
@@ -180,6 +192,9 @@ func TestProductionToolsAndMCPAgreeOnUsageAndSavedEvidence(t *testing.T) {
 			} else {
 				f := local.Observation.Rows[0].Facts
 				if condition == "complete" && (f["cpu_nanocores"].Number == nil || *f["cpu_nanocores"].Number != 125000000 || !f["container.app.limits.cpu_nanocores"].Unknown) {
+					t.Fatal(f)
+				}
+				if condition == "custom-field" && (f["/spec/minReady"].String() != "3" || f["path_status./spec/token"].String() != "redacted") {
 					t.Fatal(f)
 				}
 				if condition == "stale" && (!f["cpu_nanocores"].Unknown || local.Observation.Coverage.Complete) {

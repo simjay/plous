@@ -106,7 +106,7 @@ func TestPlousBenchTools(t *testing.T) {
 			failParity("direct and MCP schemas differ")
 		}
 		for i, call := range pair[0].Calls {
-			if call.Tool != "ui_read" && !strings.HasSuffix(call.Tool, "_show") {
+			if call.Tool != "plous_view" {
 				continue
 			}
 			var a, b agent.UIResult

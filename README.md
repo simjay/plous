@@ -44,7 +44,7 @@ plous
 
 Plous opens with your current Kubernetes context. Press **hh** for Help while navigating, or use `:quit` to exit.
 
-Follow the [terminal UI quickstart](docs/getting-started/README.md) or [set up the AI assistant](docs/guides/ai-chat.md).
+Follow the [terminal UI quickstart](docs/getting-started/README.md) or [set up the assistant panel](docs/guides/ai-chat.md#choose-an-agent).
 
 <a name="mcp"></a>
 
@@ -52,7 +52,9 @@ Follow the [terminal UI quickstart](docs/getting-started/README.md) or [set up t
 
 Use **plous-debug** in the coding agent you run in your repository. It gives your agent a workflow for investigating Kubernetes failures and connects the cluster tools it needs to check its findings.
 
-Run `plous setup` to list the supported clients. Pick your agent in the [setup guide](docs/agent-skills/plous-debug.md#install) to install the skill and connect its tools.
+Use [plous-monitor](docs/agent-skills/plous-monitor.md) for scheduled checks of Kubernetes workloads and Service endpoints with zero model calls per check.
+
+Run `plous setup` to list the supported clients. Pick your agent in the [agent directory](docs/guides/ai-chat.md#choose-an-agent) to install the skill and connect its tools.
 
 ## Documentation
 

@@ -11,9 +11,11 @@ import (
 const openCodeMCP = "/mcp"
 const openCodeV2Servers = "/mcp/servers"
 
+type openCodeConfig struct{}
+
 // OpenCode loads its user files from lowest to highest priority in this order.
 // Prefer an existing file and check every layer for a conflicting registration.
-func (c setupClient) openCodeConfigFile(defaultPath, executable string) (string, error) {
+func (openCodeConfig) selectFile(defaultPath string, owns func(serverLaunch) bool) (string, error) {
 	dir, selected := filepath.Dir(defaultPath), defaultPath
 	var registered string
 	for _, name := range []string{"config.json", "opencode.json", "opencode.jsonc"} {
@@ -25,7 +27,7 @@ func (c setupClient) openCodeConfigFile(defaultPath, executable string) (string,
 		if raw == nil {
 			continue
 		}
-		_, serverPath, err := c.parseOpenCodeConfig(raw, executable)
+		_, serverPath, err := parseOpenCodeConfig(raw, owns)
 		if err != nil {
 			return "", fmt.Errorf("OpenCode configuration %s: %w", path, err)
 		}
@@ -43,7 +45,7 @@ func (c setupClient) openCodeConfigFile(defaultPath, executable string) (string,
 	return selected, nil
 }
 
-func (c setupClient) parseOpenCodeConfig(old []byte, executable string) (hujson.Value, string, error) {
+func parseOpenCodeConfig(old []byte, owns func(serverLaunch) bool) (hujson.Value, string, error) {
 	doc, err := parseJSONConfig(old, true)
 	if err != nil {
 		return hujson.Value{}, "", err
@@ -72,14 +74,14 @@ func (c setupClient) parseOpenCodeConfig(old []byte, executable string) (hujson.
 		Command []string `json:"command"`
 	}
 	if decodeJSONValue(entry, &previous) != nil || previous.Type != "local" || len(previous.Command) == 0 ||
-		!c.manages(serverLaunch{Command: previous.Command[0], Args: previous.Command[1:]}, executable) {
+		!owns(serverLaunch{Command: previous.Command[0], Args: previous.Command[1:]}) {
 		return hujson.Value{}, "", unmanagedServerError()
 	}
 	return doc, container, nil
 }
 
-func (c setupClient) mergeOpenCodeConfig(old []byte, launch serverLaunch) ([]byte, error) {
-	doc, registered, err := c.parseOpenCodeConfig(old, launch.Command)
+func (openCodeConfig) merge(old []byte, launch serverLaunch, owns func(serverLaunch) bool) ([]byte, error) {
+	doc, registered, err := parseOpenCodeConfig(old, owns)
 	if err != nil {
 		return nil, err
 	}

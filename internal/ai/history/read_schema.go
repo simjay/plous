@@ -22,29 +22,19 @@ func ReadSchema() map[string]any {
 			"text": map[string]any{"type": "string"}, "number": map[string]any{"type": "integer"}, "boolean": map[string]any{"type": "boolean"},
 		}, "additionalProperties": false, "minProperties": 1, "maxProperties": 1},
 	}
-	var operations []string
-	var variants []any
+	var variants []observation.OperationVariant
 	for _, d := range readDefinitions {
-		operations = append(operations, d.operation)
-		branch := map[string]any{"operation": map[string]any{"enum": []string{d.operation}}}
-		for name := range properties {
-			if !slices.Contains(d.arguments, name) {
-				branch[name] = false
-			}
-		}
+		branch := map[string]any{}
 		if d.operation == "search" || d.operation == "window" {
-			branch["limit"] = map[string]any{"maximum": MaxPageResults, "default": DefaultPageResults}
+			branch["properties"] = map[string]any{"limit": map[string]any{"maximum": MaxPageResults, "default": DefaultPageResults}}
 		}
-		variant := map[string]any{"properties": branch}
 		if len(d.required) > 0 {
-			variant["required"] = d.required
+			branch["required"] = d.required
 		}
 		if slices.Contains(d.arguments, "field") {
-			variant["dependentRequired"] = map[string]any{"field": []string{"equals"}, "equals": []string{"field"}}
+			branch["dependentRequired"] = map[string]any{"field": []string{"equals"}, "equals": []string{"field"}}
 		}
-		variants = append(variants, variant)
+		variants = append(variants, observation.OperationVariant{Operation: d.operation, Arguments: d.arguments, Schema: branch})
 	}
-	properties["operation"] = map[string]any{"type": "string", "enum": operations}
-	return map[string]any{"type": "object", "properties": properties, "required": []string{"operation"}, "additionalProperties": false,
-		"dependentSchemas": map[string]any{"operation": map[string]any{"anyOf": variants}}}
+	return observation.OperationSchema(properties, variants)
 }

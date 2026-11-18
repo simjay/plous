@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/simjay/plous/internal/app/activity"
 	appsettings "github.com/simjay/plous/internal/app/settings"
 	kubecommon "github.com/simjay/plous/internal/integrations/kubernetes/common"
 	"github.com/simjay/plous/internal/ui"
@@ -268,6 +269,10 @@ func (m *model) submitForm() {
 }
 
 func (m *model) updateMain(key string) {
+	if m.page == monitorsPage {
+		m.updateMonitors(key)
+		return
+	}
 	if m.mode == 2 && m.page == "" && m.form == nil {
 		if (key == "right" || key == "left") && m.detail == "" {
 			step := 1
@@ -307,6 +312,11 @@ func (m *model) updateMain(key string) {
 			return
 		}
 		if m.page == "" && m.detail == "" {
+			if m.mode == 2 && m.alertMonitor != "" {
+				m.alertMonitor = ""
+				m.openMonitors()
+				return
+			}
 			m.focusRootSidebar()
 			return
 		}
@@ -388,13 +398,14 @@ func (m *model) updateMain(key string) {
 			}
 		}
 	default:
-		if m.currentRoot && m.current() == nil {
+		alerts := m.mode == 2 && m.activityUI.Filter == activity.Alerts
+		if !alerts && m.currentRoot && m.current() == nil {
 			if key == "enter" {
 				m.executeExplore("connections")
 			}
 			return
 		}
-		if m.current() == nil {
+		if !alerts && m.current() == nil {
 			if key == "enter" {
 				m.beginWorkspace()
 			}

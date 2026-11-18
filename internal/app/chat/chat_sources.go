@@ -73,17 +73,17 @@ func SourceSummary(record history.ReasoningEntry) (title, scope string, observed
 	if r := record.Projection; r != nil {
 		title = record.Tool
 		switch record.Tool {
-		case "kubernetes_resources", "kubernetes_resources_read", "kubernetes_logs", "kubernetes_logs_read", "kubernetes_usage", "kubernetes_usage_read":
+		case "kubernetes_read", "kubernetes_resources", "kubernetes_resources_read", "kubernetes_logs", "kubernetes_logs_read", "kubernetes_usage", "kubernetes_usage_read":
 			title = "Kubernetes"
-		case "helm_releases", "helm_releases_read", "helm_configuration", "helm_configuration_read", "helm_compare", "helm_diff_read":
+		case "helm_read", "helm_releases", "helm_releases_read", "helm_configuration", "helm_configuration_read", "helm_compare", "helm_diff_read":
 			title = "Helm"
 		case "source_files", "source_files_read":
 			title = "Source files"
 		case "source_analysis", "source_analysis_read":
 			title = "Source analysis"
-		case "argo_resources", "argo_resources_read":
+		case "argo_read", "argo_resources", "argo_resources_read":
 			title = "Argo"
-		case "flux_resources", "flux_resources_read":
+		case "flux_read", "flux_resources", "flux_resources_read":
 			title = "Flux"
 		case "history", "history_read":
 			title = "Saved history"

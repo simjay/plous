@@ -7,7 +7,7 @@ import sys
 import tempfile
 import unittest
 
-from support import FIXTURE, ROOT, Terminal
+from support import FIXTURE, ROOT, Terminal, debug_skill_body
 
 sys.path.insert(0, str(ROOT / 'tests/fixtures/helm'))
 from helm_api_fixture import HelmAPI
@@ -51,6 +51,7 @@ class ExternalAgentTests(unittest.TestCase):
             with self.subTest(kind=kind), tempfile.TemporaryDirectory(prefix='plous-entry-command-') as directory:
                 root = Path(directory)
                 app, state, env = self.open_agent(root, kind, label, moves, entry_command='celai ' + kind)
+                self.assertIn(debug_skill_body(), (root / 'launch/fixture-instructions').read_text())
                 app.send('wrapper question\r')
                 app.expect_screen('Native reply: wrapper question')
                 app.send('\x1d\x03')
@@ -255,7 +256,7 @@ class ExternalAgentTests(unittest.TestCase):
                 app.expect_screen('Ready')
                 tools = json.loads((root / 'launch/fixture-tools.json').read_text())
                 names = {tool['name'] for tool in tools}
-                self.assertTrue({'kubernetes_resources_read', 'helm_releases_read', 'history_read'} <= names)
+                self.assertTrue({'kubernetes_read', 'helm_read', 'history_read'} <= names)
                 app.send('cc')
                 app.send('count helm releases\r')
                 app.expect_screen('Helm releases: 1')
@@ -265,7 +266,7 @@ class ExternalAgentTests(unittest.TestCase):
                 # The returned reference already exists durably before CLI delivery.
                 records = [json.loads(line) for path in state.glob('**/reasoning/*.jsonl')
                            for line in path.read_text().splitlines()]
-                helm = [record for record in records if record.get('tool') == 'helm_releases_read']
+                helm = [record for record in records if record.get('tool') == 'helm_read']
                 self.assertEqual(len(helm), 1)
                 self.assertEqual(helm[0]['projection'], result['observation'])
                 self.assertTrue(result['ref'].endswith(':' + helm[0]['id']))

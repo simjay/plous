@@ -30,20 +30,20 @@ import (
 )
 
 var installedToolCalls = []struct{ name, args string }{
-	{"kubernetes_resources_read", `{"purpose":"fixture","connection_id":"cluster","operation":"get","resource":"pods","namespace":"*"}`},
-	{"kubernetes_logs_read", `{"purpose":"fixture","connection_id":"cluster","resource":"pods","namespace":"apps","name":"shop","container":"app"}`},
-	{"kubernetes_usage_read", `{"purpose":"fixture","connection_id":"cluster","resource":"pods","namespace":"apps","name":"shop"}`},
-	{"helm_releases_read", `{"purpose":"fixture","connection_id":"cluster/helm","operation":"list","namespace":"*"}`},
-	{"helm_configuration_read", `{"purpose":"fixture","connection_id":"cluster/helm","operation":"values","namespace":"apps","name":"shop"}`},
-	{"helm_diff_read", `{"purpose":"fixture","connection_id":"cluster/helm","namespace":"apps","name":"shop","revision":2,"compare_revision":1}`},
-	{"argo_resources_read", `{"purpose":"fixture","connection_id":"cluster","operation":"get","resource":"applications.argoproj.io","namespace":"*"}`},
-	{"flux_resources_read", `{"purpose":"fixture","connection_id":"cluster","operation":"get","resource":"kustomizations.kustomize.toolkit.fluxcd.io","namespace":"*"}`},
+	{"kubernetes_read", `{"purpose":"fixture","connection_id":"cluster","operation":"list","resource":"pods","namespace":"*"}`},
+	{"kubernetes_read", `{"purpose":"fixture","connection_id":"cluster","resource":"pods","namespace":"apps","name":"shop","container":"app","operation":"logs"}`},
+	{"kubernetes_read", `{"purpose":"fixture","connection_id":"cluster","resource":"pods","namespace":"apps","name":"shop","operation":"usage"}`},
+	{"helm_read", `{"purpose":"fixture","connection_id":"cluster/helm","operation":"list","namespace":"*"}`},
+	{"helm_read", `{"purpose":"fixture","connection_id":"cluster/helm","operation":"get","namespace":"apps","name":"shop","view":"values"}`},
+	{"helm_read", `{"purpose":"fixture","connection_id":"cluster/helm","namespace":"apps","name":"shop","revision":2,"compare_revision":1,"operation":"compare"}`},
+	{"argo_read", `{"purpose":"fixture","connection_id":"cluster","operation":"list","resource":"applications.argoproj.io","namespace":"*"}`},
+	{"flux_read", `{"purpose":"fixture","connection_id":"cluster","operation":"list","resource":"kustomizations.kustomize.toolkit.fluxcd.io","namespace":"*"}`},
 	{"workspace_read", `{"purpose":"fixture","operation":"workspace"}`},
 	{"history_read", `{"purpose":"fixture","operation":"search","query":"releases"}`},
-	{"ui_read", `{"purpose":"fixture"}`},
-	{"kubernetes_show", `{"purpose":"fixture","view":"list","connection_id":"cluster","resource":"pods","namespace":"apps"}`},
-	{"helm_show", `{"purpose":"fixture","connection_id":"cluster/helm","namespace":"apps","name":"shop","revision":2,"compare_revision":1}`},
-	{"history_show", `{"purpose":"fixture","ref":"record:fixture:saved"}`},
+	{"plous_view", `{"purpose":"fixture","operation":"get"}`},
+	{"plous_view", `{"purpose":"fixture","connection_id":"cluster","resource":"pods","namespace":"apps","operation":"open","destination":"resource_list"}`},
+	{"plous_view", `{"purpose":"fixture","connection_id":"cluster/helm","namespace":"apps","name":"shop","revision":2,"compare_revision":1,"operation":"open","destination":"helm_comparison"}`},
+	{"plous_view", `{"purpose":"fixture","ref":"record:fixture:saved","operation":"open","destination":"evidence"}`},
 }
 
 type installedTools struct {
@@ -70,7 +70,7 @@ func (f *installedTools) Show(context.Context, agent.ViewRequest) (agent.UIResul
 }
 
 func (f *installedTools) Call(ctx context.Context, call agent.ToolCall, maxBytes int) (json.RawMessage, error) {
-	for _, expected := range installedToolCalls {
+	for index, expected := range installedToolCalls {
 		if call.Name != expected.name {
 			continue
 		}
@@ -80,46 +80,51 @@ func (f *installedTools) Call(ctx context.Context, call agent.ToolCall, maxBytes
 		}
 		_ = json.Unmarshal([]byte(expected.args), &want)
 		if !reflect.DeepEqual(got, want) {
-			return nil, fmt.Errorf("client changed %s arguments: %s", call.Name, call.Args)
+			continue
 		}
-		if _, duplicate := f.received.LoadOrStore(call.Name, true); duplicate {
+		if _, duplicate := f.received.LoadOrStore(index, true); duplicate {
 			return nil, fmt.Errorf("client repeated %s", call.Name)
 		}
 		f.calls.Add(1)
-		return json.Marshal(map[string]string{"ref": fmt.Sprintf("record:fixture:%d:%s", f.generation, call.Name)})
+		return json.Marshal(map[string]string{"ref": fmt.Sprintf("record:fixture:%d:%d", f.generation, index)})
 	}
 	return nil, fmt.Errorf("unexpected fixture tool: %s", call.Name)
 }
 
 func TestInstalledClientFixtureCoversCatalog(t *testing.T) {
-	definitions := (&installedTools{}).Definitions()
-	if len(definitions) != len(installedToolCalls) {
-		t.Fatal("client fixture does not cover the full catalog")
+	schemas := map[string]*jsonschema.Schema{}
+	uncovered := map[string]bool{}
+	for _, tool := range (&installedTools{}).Definitions() {
+		var parameters any
+		if err := json.Unmarshal(tool.Parameters, &parameters); err != nil {
+			t.Fatal(err)
+		}
+		compiler := jsonschema.NewCompiler()
+		if err := compiler.AddResource("urn:plous:client-test", parameters); err != nil {
+			t.Fatal(err)
+		}
+		schema, err := compiler.Compile("urn:plous:client-test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		schemas[tool.Name], uncovered[tool.Name] = schema, true
 	}
-	for _, tool := range definitions {
-		t.Run(tool.Name, func(t *testing.T) {
-			for _, call := range installedToolCalls {
-				if call.name != tool.Name {
-					continue
-				}
-				var parameters, args any
-				_ = json.Unmarshal(tool.Parameters, &parameters)
-				_ = json.Unmarshal([]byte(call.args), &args)
-				compiler := jsonschema.NewCompiler()
-				if err := compiler.AddResource("urn:plous:client-test", parameters); err != nil {
-					t.Fatal(err)
-				}
-				schema, err := compiler.Compile("urn:plous:client-test")
-				if err != nil {
-					t.Fatal(err)
-				}
-				if err := schema.Validate(args); err != nil {
-					t.Fatal(err)
-				}
-				return
-			}
-			t.Fatal("missing client call fixture")
-		})
+	for _, call := range installedToolCalls {
+		schema := schemas[call.name]
+		if schema == nil {
+			t.Fatalf("fixture uses unavailable tool %s", call.name)
+		}
+		var args any
+		if err := json.Unmarshal([]byte(call.args), &args); err != nil {
+			t.Fatal(err)
+		}
+		if err := schema.Validate(args); err != nil {
+			t.Fatalf("%s %s: %v", call.name, call.args, err)
+		}
+		delete(uncovered, call.name)
+	}
+	if len(uncovered) > 0 {
+		t.Fatal("missing client call fixtures", uncovered)
 	}
 }
 
@@ -272,9 +277,9 @@ func TestInstalledNativeCLIWithMockProvider(t *testing.T) {
 					}
 				}
 			}
-			for _, call := range installedToolCalls {
-				id := fmt.Sprintf("fixture-%d-%s", generation.Load(), call.name)
-				ref := fmt.Sprintf("record:fixture:%d:%s", generation.Load(), call.name)
+			for i, call := range installedToolCalls {
+				id := fmt.Sprintf("fixture-%d-%d", generation.Load(), i)
+				ref := fmt.Sprintf("record:fixture:%d:%d", generation.Load(), i)
 				if !strings.Contains(outputs[id], ref) {
 					t.Errorf("client did not deliver current %s result for %s to the model", call.name, id)
 				}
@@ -304,8 +309,8 @@ func TestInstalledNativeCLIWithMockProvider(t *testing.T) {
 			if hasRunner && n == 1 {
 				event("response.output_item.done", map[string]any{"type": "response.output_item.done", "item": map[string]any{"type": "custom_tool_call", "id": "probe", "call_id": "probe", "name": "exec", "namespace": "functions", "input": `text("runner executed")`}})
 			} else if n == toolRound {
-				for _, call := range installedToolCalls {
-					event("response.output_item.done", map[string]any{"type": "response.output_item.done", "item": map[string]any{"type": "function_call", "id": fmt.Sprintf("fixture-%d-%s", generation.Load(), call.name), "call_id": fmt.Sprintf("fixture-%d-%s", generation.Load(), call.name), "name": call.name, "namespace": namespace, "arguments": call.args}})
+				for i, call := range installedToolCalls {
+					event("response.output_item.done", map[string]any{"type": "response.output_item.done", "item": map[string]any{"type": "function_call", "id": fmt.Sprintf("fixture-%d-%d", generation.Load(), i), "call_id": fmt.Sprintf("fixture-%d-%d", generation.Load(), i), "name": call.name, "namespace": namespace, "arguments": call.args}})
 				}
 			} else {
 				checkResults()
@@ -328,7 +333,7 @@ func TestInstalledNativeCLIWithMockProvider(t *testing.T) {
 			if n == 1 {
 				reason = "tool_use"
 				for i, call := range installedToolCalls {
-					event("content_block_start", map[string]any{"type": "content_block_start", "index": i, "content_block": map[string]any{"type": "tool_use", "id": fmt.Sprintf("fixture-%d-%s", generation.Load(), call.name), "name": wirePrefix + call.name, "input": map[string]any{}}})
+					event("content_block_start", map[string]any{"type": "content_block_start", "index": i, "content_block": map[string]any{"type": "tool_use", "id": fmt.Sprintf("fixture-%d-%d", generation.Load(), i), "name": wirePrefix + call.name, "input": map[string]any{}}})
 					event("content_block_delta", map[string]any{"type": "content_block_delta", "index": i, "delta": map[string]string{"type": "input_json_delta", "partial_json": call.args}})
 					event("content_block_stop", map[string]any{"type": "content_block_stop", "index": i})
 				}
@@ -421,20 +426,21 @@ func TestInstalledNativeCLIWithMockProvider(t *testing.T) {
 				default:
 				}
 				view := screen.Render()
+				visibleText := strings.Join(strings.Fields(view), " ")
 				if loginSent && strings.Contains(view, "Select login method:") {
 					completed = true
 					break
 				}
-				if strings.Contains(view, fmt.Sprintf("Session %d: Tools verified.", lastGeneration[phase.scope])) {
+				if strings.Contains(visibleText, fmt.Sprintf("Session %d: Tools verified.", lastGeneration[phase.scope])) {
 					restored = true
 				}
-				if strings.Contains(view, partial) {
+				if strings.Contains(visibleText, partial) {
 					select {
 					case streamed <- struct{}{}:
 					default:
 					}
 				}
-				if sent && tools.calls.Load() == int32(len(installedToolCalls)) && calls.Load() >= 2 && strings.Contains(view, partial+" verified.") {
+				if sent && tools.calls.Load() == int32(len(installedToolCalls)) && calls.Load() >= 2 && strings.Contains(visibleText, partial+" verified.") {
 					completed = true
 					break
 				}

@@ -14,7 +14,7 @@ func TestProjectedPaginationPreservesPartialCoverage(t *testing.T) {
 	connection, requests := scopedKubernetesFixture(t)
 	o.Connections = []agent.Connection{*connection}
 	main := &scriptedModel{steps: []*schema.Message{
-		call("kubernetes_resources_read", `{"purpose":"List Pods and collection coverage","connection_id":"captured","operation":"get","resource":"pods","namespace":"*"}`),
+		call("kubernetes_read", `{"purpose":"List Pods and collection coverage","connection_id":"captured","operation":"list","resource":"pods","namespace":"*"}`),
 		answer("The API repeated its cursor, so the observed list is incomplete."),
 	}}
 	o.Model = main

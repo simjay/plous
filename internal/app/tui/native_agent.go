@@ -133,14 +133,12 @@ func (m *model) syncNativeAgent() tea.Cmd {
 		return nil
 	}
 	w, h := m.nativeAgentDimensions()
-	n, ctx := appchat.NewNative(context.Background(), m.settings.MainAgent, m.conversationScope(), m.assistantScopeLabel(), w, h)
+	o := m.assistantOptions()
+	n, ctx := appchat.NewNative(context.Background(), o.Agent, o.WorkspaceID, m.assistantScopeLabel(), w, h)
 	n.Screen.SetForegroundColor(ui.Foreground)
 	n.Screen.SetBackgroundColor(ui.Background)
 	m.nativeAgent = n
 	m.nativeError = ""
-	connections := m.assistantConnections()
-
-	o := ai.Options{Debug: m.debugPolicy, UI: m.uiTools(connections), Agent: n.Kind, Store: m.store, History: m.history, WorkspaceID: n.Scope, ScopeContext: m.contextText(), Connections: connections}
 	fresh := m.nativeFresh
 	m.nativeFresh = false
 	return tea.Batch(nativeTick(n), func() tea.Msg {
@@ -157,7 +155,7 @@ func (m *model) syncNativeAgent() tea.Cmd {
 		if err != nil {
 			return fail(err)
 		}
-		instructions := ai.Instructions + "\nThis native terminal session uses only Plous tools. Its captured scope remains fixed until the session closes. Built-in shell and file execution are unavailable. Active cluster diagnostics require an explicitly exposed Plous tool. Call the directly exposed Plous tools.\nCaptured connection and page:\n" + o.ScopeContext
+		instructions := ai.Instructions + "\nThis native terminal session runs inside the Plous panel and uses only Plous tools. Its captured scope remains fixed until the session closes. Built-in shell and file execution are unavailable. Active cluster diagnostics require an explicitly exposed Plous tool. Call the directly exposed Plous tools.\nCaptured connection and page:\n" + o.ScopeContext
 		t, err := cli.StartTerminal(tools.Context, cli.TerminalOptions{Kind: n.Kind, Path: path, Args: args, Directory: directory, StateDirectory: stateDirectory, Instructions: instructions, ID: tools.ID, Resume: !fresh && previous == nil, Tools: tools, Width: w, Height: h, Input: n.Input, Output: n})
 		if err == nil {
 			n.SetTerminal(t)

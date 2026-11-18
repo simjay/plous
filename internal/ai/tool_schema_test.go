@@ -16,6 +16,7 @@ import (
 	flux "github.com/simjay/plous/internal/integrations/flux/monitor"
 	helm "github.com/simjay/plous/internal/integrations/helm/monitor"
 	kube "github.com/simjay/plous/internal/integrations/kubernetes/monitor"
+	"github.com/simjay/plous/internal/integrations/observation"
 )
 
 func compileToolSchema(t *testing.T, parameters any) *jsonschema.Schema {
@@ -37,43 +38,13 @@ func compileToolSchema(t *testing.T, parameters any) *jsonschema.Schema {
 }
 
 func TestCapabilityCatalogHasOneOwnerPerOperation(t *testing.T) {
+	o := Options{WorkspaceID: "scope", UI: &testUI{}, Connections: []Connection{{Tool: "kubernetes"}, {Tool: "helm"}}}
 	var names []string
-	owners := map[string]string{}
-	for _, d := range externalDefinitions() {
-		names = append(names, d.Name)
-		properties := d.parameters()["properties"].(map[string]any)
-		for _, operation := range d.Operations {
-			// Controller integrations share cluster access, but own their policies.
-			domain := d.Owner
-			if d.Name == "argo_resources_read" || d.Name == "flux_resources_read" {
-				domain = d.Name
-			}
-			key := domain + "/" + operation
-			if previous := owners[key]; previous != "" {
-				t.Fatalf("%s belongs to both %s and %s", key, previous, d.Name)
-			}
-			owners[key] = d.Name
-		}
-		for _, field := range map[string][]string{
-			"kubernetes_resources_read": {"container", "tail_lines", "max_bytes"},
-			"kubernetes_logs_read":      {"label_selector", "field_selector", "continue"},
-			"kubernetes_usage_read":     {"container", "tail_lines", "continue"},
-			"helm_releases_read":        {"compare_revision"}, "helm_configuration_read": {"compare_revision"},
-		}[d.Name] {
-			if _, exists := properties[field]; exists {
-				t.Fatalf("%s exposes unrelated argument %s", d.Name, field)
-			}
-		}
-	}
-	for _, d := range historyDefinitions() {
-		names = append(names, d.Name)
-	}
-	for _, d := range uiDefinitions() {
-		names = append(names, d.Name)
+	for _, definition := range ToolDefinitions(o) {
+		names = append(names, definition.Name)
 	}
 	sort.Strings(names)
-	want := []string{"argo_resources_read", "flux_resources_read", "helm_diff_read", "helm_configuration_read", "helm_releases_read", "history_read", "kubernetes_logs_read", "kubernetes_resources_read", "kubernetes_usage_read", "ui_read", "kubernetes_show", "helm_show", "history_show", "workspace_read"}
-	sort.Strings(want)
+	want := []string{"argo_read", "flux_read", "helm_read", "history_read", "kubernetes_read", "plous_view", "workspace_read"}
 	if !reflect.DeepEqual(names, want) {
 		t.Fatal(names)
 	}
@@ -86,9 +57,8 @@ func TestCapabilityBoundaryRejectsBeforeAcquisition(t *testing.T) {
 	session := newToolSession(t.Context(), op)
 	defer session.Close()
 	for _, tc := range []struct{ tool, operation string }{
-		{"kubernetes_resources_read", "logs"}, {"kubernetes_resources_read", "usage"},
-		{"kubernetes_logs_read", "get"}, {"kubernetes_usage_read", "logs"},
-		{"helm_releases_read", "values"}, {"helm_configuration_read", "compare"}, {"helm_diff_read", "status"},
+		{"kubernetes_resources_read", "get"}, {"kubernetes_logs_read", "logs"}, {"kubernetes_usage_read", "usage"},
+		{"helm_releases_read", "list"}, {"helm_configuration_read", "values"}, {"helm_diff_read", "compare"},
 		{"kubernetes_read", "get"}, {"helm_read", "status"}, {"source_read", "read"}, {"argo_read", "get"}, {"flux_read", "get"},
 		{"kubernetes_resources", "get"}, {"kubernetes_logs", "logs"}, {"kubernetes_usage", "usage"},
 		{"helm_releases", "list"}, {"helm_configuration", "values"}, {"helm_compare", "compare"},
@@ -109,23 +79,27 @@ func TestIntegrationSchemasAndValidatorsAgreeOnOperationRequirements(t *testing.
 	scope := kube.CommandScope{ConnectionID: "cluster", Context: "fixture", Namespace: "shop"}
 	for _, d := range kube.ReadCommands() {
 		t.Run("kubernetes/"+d.Operation, func(t *testing.T) {
-			input := map[string]any{"resource": "pods"}
-			if len(kube.ReadOperations(d.Tool)) > 1 {
-				input["operation"] = d.Operation
+			input := map[string]any{}
+			if d.Operation != "discover" {
+				input["resource"] = "pods"
 			}
+			input["operation"] = d.Operation
 			for _, field := range d.Required {
 				if field != "resource" {
 					input[field] = "app"
 				}
 			}
-			schema := compileToolSchema(t, kube.ReadSchema(d.Tool))
+			schema := compileToolSchema(t, kube.ReadSchema())
 			validate := func() bool {
 				commandInput := map[string]any{"operation": d.Operation}
 				for name, value := range input {
 					commandInput[name] = value
 				}
-				data, _ := json.Marshal(commandInput)
-				command, err := kube.DecodeCommand(string(data))
+				args, parseErr := observation.ParseArguments(marshal(commandInput))
+				if parseErr != nil {
+					t.Fatal(parseErr)
+				}
+				command, err := kube.DecodeCommand(args)
 				return err == nil && kube.ValidateRead(command, scope) == nil
 			}
 			if schema.Validate(input) != nil || !validate() {
@@ -148,20 +122,24 @@ func TestIntegrationSchemasAndValidatorsAgreeOnOperationRequirements(t *testing.
 	for _, d := range helm.ReadCommands() {
 		t.Run("helm/"+d.Operation, func(t *testing.T) {
 			input := map[string]any{}
-			if len(helm.ReadOperations(d.Tool)) > 1 {
-				input["operation"] = d.Operation
-			}
+			input["operation"] = d.Operation
 			for _, f := range d.Required {
 				input[f] = "app"
+				if f == "view" {
+					input[f] = "status"
+				}
 			}
-			schema := compileToolSchema(t, helm.ReadSchema(d.Tool))
+			schema := compileToolSchema(t, helm.ReadSchema())
 			validate := func() bool {
 				commandInput := map[string]any{"operation": d.Operation}
 				for name, value := range input {
 					commandInput[name] = value
 				}
-				data, _ := json.Marshal(commandInput)
-				command, err := helm.DecodeCommand(string(data))
+				args, parseErr := observation.ParseArguments(marshal(commandInput))
+				if parseErr != nil {
+					t.Fatal(parseErr)
+				}
+				command, err := helm.DecodeCommand(args)
 				return err == nil && helm.ValidateRead(command, helm.Config{ConnectionID: "cluster", Context: "fixture", Namespace: "shop"}) == nil
 			}
 			if schema.Validate(input) != nil || !validate() {
@@ -189,7 +167,7 @@ func TestIntegrationSchemasAndValidatorsAgreeOnOperationRequirements(t *testing.
 			data, _ := json.Marshal(command)
 			var input any
 			_ = json.Unmarshal(data, &input)
-			want := op != "usage"
+			want := op == "get"
 			if (schema.Validate(input) == nil) != want || (tool.validate(command) == nil) != want {
 				t.Fatal(tool.name, op)
 			}
@@ -198,12 +176,10 @@ func TestIntegrationSchemasAndValidatorsAgreeOnOperationRequirements(t *testing.
 }
 
 func TestAdvertisedToolBoundsAndRequiredArguments(t *testing.T) {
-	var definitions []agent.Tool
-	for _, d := range externalDefinitions() {
-		definitions = append(definitions, agent.Tool{Name: d.Name, Description: d.Description, Parameters: marshal(d.parameters())})
-	}
-	definitions = append(definitions, historyDefinitions()...)
-	definitions = append(definitions, uiDefinitions()...)
+	definitions := ToolDefinitions(Options{
+		WorkspaceID: "scope", UI: &testUI{}, Connections: []Connection{{Tool: "kubernetes"}, {Tool: "helm"}},
+		Debug: kube.DebugPolicy{Exec: true, Image: "fixture"},
+	})
 	prepared, err := aimodel.Prepare(nil, definitions)
 	if err != nil {
 		t.Fatal(err)
@@ -234,18 +210,24 @@ func TestAdvertisedToolBoundsAndRequiredArguments(t *testing.T) {
 		tool, args string
 		valid      bool
 	}{
-		{"kubernetes_logs_read", `{"resource":"pods","name":"app","container":"app","tail_lines":500}`, true},
-		{"kubernetes_logs_read", `{"operation":"logs","resource":"pods","name":"app","container":"app"}`, false},
-		{"kubernetes_usage_read", `{"operation":"usage","resource":"pods","name":"app"}`, false},
-		{"kubernetes_logs_read", `{"resource":"pods","name":"app","container":"app","tail_lines":501}`, false},
-		{"kubernetes_usage_read", `{"resource":"pods","name":"app","tail_lines":0}`, false},
-		{"kubernetes_resources_read", `{"operation":"describe","resource":"pods"}`, false},
-		{"helm_diff_read", `{"name":"app","revision":3,"compare_revision":1}`, true},
-		{"helm_diff_read", `{"operation":"compare","name":"app","revision":3,"compare_revision":1}`, false},
-		{"helm_diff_read", `{"name":"app","compare_revision":1}`, false},
-		{"helm_diff_read", `{"name":"app","revision":0,"compare_revision":1}`, false},
-		{"helm_diff_read", `{"name":"app","revision":3,"compare_revision":0}`, false},
-		{"helm_configuration_read", `{"operation":"values","name":"app","compare_revision":1}`, false},
+		{"kubernetes_read", `{"operation":"logs","resource":"pods","name":"app","container":"app","tail_lines":500}`, true},
+		{"kubernetes_read", `{"resource":"pods","name":"app","container":"app"}`, false},
+		{"kubernetes_read", `{"operation":"usage","resource":"pods","name":"app"}`, true},
+		{"kubernetes_read", `{"operation":"logs","resource":"pods","name":"app","container":"app","tail_lines":501}`, false},
+		{"kubernetes_read", `{"operation":"usage","resource":"pods","name":"app","tail_lines":0}`, false},
+		{"kubernetes_read", `{"operation":"get","resource":"pods"}`, false},
+		{"kubernetes_read", `{"operation":"list","resource":"pods","paths":["/spec"]}`, false},
+		{"helm_read", `{"operation":"compare","name":"app","revision":3,"compare_revision":1}`, true},
+		{"helm_read", `{"operation":"compare","name":"app","compare_revision":1}`, false},
+		{"helm_read", `{"operation":"compare","name":"app","revision":0,"compare_revision":1}`, false},
+		{"helm_read", `{"operation":"compare","name":"app","revision":3,"compare_revision":0}`, false},
+		{"helm_read", `{"operation":"get","view":"values","name":"app","compare_revision":1}`, false},
+		{"kubernetes_read", `{"operation":"usage","resource":"nodes","name":"worker"}`, true},
+		{"kubernetes_read", `{"operation":"usage","resource":"services","name":"app"}`, false},
+		{"kubernetes_run", `{"operation":"diagnostic","namespace":"shop","test":"tcp","target":"app","port":443}`, true},
+		{"kubernetes_run", `{"operation":"diagnostic","namespace":"shop","test":"tcp","target":"app"}`, false},
+		{"kubernetes_run", `{"operation":"diagnostic","namespace":"shop","test":"dns","target":"app","port":443}`, false},
+		{"kubernetes_run", `{"operation":"exec","namespace":"shop","name":"app","uid":"uid","container":"app","command":["true"],"test":""}`, false},
 		{"workspace_read", `{"operation":"activity","limit":0}`, true},
 		{"workspace_read", `{"operation":"activity","limit":21}`, false},
 		{"history_read", `{"operation":"compare","ref":"record:one:1"}`, false},
@@ -262,36 +244,6 @@ func TestAdvertisedToolBoundsAndRequiredArguments(t *testing.T) {
 			for _, schema := range schemas[tc.tool] {
 				if err := schema.Validate(input); (err == nil) != tc.valid {
 					t.Fatal(err)
-				}
-			}
-		})
-	}
-}
-
-func TestToolInputPolicyDoesNotDependOnSchema(t *testing.T) {
-	for _, d := range externalDefinitions() {
-		t.Run(d.Name, func(t *testing.T) {
-			d.Schema = func() map[string]any { t.Fatal("execution generated a schema"); return nil }
-			input := map[string]any{"connection_id": "fixture"}
-			if len(d.Operations) > 1 {
-				input["operation"] = d.Operations[0]
-			}
-			prepared, err := d.prepareInput(string(marshal(input)))
-			if err != nil {
-				t.Fatal(err)
-			}
-			var got map[string]any
-			if err := json.Unmarshal([]byte(prepared), &got); err != nil || got["operation"] != d.Operations[0] {
-				t.Fatal(prepared, err)
-			}
-			input["operation"] = "not-allowed"
-			if _, err := d.prepareInput(string(marshal(input))); err == nil {
-				t.Fatal("accepted an unsupported operation")
-			}
-			if len(d.Operations) == 1 {
-				input["operation"] = d.Operations[0]
-				if _, err := d.prepareInput(string(marshal(input))); err == nil {
-					t.Fatal("accepted a redundant operation")
 				}
 			}
 		})

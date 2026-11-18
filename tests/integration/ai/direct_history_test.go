@@ -44,7 +44,7 @@ func TestDirectHistoryUsesProductionSourcesWithoutWorker(t *testing.T) {
 		}
 		switch step {
 		case 1:
-			return call("kubernetes_resources_read", `{"purpose":"Inspect the current Pod","connection_id":"captured","operation":"get","resource":"pods","name":"checkout","namespace":"payments"}`)
+			return call("kubernetes_read", `{"purpose":"Inspect the current Pod","connection_id":"captured","operation":"get","resource":"pods","name":"checkout","namespace":"payments"}`)
 		case 2:
 			var saved struct {
 				Ref string `json:"ref"`

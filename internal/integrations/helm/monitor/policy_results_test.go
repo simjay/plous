@@ -28,7 +28,7 @@ func TestProjectionDoesNotPersistLargeOriginalValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := executor.Execute(t.Context(), Command{Operation: "values", Name: "shop", Revision: 1})
+	result, err := executor.Execute(t.Context(), Command{Operation: "get", View: "values", Name: "shop", Revision: 1})
 	if err != nil {
 		t.Fatal(err)
 	}

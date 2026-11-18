@@ -2,12 +2,10 @@ package tui
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	agent "github.com/simjay/plous/internal/ai"
 	backend "github.com/simjay/plous/internal/ai/agent"
 	"github.com/simjay/plous/internal/ai/cli"
 	"github.com/simjay/plous/internal/ai/history"
@@ -73,21 +71,6 @@ func (m *model) openConversation(c *appchat.ChatState, conversation history.Conv
 	m.persist()
 }
 
-func (m *model) contextText() string {
-	if m.savedConnection() == nil {
-		return ""
-	}
-	// Capture identities and filters only; resource bodies are retrieved through tools.
-	value := struct {
-		Workspace   string                `json:"workspace"`
-		Revision    uint64                `json:"revision"`
-		Connections []agent.Connection    `json:"connections"`
-		Viewing     appchat.AssistantPage `json:"viewing"`
-	}{m.current().Name, m.current().Revision, m.assistantConnections(), m.assistantPageContext()}
-	data, _ := json.MarshalIndent(value, "", "  ")
-	return string(data)
-}
-
 func (m *model) sendChat() tea.Cmd {
 	if m.externalAgentSelected() {
 		if _, err := cli.Executable(m.settings.MainAgent); err != nil {
@@ -142,17 +125,10 @@ func (m *model) sendChat() tea.Cmd {
 		m.status = "The message exceeds the 256 KiB limit. Shorten the draft before sending."
 		return nil
 	}
-	_, contextText := m.chatMessages(text, false)
-	system := agent.Instructions
-	if config.Instructions != "" {
-		system += "\n\n" + config.Instructions
-	}
-	r := history.Request{Backend: kind, Role: "chat", SettingsRevision: m.settings.Revision, Agent: config, Prompt: text, Context: contextText}
-	profile := m.store
-	connections, store, workspaceID, conversation := m.assistantConnections(), m.history, m.conversationScope(), c.Conversation
-
-	presentation := m.uiTools(connections)
-	debugPolicy := m.debugPolicy
+	options := m.assistantOptions()
+	options.Config, options.Prompt = config, text
+	r := history.Request{Backend: kind, Role: "chat", SettingsRevision: m.settings.Revision, Agent: config, Prompt: text, Context: options.ScopeContext}
+	store, workspaceID, conversation := options.History, options.WorkspaceID, c.Conversation
 	newer := c.Newer
 	ctx, cancel := context.WithCancel(context.Background())
 	run := &appchat.ChatRun{Agent: kind, Chat: c, Cancel: cancel, Events: make(chan appchat.ChatEvent, 8), Starting: true}
@@ -173,7 +149,7 @@ func (m *model) sendChat() tea.Cmd {
 			return result
 		}
 		if kind == backend.Plous {
-			result.key, result.err = profile.Credential(config)
+			result.key, result.err = options.Store.Credential(config)
 			if result.err == nil {
 				result.err = config.Ready(result.key)
 			}
@@ -252,7 +228,7 @@ func (m *model) sendChat() tea.Cmd {
 			close(run.Events)
 			return appchat.WaitChat(run)
 		}
-		options := agent.Options{Debug: debugPolicy, UI: presentation, Agent: kind, Store: profile, History: store, WorkspaceID: workspaceID, ConversationID: result.conversation.ID, TurnID: turn.Request.ID, Config: config, Key: result.key, System: system, ScopeContext: contextText, Prompt: text, Connections: connections}
+		options.ConversationID, options.TurnID, options.Key = result.conversation.ID, turn.Request.ID, result.key
 		go run.Produce(ctx, options)
 		return appchat.WaitChat(run)
 	}})

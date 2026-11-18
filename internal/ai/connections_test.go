@@ -18,7 +18,12 @@ func TestConnectionRoutingRejectsAmbiguityAndForeignTargets(t *testing.T) {
 		`{"connection_id":"kube","operation":"get","resource":"pods","Context":"other"}`,
 		`{"connection_id":"kube","operation":"get","resource":"pods"} {}`,
 	} {
-		if _, err := op.readKubernetes(t.Context(), input); err == nil || strings.Contains(err.Error(), "could not open") {
+		args, err := op.toolInput([]byte(input))
+		if err == nil {
+			tool, _ := op.tool("kubernetes_read")
+			_, err = op.dispatchRead(t.Context(), tool, args)
+		}
+		if err == nil || strings.Contains(err.Error(), "could not open") {
 			t.Fatalf("invalid request reached connection: %s %v", input, err)
 		}
 	}
@@ -27,7 +32,12 @@ func TestConnectionRoutingRejectsAmbiguityAndForeignTargets(t *testing.T) {
 		`{"connection_id":"other-workspace","operation":"list"}`,
 		`{"connection_id":"helm","operation":"metadata","name":"shop","namespace":"*"}`,
 	} {
-		if _, err := op.readHelm(t.Context(), input); err == nil || strings.Contains(err.Error(), "kubeconfig") {
+		args, err := op.toolInput([]byte(input))
+		if err == nil {
+			tool, _ := op.tool("helm_read")
+			_, err = op.dispatchRead(t.Context(), tool, args)
+		}
+		if err == nil || strings.Contains(err.Error(), "kubeconfig") {
 			t.Fatalf("invalid Helm target: %s %v", input, err)
 		}
 	}

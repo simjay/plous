@@ -229,7 +229,7 @@ func TestChatRecoveryAndNewConversationSurviveRestart(t *testing.T) {
 
 func TestWorkspaceContextIsAutomaticAndContainsOnlySavedScope(t *testing.T) {
 	m, _ := testModel(t)
-	if m.contextText() != "" {
+	if m.assistantOptions().ScopeContext != "" {
 		t.Fatal("General chat must not have a workspace context")
 	}
 	createWorkspace(t, m, "Payments")
@@ -239,16 +239,16 @@ func TestWorkspaceContextIsAutomaticAndContainsOnlySavedScope(t *testing.T) {
 	}
 	m.connection = "conn"
 	m.tool = "kubernetes"
-	text := m.contextText()
+	text := m.assistantOptions().ScopeContext
 	if strings.Contains(text, "SECRET") || strings.Contains(text, "stage-context") || !strings.Contains(text, "development") || !strings.Contains(text, "payments") || !strings.Contains(text, "Payments") {
 		t.Fatal(text)
 	}
 	m.connection = "other"
-	if next := m.contextText(); !strings.Contains(next, "stage-context") || strings.Contains(next, "development") {
+	if next := m.assistantOptions().ScopeContext; !strings.Contains(next, "stage-context") || strings.Contains(next, "development") {
 		t.Fatal("connection selection did not update the next request's scope", next)
 	}
 	m.active = ""
-	if m.contextText() != "" {
+	if m.assistantOptions().ScopeContext != "" {
 		t.Fatal("General chat inherited the previous workspace context")
 	}
 }

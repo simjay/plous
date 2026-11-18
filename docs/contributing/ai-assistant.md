@@ -39,21 +39,44 @@ Both CLIs run in the launch directory. Resume metadata is separate for each agen
 
 ## Main loop and connection tools
 
-Each operation captures its agent, cluster, and page hint. Built-in turns also capture model and credentials. External sessions capture the executable command.
+The built-in turn captures the model, credentials, cluster connection, and page hint. A hosted CLI session captures its executable and holds its cluster connection until closure. General chat and history-only views have no live cluster tools. The connection sets the cluster and credentials. A read can select a namespace those credentials allow.
 
-Integrations own schemas, argument rules, read policies, and projections. Schema generation advertises those rules, and execution validates the same Go definitions. Single-operation tools infer their operation from the tool name.
+## Agent tool design
 
-The host validates scope, serializes calls, and saves results before delivery. Invalid arguments receive feedback. Cancellation, exhausted budgets, and history scope or integrity failures stop execution.
+**Use one public tool per domain and authority boundary.** A tool name identifies the owner and kind of access. An operation selects the work within that boundary. Its schema states which arguments the operation accepts.
 
-Only projected facts, identities, times, and completeness enter saved observations. Raw API bodies are temporary. Neither browsing another page nor naming another connection expands access.
+| Change | Where it belongs |
+| --- | --- |
+| Read another aspect of Kubernetes within the captured cluster | Add an operation or option to `kubernetes_read` |
+| Read another aspect of a Helm release | Extend `helm_read` |
+| Read saved monitor status or alerts | Use `monitor_read` within the captured Kubernetes connection |
+| Return an additional fact from an existing read | Extend the owning projection or use its field selector |
+| Execute a command or start a temporary diagnostic | Use `kubernetes_run` with the operation's host grant |
+| Read or open a Plous view | Use `plous_view` through the session UI port |
+| Inspect or change the standalone session target | Use `kubernetes_context_read` or the separately confirmed `kubernetes_context_select` |
 
-General chat and history-only views have no live connection tools. A page's namespace is context, not a Kubernetes access boundary.
+The tool name alone does not grant access. Exec and temporary diagnostics have independent grants even though they share `kubernetes_run`. The MCP client can filter or annotate the whole tool by name. The Go handler checks the requested operation and target on every call. A skill describes a workflow and uses the same tools as other callers.
+
+### Follow a call through the code
+
+1. **Register the tool in the host.** [The registry](../../internal/ai/tools.go) supplies the name, schema, handler binding, and scope-based availability for built-in Plous and MCP. It adds common arguments such as `purpose` and declares which connection type a cluster-bound tool accepts. Standalone target tools are registered by [the standalone host](../../internal/app/debugging/session.go). They work before a cluster tool session exists.
+2. **Keep domain rules with the implementation.** Each integration owns its operation arguments and validation in its `monitor/read_tool.go`. Kubernetes diagnostics own their argument and grant definitions in [run_tool.go](../../internal/integrations/kubernetes/monitor/run_tool.go). Use the same definitions for schemas and runtime field admission. [Schema assembly](../../internal/integrations/observation/operation_schema.go) shares the wire format. [Argument parsing](../../internal/integrations/observation/arguments.go) supplies one validated object for host routing and domain decoding. Check resolved scope, resource identity, and contextual rules in Go. For example, the diagnostic handler requires a port for TCP and rejects it for DNS or HTTP. The client may show the schema as a hint. Runtime validation still applies.
+3. **Keep transport and authority separate.** [The tool session](../../internal/ai/tool_session.go) resolves `connection_id` against the connection type declared in the registry and supplies the captured connection to [the cluster binding](../../internal/ai/cluster_tools.go). The session serializes calls, records active diagnostic intent, and persists observations before delivery. Saved-history queries and view receipts have dedicated handling in the same session. MCP transports the shared contract. The TUI can call integration readers directly through typed Go inputs and keeps its own action and confirmation flow.
+4. **Project facts at the read boundary.** An observation carries identities, typed facts, observation time, and coverage. Raw API bodies are temporary. Kubernetes `get` can acquire selected scalar `paths` under masking. The `fields` option selects already projected row facts for delivery. A saved reference lets a caller page through the same observation.
+
+The TUI builds the same tool options for the context meter, built-in turns, and native agents. The TUI and standalone MCP hosts supply the [monitor reader](../../internal/app/monitor/read_tool.go). The reader owns the monitor schema and saved alert access. The shared tool session checks the captured Kubernetes connection before invoking it.
+
+### Extend an existing reader
+
+For a new Kubernetes CRD, first try the generic path. `discover` lists served API types, `list` enumerates objects of one type, and `get` reads a named object. Explore and the agent share [catalog acquisition](../../internal/integrations/kubernetes/monitor/discovery.go) and [version resolution](../../internal/integrations/kubernetes/common/discovery.go) through their own transports. A new type can use those operations and request masked fields without a kind-specific handler. Add an integration projection when Go must compute a domain fact, such as following Pod ownership or establishing readiness from controller status. Compute mechanical facts as typed Go values so the UI, monitor, and agent projection can reuse them.
+
+When changing the contract, update its schema and validator together. Test one valid call and the relevant denials, including unrelated arguments supplied as zero, empty, or false. Check that the same operation and scope work through direct calls and MCP. If you replace a tool name, update the skill, docs, fixtures, and benchmark in the same change. Preserve saved references and the meaning of old observations so Sources and history comparisons still work.
 
 ## Standalone MCP and active diagnostics
 
-`app/debugging` owns `plous setup` and `plous mcp serve`. Setup installs the embedded skill and managed MCP entry. Serve opens a separate profile, captures the explicit cluster and default namespace, and adapts `agent.Tools` through `cli.ServeStdio`. It has no `agent.UI` port.
+`app/debugging` owns `plous setup` and `plous mcp serve`. Setup installs the embedded skill and managed MCP entry. Serve opens a separate profile and adapts `agent.Tools` through `cli.ServeStdio`. Each call captures the selected target, which follows kubeconfig’s current context by default. An operator-confirmed target change applies between calls. Standalone sessions have no `agent.UI` port.
 
-Kubernetes owns `kubernetes_exec_run` and `kubernetes_diagnostic_run`. Launch options explicitly enable them. Both record intent before dispatch and results before delivery.
+Kubernetes owns `kubernetes_run exec` and `kubernetes_run diagnostic`. Launch options explicitly enable them. Both record intent before dispatch and results before delivery.
 
 Temporary tests use a fixed Job template, deadlines, identity-checked cleanup, and TTL fallback. Exec cancellation does not guarantee remote termination. See [diagnostic contracts](../reference/mcp.md#active-diagnostics).
 
@@ -61,7 +84,7 @@ Usage projections share the TUI's identity, ownership, freshness, and aggregatio
 
 ## UI tools
 
-`ui_read`, `kubernetes_show`, `helm_show`, and `history_show` use `agent.UI`. The tool session validates the target. The app loop prepares the view through `app/navigation`, rechecks current input and scope, then applies it without changing focus.
+`plous_view` uses `agent.UI` for `get` and `open`. The tool session validates the target. The app loop prepares the view through `app/navigation`, rechecks current input and scope, then applies it without changing focus.
 
 Viewers reuse Monitor, documents, and Diff Reviewer. Navigation results are execution metadata, outside searchable evidence. Standalone MCP has no UI tools.
 

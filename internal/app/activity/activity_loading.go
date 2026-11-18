@@ -45,6 +45,9 @@ func ReadActivity(store *workspace.Store, run *ActivityLoad) ActivityResult {
 }
 
 func (e ActivityEntry) Identity() string {
+	if e.Alert != nil {
+		return "alert/" + e.MonitorName + "/" + e.Alert.ID
+	}
 	if e.Change != nil {
 		return "change/" + e.Change.ID
 	}

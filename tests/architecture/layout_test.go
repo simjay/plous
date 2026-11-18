@@ -101,6 +101,7 @@ func ownershipViolations(root string) ([]string, error) {
 				{"internal/integrations/observation/", []string{"internal/ai", "internal/app", "internal/workspace", "internal/integrations/kubernetes", "internal/integrations/helm"}},
 				{"internal/ui/", []string{"internal/app", "internal/integrations", "internal/workspace", "internal/ai"}},
 				{"internal/integrations/", []string{"internal/app", "internal/ui", "internal/ai", "internal/workspace"}},
+				{"internal/ai/", []string{"internal/app"}},
 				{"internal/ai/model/", []string{"internal/app", "internal/ai/history", "internal/workspace"}},
 				{"internal/ai/history/", []string{"internal/app", "internal/workspace", "internal/integrations"}},
 			} {
@@ -263,7 +264,9 @@ func TestOwnershipRejectsTestOnlyImports(t *testing.T) {
 
 func TestProductLayout(t *testing.T) {
 	root := filepath.Join("..", "..")
-	owners := map[string]bool{"ai": true, "app": true, "integrations": true, "ui": true, "workspace": true}
+	owners := map[string]bool{
+		"ai": true, "app": true, "integrations": true, "ui": true, "workspace": true,
+	}
 	entries, err := os.ReadDir(filepath.Join(root, "internal"))
 	if err != nil {
 		t.Fatal(err)

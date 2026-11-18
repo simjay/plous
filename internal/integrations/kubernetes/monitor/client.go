@@ -7,18 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
 	kubecommon "github.com/simjay/plous/internal/integrations/kubernetes/common"
-	apidiscovery "k8s.io/api/apidiscovery/v2"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	apiVersion "k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -68,9 +64,8 @@ func NewTarget(target *kubecommon.Target, namespace string) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	if config.ExecProvider != nil {
-		config.ExecProvider.StdinUnavailable = true
-		config.ExecProvider.StdinUnavailableMessage = "Authenticate outside Plous, then refresh Explore."
+	if err := PrepareExecCredentials(config); err != nil {
+		return nil, err
 	}
 	c, err := NewForConfig(config)
 	if err != nil {
@@ -101,128 +96,23 @@ func NewForConfig(config *rest.Config) (*Client, error) {
 	return &Client{dynamic: dynamic.New(raw), rest: raw, discovery: catalog.RESTClient(), config: rest.CopyConfig(copy), Namespace: "default"}, nil
 }
 
-func (c *Client) read(ctx context.Context, path string, into any) error {
-	data, err := c.discovery.Get().AbsPath(path).Timeout(12 * time.Second).Do(ctx).Raw()
-	if err != nil {
-		return err
-	}
-	return json.Unmarshal(data, into)
-}
-
-func (c *Client) discoveryGroups(ctx context.Context) (metav1.APIGroupList, map[schema.GroupVersion]*metav1.APIResourceList, []error) {
-	data, err := c.discovery.Get().AbsPath("/apis").SetHeader("Accept", discovery.AcceptV2+","+discovery.AcceptV1).Timeout(12 * time.Second).Do(ctx).Raw()
-	var response struct {
-		metav1.TypeMeta
-		Groups []metav1.APIGroup                `json:"groups"`
-		Items  []apidiscovery.APIGroupDiscovery `json:"items"`
-	}
-	if err == nil {
-		err = json.Unmarshal(data, &response)
-	}
-	if err != nil {
-		return metav1.APIGroupList{}, nil, []error{err}
-	}
-	if response.Kind != "APIGroupDiscoveryList" {
-		return metav1.APIGroupList{Groups: response.Groups}, nil, nil
-	}
-	if response.APIVersion != apidiscovery.SchemeGroupVersion.String() {
-		return metav1.APIGroupList{}, nil, []error{errors.New("Unsupported Kubernetes discovery response version.")}
-	}
-	groups, resources, failed := discovery.SplitGroupsAndResources(apidiscovery.APIGroupDiscoveryList{Items: response.Items})
-	var failures []error
-	for _, err := range failed {
-		failures = append(failures, err)
-	}
-	return *groups, resources, failures
-}
-
 func (c *Client) Discover(ctx context.Context) ([]kubecommon.Resource, string, error) {
-	groups, aggregated, failures := c.discoveryGroups(ctx)
-	versions := []schema.GroupVersion{{Version: "v1"}}
-	preferred := map[string]string{"": "v1"}
-	for _, group := range groups.Groups {
-		gv, err := schema.ParseGroupVersion(group.PreferredVersion.GroupVersion)
-		if err == nil && gv.Version != "" {
-			preferred[gv.Group] = gv.Version
-			versions = append(versions, gv)
+	catalog, err := discoverCatalog(ctx, func(ctx context.Context, path, accept string, target any) error {
+		request := c.discovery.Get().AbsPath(path).Timeout(12 * time.Second)
+		if accept != "" {
+			request.SetHeader("Accept", accept)
 		}
-		for _, version := range group.Versions {
-			gv, err := schema.ParseGroupVersion(version.GroupVersion)
-			if err == nil && gv.Version != "" && !slices.Contains(versions, gv) {
-				versions = append(versions, gv)
-			}
+		data, err := request.Do(ctx).Raw()
+		if err != nil {
+			return err
 		}
+		return json.Unmarshal(data, target)
+	}, "")
+	if err != nil {
+		return nil, "", err
 	}
-	type discoveryResult struct {
-		list metav1.APIResourceList
-		err  error
-	}
-	results := make([]discoveryResult, len(versions))
-	var wg sync.WaitGroup
-	limit := make(chan struct{}, 6)
-	for i, gv := range versions {
-		if list, ok := aggregated[gv]; ok {
-			results[i].list = *list
-			continue
-		}
-		wg.Go(func() {
-			select {
-			case limit <- struct{}{}:
-			case <-ctx.Done():
-				return
-			}
-			defer func() { <-limit }()
-			path := "/api/" + gv.Version
-			if gv.Group != "" {
-				path = "/apis/" + gv.String()
-			}
-			results[i].err = c.read(ctx, path, &results[i].list)
-		})
-	}
-	wg.Wait()
-	if ctx.Err() != nil {
-		return nil, "", ctx.Err()
-	}
-	selected := map[string]kubecommon.Resource{}
-	for i, result := range results {
-		if result.err != nil {
-			failures = append(failures, result.err)
-			continue
-		}
-		gv := versions[i]
-		subresources := map[string]map[string][]string{}
-		for _, item := range result.list.APIResources {
-			parent, subresource, ok := strings.Cut(item.Name, "/")
-			if !ok {
-				continue
-			}
-			if subresources[parent] == nil {
-				subresources[parent] = map[string][]string{}
-			}
-			subresources[parent][subresource] = slices.Clone(item.Verbs)
-		}
-		for _, item := range result.list.APIResources {
-			if strings.Contains(item.Name, "/") || !slices.Contains(item.Verbs, "list") {
-				continue
-			}
-			resource := kubecommon.Resource{Group: gv.Group, Version: gv.Version, Name: item.Name, Kind: item.Kind, Namespaced: item.Namespaced, Verbs: item.Verbs, ShortNames: item.ShortNames}
-			resource.Subresources = subresources[item.Name]
-			previous, exists := selected[resource.Key()]
-			// A group's preferred version may omit a resource served by another
-			// version. Prefer it only when it actually advertises this resource.
-			if !exists || resource.Version == preferred[gv.Group] || (previous.Version != preferred[gv.Group] && apiVersion.CompareKubeAwareVersionStrings(resource.Version, previous.Version) > 0) {
-				selected[resource.Key()] = resource
-			}
-		}
-	}
-	resources := make([]kubecommon.Resource, 0, len(selected))
-	for _, resource := range selected {
-		resources = append(resources, resource)
-	}
+	resources := catalog.Listable()
 	if len(resources) == 0 {
-		if len(failures) > 0 {
-			return nil, "", failures[0]
-		}
 		return nil, "", errors.New("The cluster returned no listable resource types.")
 	}
 	slices.SortFunc(resources, CompareResources)
@@ -230,7 +120,7 @@ func (c *Client) Discover(ctx context.Context) ([]kubecommon.Resource, string, e
 	c.catalog = slices.Clone(resources)
 	c.catalogMu.Unlock()
 	warning := ""
-	if len(failures) > 0 {
+	if len(catalog.Missing) > 0 {
 		warning = "Some API groups could not be discovered. Refresh to retry."
 	}
 	return resources, warning, nil

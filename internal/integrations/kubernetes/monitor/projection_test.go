@@ -3,6 +3,7 @@ package monitor
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -10,7 +11,25 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/simjay/plous/internal/integrations/observation"
 )
+
+func TestAgentReadTimesOutWhileReceivingBody(t *testing.T) {
+	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, "{")
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+	})
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancel()
+	_, err := readAgentBytes(ctx, client.rest.Get().AbsPath("/api/v1"), 1024, 100*time.Millisecond)
+	var failure *observation.ReadFailure
+	if !errors.As(err, &failure) || !strings.Contains(failure.Message, "timed out") || ctx.Err() != nil {
+		t.Fatal("stalled body did not return an operational timeout", err, ctx.Err())
+	}
+}
 
 func agentTestDiscovery(w http.ResponseWriter) {
 	reply(w, map[string]any{"apiVersion": "v1", "kind": "APIResourceList", "resources": []any{
@@ -26,11 +45,9 @@ func TestAgentReadDenialsNeverContactKubernetes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, definition := range commandDefinitions {
-		if definition.Access == AccessWrite {
-			if _, err := executor.Execute(context.Background(), Command{Operation: definition.Operation, Resource: "pods"}); err == nil {
-				t.Errorf("write %s allowed", definition.Operation)
-			}
+	for _, operation := range []string{"apply", "create", "patch", "edit", "delete", "replace", "scale", "annotate", "label", "rollout restart", "rollout undo", "set", "drain", "cordon", "uncordon", "taint"} {
+		if _, err := executor.Execute(context.Background(), Command{Operation: operation, Resource: "pods"}); err == nil {
+			t.Errorf("write %s allowed", operation)
 		}
 	}
 	for _, input := range []string{
@@ -41,7 +58,7 @@ func TestAgentReadDenialsNeverContactKubernetes(t *testing.T) {
 		`{"operation":"exec","resource":"pods"}`,
 		`{"operation":"get","resource":"pods","limit":1000}`,
 	} {
-		command, err := DecodeCommand(input)
+		command, err := decodeCommandJSON(input)
 		if err == nil {
 			_, err = executor.Execute(context.Background(), command)
 		}
@@ -84,7 +101,7 @@ func TestProjectionCollectsPagesAndComputesReadiness(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := executor.Execute(t.Context(), Command{Operation: "get", Resource: "pods"})
+	result, err := executor.Execute(t.Context(), Command{Operation: "list", Resource: "pods"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +125,7 @@ func TestProjectionRejectsRepeatedContinuation(t *testing.T) {
 		reply(w, page)
 	})
 	executor, _ := NewProjector(client, agentTestScope())
-	r, err := executor.Execute(t.Context(), Command{Operation: "get", Resource: "pods"})
+	r, err := executor.Execute(t.Context(), Command{Operation: "list", Resource: "pods"})
 	if err == nil && r.Coverage.Complete {
 		t.Fatal("repeated continuation claimed completeness", r)
 	}
@@ -259,7 +276,7 @@ func TestAgentReadsValidateGroupDiscoveryBeforeResourceRequest(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			result, err := executor.Execute(context.Background(), Command{Operation: "describe", Resource: "deployments.apps", Name: "web"})
+			result, err := executor.Execute(context.Background(), Command{Operation: "get", Resource: "deployments.apps", Name: "web"})
 			if groupVersion == "apps/v1" {
 				if err != nil || objectRequests.Load() != 1 || len(result.Rows) == 0 {
 					t.Fatalf("valid grouped read failed: %+v %v", result, err)
@@ -434,7 +451,7 @@ func TestProjectionDoesNotInferMissingReadinessOrWrongKind(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			r, err := p.Execute(t.Context(), Command{Operation: "get", Resource: "pods"})
+			r, err := p.Execute(t.Context(), Command{Operation: "list", Resource: "pods"})
 			if kind != "Pod" {
 				if err == nil {
 					t.Fatal("accepted object from another kind")
@@ -462,7 +479,7 @@ func TestProjectionRejectsConflictingDuplicateIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = projector.Execute(t.Context(), Command{Operation: "get", Resource: "pods"}); err == nil || !strings.Contains(err.Error(), "conflicting") {
+	if _, err = projector.Execute(t.Context(), Command{Operation: "list", Resource: "pods"}); err == nil || !strings.Contains(err.Error(), "conflicting") {
 		t.Fatal("silently discarded conflicting evidence", err)
 	}
 }
@@ -481,7 +498,7 @@ func TestClusterResourceProjectionDoesNotClaimNamespace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := projector.Execute(t.Context(), Command{Operation: "get", Resource: "nodes"})
+	got, err := projector.Execute(t.Context(), Command{Operation: "list", Resource: "nodes"})
 	if err != nil || got.Namespace != "" || got.Selection["resource"] != "nodes" {
 		t.Fatal(got, err)
 	}

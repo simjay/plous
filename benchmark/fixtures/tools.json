@@ -7,7 +7,7 @@
       "steps": [
         {
           "id": "read",
-          "tool": "kubernetes_resources_read",
+          "tool": "kubernetes_read",
           "args": {
             "purpose": "PlousBench read",
             "connection_id": "cluster",
@@ -39,7 +39,7 @@
       "steps": [
         {
           "id": "read",
-          "tool": "kubernetes_resources_read",
+          "tool": "kubernetes_read",
           "args": {
             "purpose": "PlousBench read",
             "connection_id": "cluster",
@@ -71,13 +71,14 @@
       "steps": [
         {
           "id": "read",
-          "tool": "kubernetes_logs_read",
+          "tool": "kubernetes_read",
           "args": {
             "purpose": "PlousBench read",
             "connection_id": "cluster",
             "resource": "pods",
             "name": "web",
-            "container": "app"
+            "container": "app",
+            "operation": "logs"
           },
           "checks": [
             {
@@ -99,11 +100,11 @@
       "steps": [
         {
           "id": "read",
-          "tool": "kubernetes_resources_read",
+          "tool": "kubernetes_read",
           "args": {
             "purpose": "PlousBench read",
             "connection_id": "cluster",
-            "operation": "get",
+            "operation": "list",
             "resource": "pods",
             "fields": []
           },
@@ -158,11 +159,11 @@
       "steps": [
         {
           "id": "read",
-          "tool": "kubernetes_resources_read",
+          "tool": "kubernetes_read",
           "args": {
             "purpose": "PlousBench read",
             "connection_id": "cluster",
-            "operation": "get",
+            "operation": "list",
             "resource": "pods",
             "fields": []
           },
@@ -221,11 +222,11 @@
       "steps": [
         {
           "id": "read",
-          "tool": "kubernetes_resources_read",
+          "tool": "kubernetes_read",
           "args": {
             "purpose": "PlousBench read",
             "connection_id": "cluster",
-            "operation": "get",
+            "operation": "list",
             "resource": "pods",
             "fields": []
           },
@@ -284,11 +285,11 @@
       "steps": [
         {
           "id": "other",
-          "tool": "kubernetes_resources_read",
+          "tool": "kubernetes_read",
           "args": {
             "purpose": "PlousBench other",
             "connection_id": "other",
-            "operation": "get",
+            "operation": "list",
             "resource": "pods"
           },
           "checks": [
@@ -301,7 +302,7 @@
         },
         {
           "id": "recover",
-          "tool": "kubernetes_resources_read",
+          "tool": "kubernetes_read",
           "args": {
             "purpose": "PlousBench recover",
             "connection_id": "cluster",
@@ -325,7 +326,7 @@
       "steps": [
         {
           "id": "invalid",
-          "tool": "kubernetes_resources_read",
+          "tool": "kubernetes_read",
           "args": {
             "purpose": "PlousBench invalid",
             "connection_id": "cluster",
@@ -342,7 +343,7 @@
         },
         {
           "id": "recover",
-          "tool": "kubernetes_resources_read",
+          "tool": "kubernetes_read",
           "args": {
             "purpose": "PlousBench recover",
             "connection_id": "cluster",
@@ -366,11 +367,11 @@
       "steps": [
         {
           "id": "bad-page",
-          "tool": "kubernetes_resources_read",
+          "tool": "kubernetes_read",
           "args": {
             "purpose": "PlousBench bad-page",
             "connection_id": "cluster",
-            "operation": "get",
+            "operation": "list",
             "resource": "pods"
           },
           "checks": [],
@@ -379,11 +380,11 @@
         },
         {
           "id": "revoked",
-          "tool": "kubernetes_resources_read",
+          "tool": "kubernetes_read",
           "args": {
             "purpose": "PlousBench revoked",
             "connection_id": "cluster",
-            "operation": "get",
+            "operation": "list",
             "resource": "pods"
           },
           "checks": [],
@@ -398,11 +399,11 @@
       "steps": [
         {
           "id": "closed",
-          "tool": "kubernetes_resources_read",
+          "tool": "kubernetes_read",
           "args": {
             "purpose": "PlousBench closed",
             "connection_id": "cluster",
-            "operation": "get",
+            "operation": "list",
             "resource": "pods"
           },
           "checks": [],
@@ -418,11 +419,11 @@
       "steps": [
         {
           "id": "cancelled",
-          "tool": "kubernetes_resources_read",
+          "tool": "kubernetes_read",
           "args": {
             "purpose": "PlousBench cancelled",
             "connection_id": "cluster",
-            "operation": "get",
+            "operation": "list",
             "resource": "pods"
           },
           "checks": [],
@@ -438,11 +439,11 @@
       "steps": [
         {
           "id": "read",
-          "tool": "kubernetes_resources_read",
+          "tool": "kubernetes_read",
           "args": {
             "purpose": "PlousBench read",
             "connection_id": "cluster",
-            "operation": "get",
+            "operation": "list",
             "resource": "pods",
             "fields": []
           },
@@ -492,7 +493,7 @@
       "steps": [
         {
           "id": "read",
-          "tool": "argo_resources_read",
+          "tool": "argo_read",
           "args": {
             "purpose": "PlousBench read",
             "connection_id": "cluster",
@@ -524,7 +525,7 @@
       "steps": [
         {
           "id": "read",
-          "tool": "flux_resources_read",
+          "tool": "flux_read",
           "args": {
             "purpose": "PlousBench read",
             "connection_id": "cluster",
@@ -556,13 +557,14 @@
       "steps": [
         {
           "id": "v2",
-          "tool": "helm_configuration_read",
+          "tool": "helm_read",
           "args": {
             "purpose": "PlousBench v2",
             "connection_id": "cluster/helm",
-            "operation": "values",
+            "operation": "get",
             "name": "web",
-            "revision": 2
+            "revision": 2,
+            "view": "values"
           },
           "checks": [
             {
@@ -578,13 +580,14 @@
         },
         {
           "id": "v3",
-          "tool": "helm_configuration_read",
+          "tool": "helm_read",
           "args": {
             "purpose": "PlousBench v3",
             "connection_id": "cluster/helm",
-            "operation": "values",
+            "operation": "get",
             "name": "web",
-            "revision": 3
+            "revision": 3,
+            "view": "values"
           },
           "checks": [
             {
@@ -627,11 +630,11 @@
       "steps": [
         {
           "id": "unavailable",
-          "tool": "kubernetes_resources_read",
+          "tool": "kubernetes_read",
           "args": {
             "purpose": "PlousBench unavailable",
             "connection_id": "cluster",
-            "operation": "get",
+            "operation": "list",
             "resource": "pods"
           },
           "checks": [
@@ -739,7 +742,7 @@
       "steps": [
         {
           "id": "before",
-          "tool": "kubernetes_resources_read",
+          "tool": "kubernetes_read",
           "args": {
             "purpose": "PlousBench before",
             "connection_id": "cluster",
@@ -759,7 +762,7 @@
         },
         {
           "id": "after",
-          "tool": "kubernetes_resources_read",
+          "tool": "kubernetes_read",
           "args": {
             "purpose": "PlousBench after",
             "connection_id": "cluster",
@@ -815,11 +818,11 @@
       "steps": [
         {
           "id": "owners",
-          "tool": "kubernetes_resources_read",
+          "tool": "kubernetes_read",
           "args": {
             "purpose": "PlousBench owners",
             "connection_id": "cluster",
-            "operation": "get",
+            "operation": "list",
             "resource": "pods"
           },
           "checks": [
@@ -850,15 +853,16 @@
       "steps": [
         {
           "id": "show",
-          "tool": "kubernetes_show",
+          "tool": "plous_view",
           "args": {
             "purpose": "PlousBench UI presentation",
-            "view": "resource",
             "connection_id": "cluster",
             "resource": "deployments.apps",
             "namespace": "apps",
             "name": "web",
-            "tab": "yaml"
+            "tab": "yaml",
+            "operation": "open",
+            "destination": "resource"
           },
           "checks": [
             {
@@ -877,9 +881,10 @@
         },
         {
           "id": "screen",
-          "tool": "ui_read",
+          "tool": "plous_view",
           "args": {
-            "purpose": "PlousBench UI presentation"
+            "purpose": "PlousBench UI presentation",
+            "operation": "get"
           },
           "checks": [
             {
@@ -908,14 +913,15 @@
       "steps": [
         {
           "id": "show",
-          "tool": "kubernetes_show",
+          "tool": "plous_view",
           "args": {
             "purpose": "PlousBench UI presentation",
-            "view": "list",
             "connection_id": "cluster",
             "resource": "pods",
             "namespace": "apps",
-            "filter": "Running"
+            "filter": "Running",
+            "operation": "open",
+            "destination": "resource_list"
           },
           "checks": [
             {
@@ -934,9 +940,10 @@
         },
         {
           "id": "screen",
-          "tool": "ui_read",
+          "tool": "plous_view",
           "args": {
-            "purpose": "PlousBench UI presentation"
+            "purpose": "PlousBench UI presentation",
+            "operation": "get"
           },
           "checks": [
             {
@@ -957,16 +964,16 @@
       "steps": [
         {
           "id": "show",
-          "tool": "kubernetes_show",
+          "tool": "plous_view",
           "args": {
             "purpose": "PlousBench UI presentation",
-            "view": "logs",
             "connection_id": "cluster",
-            "resource": "pods",
             "namespace": "apps",
             "name": "web",
             "container": "app",
-            "highlight": "connection refused"
+            "highlight": "connection refused",
+            "operation": "open",
+            "destination": "pod_logs"
           },
           "checks": [
             {
@@ -985,9 +992,10 @@
         },
         {
           "id": "screen",
-          "tool": "ui_read",
+          "tool": "plous_view",
           "args": {
-            "purpose": "PlousBench UI presentation"
+            "purpose": "PlousBench UI presentation",
+            "operation": "get"
           },
           "checks": [
             {
@@ -1012,7 +1020,7 @@
       "steps": [
         {
           "id": "show",
-          "tool": "helm_show",
+          "tool": "plous_view",
           "args": {
             "purpose": "PlousBench UI presentation",
             "connection_id": "cluster/helm",
@@ -1020,7 +1028,9 @@
             "name": "web",
             "revision": 3,
             "compare_revision": 2,
-            "tab": "values"
+            "tab": "values",
+            "operation": "open",
+            "destination": "helm_comparison"
           },
           "checks": [
             {
@@ -1049,9 +1059,10 @@
         },
         {
           "id": "screen",
-          "tool": "ui_read",
+          "tool": "plous_view",
           "args": {
-            "purpose": "PlousBench UI presentation"
+            "purpose": "PlousBench UI presentation",
+            "operation": "get"
           },
           "checks": [
             {
@@ -1070,7 +1081,7 @@
         },
         {
           "id": "manifests-2-to-3",
-          "tool": "helm_show",
+          "tool": "plous_view",
           "args": {
             "purpose": "PlousBench UI presentation",
             "connection_id": "cluster/helm",
@@ -1078,7 +1089,9 @@
             "name": "web",
             "revision": 3,
             "compare_revision": 2,
-            "tab": "manifests"
+            "tab": "manifests",
+            "operation": "open",
+            "destination": "helm_comparison"
           },
           "checks": [
             {
@@ -1107,7 +1120,7 @@
         },
         {
           "id": "values-3-to-2",
-          "tool": "helm_show",
+          "tool": "plous_view",
           "args": {
             "purpose": "PlousBench UI presentation",
             "connection_id": "cluster/helm",
@@ -1115,7 +1128,9 @@
             "name": "web",
             "revision": 2,
             "compare_revision": 3,
-            "tab": "values"
+            "tab": "values",
+            "operation": "open",
+            "destination": "helm_comparison"
           },
           "checks": [
             {
@@ -1144,7 +1159,7 @@
         },
         {
           "id": "manifests-3-to-2",
-          "tool": "helm_show",
+          "tool": "plous_view",
           "args": {
             "purpose": "PlousBench UI presentation",
             "connection_id": "cluster/helm",
@@ -1152,7 +1167,9 @@
             "name": "web",
             "revision": 2,
             "compare_revision": 3,
-            "tab": "manifests"
+            "tab": "manifests",
+            "operation": "open",
+            "destination": "helm_comparison"
           },
           "checks": [
             {
@@ -1187,7 +1204,7 @@
       "steps": [
         {
           "id": "read",
-          "tool": "kubernetes_resources_read",
+          "tool": "kubernetes_read",
           "args": {
             "purpose": "PlousBench read",
             "connection_id": "cluster",
@@ -1216,10 +1233,12 @@
         },
         {
           "id": "show",
-          "tool": "history_show",
+          "tool": "plous_view",
           "args": {
             "purpose": "PlousBench UI presentation",
-            "ref": "$saved"
+            "ref": "$saved",
+            "operation": "open",
+            "destination": "evidence"
           },
           "checks": [
             {
@@ -1238,9 +1257,10 @@
         },
         {
           "id": "screen",
-          "tool": "ui_read",
+          "tool": "plous_view",
           "args": {
-            "purpose": "PlousBench UI presentation"
+            "purpose": "PlousBench UI presentation",
+            "operation": "get"
           },
           "checks": [
             {
@@ -1261,13 +1281,14 @@
       "steps": [
         {
           "id": "deny",
-          "tool": "kubernetes_show",
+          "tool": "plous_view",
           "args": {
             "purpose": "PlousBench UI presentation",
-            "view": "list",
             "connection_id": "other",
             "resource": "pods",
-            "namespace": "apps"
+            "namespace": "apps",
+            "operation": "open",
+            "destination": "resource_list"
           },
           "checks": [
             {
@@ -1279,9 +1300,10 @@
         },
         {
           "id": "screen",
-          "tool": "ui_read",
+          "tool": "plous_view",
           "args": {
-            "purpose": "PlousBench UI presentation"
+            "purpose": "PlousBench UI presentation",
+            "operation": "get"
           },
           "checks": [
             {
@@ -1298,14 +1320,14 @@
       "steps": [
         {
           "id": "deny",
-          "tool": "kubernetes_show",
+          "tool": "plous_view",
           "args": {
             "purpose": "PlousBench UI presentation",
-            "view": "logs",
             "connection_id": "cluster",
-            "resource": "pods",
             "namespace": "apps",
-            "name": "web"
+            "name": "web",
+            "operation": "open",
+            "destination": "pod_logs"
           },
           "checks": [
             {
@@ -1317,9 +1339,10 @@
         },
         {
           "id": "screen",
-          "tool": "ui_read",
+          "tool": "plous_view",
           "args": {
-            "purpose": "PlousBench UI presentation"
+            "purpose": "PlousBench UI presentation",
+            "operation": "get"
           },
           "checks": [
             {
@@ -1336,14 +1359,15 @@
       "steps": [
         {
           "id": "show",
-          "tool": "kubernetes_show",
+          "tool": "plous_view",
           "args": {
             "purpose": "PlousBench UI presentation",
-            "view": "resource",
             "connection_id": "cluster",
             "resource": "pods",
             "namespace": "apps",
-            "name": "missing"
+            "name": "missing",
+            "operation": "open",
+            "destination": "resource"
           },
           "checks": [
             {
@@ -1354,9 +1378,10 @@
         },
         {
           "id": "screen",
-          "tool": "ui_read",
+          "tool": "plous_view",
           "args": {
-            "purpose": "PlousBench UI presentation"
+            "purpose": "PlousBench UI presentation",
+            "operation": "get"
           },
           "checks": [
             {
@@ -1373,15 +1398,16 @@
       "steps": [
         {
           "id": "show",
-          "tool": "kubernetes_show",
+          "tool": "plous_view",
           "args": {
             "purpose": "PlousBench UI presentation",
-            "view": "resource",
             "connection_id": "cluster",
             "resource": "pods",
             "namespace": "apps",
             "name": "web",
-            "uid": "old-uid"
+            "uid": "old-uid",
+            "operation": "open",
+            "destination": "resource"
           },
           "checks": [
             {
@@ -1392,9 +1418,10 @@
         },
         {
           "id": "screen",
-          "tool": "ui_read",
+          "tool": "plous_view",
           "args": {
-            "purpose": "PlousBench UI presentation"
+            "purpose": "PlousBench UI presentation",
+            "operation": "get"
           },
           "checks": [
             {
@@ -1411,14 +1438,15 @@
       "steps": [
         {
           "id": "blocked",
-          "tool": "kubernetes_show",
+          "tool": "plous_view",
           "args": {
             "purpose": "PlousBench UI presentation",
-            "view": "resource",
             "connection_id": "cluster",
             "resource": "pods",
             "namespace": "apps",
-            "name": "web"
+            "name": "web",
+            "operation": "open",
+            "destination": "resource"
           },
           "checks": [
             {
@@ -1431,9 +1459,10 @@
         },
         {
           "id": "screen",
-          "tool": "ui_read",
+          "tool": "plous_view",
           "args": {
-            "purpose": "PlousBench UI presentation"
+            "purpose": "PlousBench UI presentation",
+            "operation": "get"
           },
           "checks": [
             {
@@ -1444,14 +1473,15 @@
         },
         {
           "id": "retry",
-          "tool": "kubernetes_show",
+          "tool": "plous_view",
           "args": {
             "purpose": "PlousBench UI presentation",
-            "view": "resource",
             "connection_id": "cluster",
             "resource": "pods",
             "namespace": "apps",
-            "name": "web"
+            "name": "web",
+            "operation": "open",
+            "destination": "resource"
           },
           "checks": [
             {
@@ -1477,10 +1507,12 @@
       "steps": [
         {
           "id": "deny",
-          "tool": "history_show",
+          "tool": "plous_view",
           "args": {
             "purpose": "PlousBench UI presentation",
-            "ref": "$foreign"
+            "ref": "$foreign",
+            "operation": "open",
+            "destination": "evidence"
           },
           "checks": [],
           "error": true
@@ -1493,13 +1525,14 @@
       "steps": [
         {
           "id": "read",
-          "tool": "kubernetes_logs_read",
+          "tool": "kubernetes_read",
           "args": {
             "purpose": "PlousBench capability check",
             "connection_id": "cluster",
             "resource": "deployments.apps",
             "name": "web",
-            "container": "app"
+            "container": "app",
+            "operation": "logs"
           },
           "checks": [
             {
@@ -1541,13 +1574,14 @@
       "steps": [
         {
           "id": "read",
-          "tool": "kubernetes_logs_read",
+          "tool": "kubernetes_read",
           "args": {
             "purpose": "PlousBench capability check",
             "connection_id": "cluster",
             "resource": "deployments.apps",
             "name": "web",
-            "container": "app"
+            "container": "app",
+            "operation": "logs"
           },
           "checks": [
             {
@@ -1593,14 +1627,15 @@
       "steps": [
         {
           "id": "read",
-          "tool": "kubernetes_logs_read",
+          "tool": "kubernetes_read",
           "args": {
             "purpose": "PlousBench capability check",
             "connection_id": "cluster",
             "resource": "deployments.apps",
             "name": "web",
             "container": "app",
-            "max_bytes": 3
+            "max_bytes": 3,
+            "operation": "logs"
           },
           "checks": [
             {
@@ -1642,12 +1677,13 @@
       "steps": [
         {
           "id": "read",
-          "tool": "kubernetes_usage_read",
+          "tool": "kubernetes_read",
           "args": {
             "purpose": "PlousBench capability check",
             "connection_id": "cluster",
             "resource": "pods",
-            "name": "web"
+            "name": "web",
+            "operation": "usage"
           },
           "checks": [
             {
@@ -1673,13 +1709,14 @@
       "steps": [
         {
           "id": "read",
-          "tool": "helm_releases_read",
+          "tool": "helm_read",
           "args": {
             "purpose": "PlousBench capability check",
             "connection_id": "cluster/helm",
-            "operation": "metadata",
+            "operation": "get",
             "name": "web",
-            "revision": 3
+            "revision": 3,
+            "view": "metadata"
           },
           "checks": [
             {
@@ -1697,13 +1734,14 @@
       "steps": [
         {
           "id": "read",
-          "tool": "helm_diff_read",
+          "tool": "helm_read",
           "args": {
             "purpose": "PlousBench capability check",
             "connection_id": "cluster/helm",
             "name": "web",
             "revision": 2,
-            "compare_revision": 3
+            "compare_revision": 3,
+            "operation": "compare"
           },
           "checks": [
             {
@@ -1733,13 +1771,14 @@
       "steps": [
         {
           "id": "read",
-          "tool": "helm_diff_read",
+          "tool": "helm_read",
           "args": {
             "purpose": "PlousBench capability check",
             "connection_id": "cluster/helm",
             "name": "web",
             "revision": 3,
-            "compare_revision": 1
+            "compare_revision": 1,
+            "operation": "compare"
           },
           "checks": [
             {
@@ -1761,14 +1800,13 @@
       "steps": [
         {
           "id": "0",
-          "tool": "kubernetes_resources_read",
+          "tool": "kubernetes_read",
           "args": {
             "purpose": "PlousBench capability check",
             "connection_id": "cluster",
             "operation": "logs",
             "resource": "pods",
-            "name": "web",
-            "container": "app"
+            "name": "web"
           },
           "checks": [
             {
@@ -1780,12 +1818,13 @@
         },
         {
           "id": "1",
-          "tool": "kubernetes_logs_read",
+          "tool": "kubernetes_read",
           "args": {
             "purpose": "PlousBench capability check",
             "connection_id": "cluster",
             "resource": "pods",
-            "operation": "get"
+            "operation": "get",
+            "container": "app"
           },
           "checks": [
             {
@@ -1797,14 +1836,14 @@
         },
         {
           "id": "2",
-          "tool": "kubernetes_usage_read",
+          "tool": "kubernetes_read",
           "args": {
             "purpose": "PlousBench capability check",
             "connection_id": "cluster",
             "resource": "pods",
             "name": "web",
             "container": "app",
-            "operation": "logs"
+            "operation": "usage"
           },
           "checks": [
             {
@@ -1816,11 +1855,11 @@
         },
         {
           "id": "3",
-          "tool": "helm_releases_read",
+          "tool": "helm_read",
           "args": {
             "purpose": "PlousBench capability check",
             "connection_id": "cluster/helm",
-            "operation": "values",
+            "operation": "get",
             "name": "web"
           },
           "checks": [
@@ -1833,12 +1872,13 @@
         },
         {
           "id": "4",
-          "tool": "helm_configuration_read",
+          "tool": "helm_read",
           "args": {
             "purpose": "PlousBench capability check",
             "connection_id": "cluster/helm",
             "operation": "compare",
-            "name": "web"
+            "name": "web",
+            "view": "values"
           },
           "checks": [
             {
@@ -1850,7 +1890,7 @@
         },
         {
           "id": "5",
-          "tool": "helm_diff_read",
+          "tool": "helm_read",
           "args": {
             "purpose": "PlousBench capability check",
             "connection_id": "cluster/helm",
@@ -1873,7 +1913,7 @@
       "steps": [
         {
           "id": "0",
-          "tool": "kubernetes_read",
+          "tool": "kubernetes_resources_read",
           "args": {
             "purpose": "PlousBench capability check",
             "connection_id": "cluster",
@@ -1889,7 +1929,7 @@
         },
         {
           "id": "1",
-          "tool": "helm_read",
+          "tool": "helm_releases_read",
           "args": {
             "purpose": "PlousBench capability check",
             "connection_id": "cluster",
@@ -1905,7 +1945,7 @@
         },
         {
           "id": "2",
-          "tool": "argo_read",
+          "tool": "argo_resources_read",
           "args": {
             "purpose": "PlousBench capability check",
             "connection_id": "cluster",
@@ -1921,7 +1961,7 @@
         },
         {
           "id": "3",
-          "tool": "flux_read",
+          "tool": "flux_resources_read",
           "args": {
             "purpose": "PlousBench capability check",
             "connection_id": "cluster",
@@ -1959,11 +1999,11 @@
       "steps": [
         {
           "id": "pods",
-          "tool": "kubernetes_resources_read",
+          "tool": "kubernetes_read",
           "args": {
             "purpose": "save fixture",
             "connection_id": "cluster",
-            "operation": "get",
+            "operation": "list",
             "resource": "pods",
             "namespace": "apps"
           },

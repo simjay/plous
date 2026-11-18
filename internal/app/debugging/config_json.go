@@ -12,8 +12,14 @@ import (
 
 const jsonMCPServers = "/mcpServers"
 
-func (c setupClient) mergeJSONConfig(old []byte, launch serverLaunch) ([]byte, error) {
-	doc, err := parseJSONConfig(old, c.format == jsoncConfig)
+type jsonConfig struct {
+	allowComments bool
+	mcpType       string
+	kubeconfigEnv string
+}
+
+func (c jsonConfig) merge(old []byte, launch serverLaunch, owns func(serverLaunch) bool) ([]byte, error) {
+	doc, err := parseJSONConfig(old, c.allowComments)
 	if err != nil {
 		return nil, err
 	}
@@ -32,7 +38,7 @@ func (c setupClient) mergeJSONConfig(old []byte, launch serverLaunch) ([]byte, e
 			Type string `json:"type"`
 		}
 		if decodeJSONValue(entry, &previous) != nil || (previous.Type != "" && previous.Type != "stdio") ||
-			fields["url"] != nil || !c.manages(previous.serverLaunch, launch.Command) {
+			fields["url"] != nil || !owns(previous.serverLaunch) {
 			return nil, unmanagedServerError()
 		}
 	}

@@ -127,3 +127,64 @@ func TestToolSessionSerializesCallsAndCancelsWaitingRead(t *testing.T) {
 		t.Fatal("cancelled waiting call reached acquisition", err, reads.Load())
 	}
 }
+
+func TestExternalCancellationCannotMaskEvidenceFailure(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	op := deliveryFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1" {
+			deliveryDiscovery(w)
+			return
+		}
+		cancel()
+		<-r.Context().Done()
+	})
+	failure := errors.New("could not persist execution receipt")
+	op.o.Observe = func(Observation) error { return failure }
+	session := newToolSession(t.Context(), op)
+	session.external = true
+	defer session.Close()
+
+	_, err := session.Call(ctx, deliveryRead(), 65536)
+	if !errors.Is(err, context.Canceled) || !errors.Is(err, failure) || errors.Is(err, agent.ErrRequestCancelled) {
+		t.Fatal("cancellation masked an evidence failure", err)
+	}
+	if _, err = session.Call(t.Context(), deliveryRead(), 65536); !errors.Is(err, context.Canceled) {
+		t.Fatal("evidence failure left tool access available", err)
+	}
+}
+
+func TestHostedReadCancellationPreservesEvidenceAndToolAccess(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	var reads atomic.Int32
+	op := deliveryFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1" {
+			deliveryDiscovery(w)
+			return
+		}
+		if reads.Add(1) == 1 {
+			cancel()
+			<-r.Context().Done()
+			return
+		}
+		deliveryPods(w, 1, "")
+	})
+	op.o.UI = &testUI{}
+	session := newToolSession(t.Context(), op)
+	session.external = true
+	defer session.Close()
+
+	if _, err := session.Call(ctx, deliveryRead(), 65536); !errors.Is(err, agent.ErrRequestCancelled) {
+		t.Fatal("hosted read cancellation revoked tool access", err)
+	}
+	saved, err := op.o.History.TurnEvidence(t.Context(), op.o.WorkspaceID, op.o.ConversationID, op.o.TurnID)
+	if err != nil || len(saved) != 1 || saved[0].Projection.Facts["error"].String() != "The read was cancelled." {
+		t.Fatal("missing interrupted read evidence", saved, err)
+	}
+	followup := deliveryRead()
+	followup.ID = "follow-up"
+	if result, err := session.Call(t.Context(), followup, 65536); err != nil || !strings.Contains(string(result), "pod-0") {
+		t.Fatal("next hosted read failed", string(result), err)
+	}
+}

@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/x/term"
 	"github.com/go-logr/logr"
 	"github.com/simjay/plous/internal/ai/history"
+	appmonitor "github.com/simjay/plous/internal/app/monitor"
 	"github.com/simjay/plous/internal/app/terminal"
 	kubernetes "github.com/simjay/plous/internal/integrations/kubernetes/monitor"
 	"github.com/simjay/plous/internal/workspace"
@@ -57,6 +58,12 @@ func Run(version, dataDir string, policy kubernetes.DebugPolicy) int {
 		fmt.Fprintln(output.Diagnostics, "Plous:", err)
 		return 1
 	}
+	app.monitorRoot, err = appmonitor.Root(root)
+	if err != nil {
+		store.Close()
+		fmt.Fprintln(output.Diagnostics, "Plous:", err)
+		return 1
+	}
 	app.clipboard = systemClipboard()
 	app.debugPolicy = policy
 	// Dependency diagnostics bypass the renderer and move the terminal cursor.
@@ -65,7 +72,10 @@ func Run(version, dataDir string, policy kubernetes.DebugPolicy) int {
 	logOutput := log.Writer()
 	log.SetOutput(io.Discard)
 	defer log.SetOutput(logOutput)
+	stopCredentialHelpers := kubernetes.StartCredentialHelpers()
+	defer stopCredentialHelpers()
 	_, runErr := tea.NewProgram(app, tea.WithInput(&terminal.Input{File: os.Stdin}), tea.WithOutput(output.Renderer)).Run()
+	stopCredentialHelpers()
 	app.stopViews()
 	app.stopChat()
 	app.drainNativeAgent()

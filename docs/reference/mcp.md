@@ -2,7 +2,7 @@
 
 [Documentation](../README.md) · [Client setup](../mcp/setup.md)
 
-This reference lists Plous's agent tools. For a guided setup, use [plous-debug](../agent-skills/plous-debug.md) or the [assistant panel](../guides/ai-chat.md#run-claude-code-or-codex).
+This reference lists Plous’s agent tools. Find setup instructions for your client in the [agent directory](../guides/ai-chat.md#choose-an-agent).
 
 ## Available tools
 
@@ -10,35 +10,35 @@ Standalone setup names its server `plous_debug`. The panel normally uses `plous`
 
 | Task | Tools | Results |
 | --- | --- | --- |
-| Inspect objects | `kubernetes_resources_read`, `helm_releases_read`, `argo_resources_read`, `flux_resources_read` | Resources, releases, controller status |
-| Read Helm configuration | `helm_configuration_read` | Filtered values, manifests, hooks |
-| Read logs | `kubernetes_logs_read` | Pod or workload log excerpts |
-| Run diagnostics | `kubernetes_exec_run`, `kubernetes_diagnostic_run` | Explicitly enabled commands or temporary tests |
-| Read usage | `kubernetes_usage_read` | Current Pod, Node, or workload usage and budgets |
-| Compare Helm revisions | `helm_diff_read` | Differences between stored revisions |
+| Kubernetes | `kubernetes_read` | `discover` API resource types, `list` objects, `get` a named object, or read `logs` and `usage` |
+| Helm | `helm_read` | `list` releases, `get` a release view, read revision `history`, or `compare` revisions |
+| GitOps | `argo_read`, `flux_read` | `list` or `get` a supported controller resource |
+| Review monitors | `monitor_read` | `status` for monitor status, `list` for alerts, or `get` with an exact `alert_id`. Accepts `monitor_name` within the captured Kubernetes connection |
 | Read app records | `workspace_read`, `history_read` | Workspace and Activity data, saved messages and evidence |
-| Open Plous views | `ui_read`, `kubernetes_show`, `helm_show`, `history_show` | Current view information and navigation results. Panel sessions only. |
+| Run diagnostics | `kubernetes_run` | Host-enabled `exec` and `diagnostic` operations |
+| Open Plous views | `plous_view` | Panel-only `get` and `open` operations |
 
-`_read` tools return information. `_show` tools open a view. `_run` tools can change cluster or application state.
+Use `kubernetes_read` with `discover` and an optional `query` to find qualified resource names and served versions. Use the returned name as `resource` in `list` or `get`. Both accept an optional version such as `api_version=v1`. The group is part of the resource name. Catalog verbs describe the API. The live read checks the connection's permissions.
 
-Argument rules:
+A named Kubernetes `get` accepts up to 16 exact JSON Pointers in `paths`. Returned row facts include each found value at its pointer and a `path_status.<pointer>` fact. Field selection uses the same masking rules as the default projection. Custom fields can contain sensitive values under ordinary names. `fields` selects already recorded facts for delivery.
 
-- `kubernetes_logs_read`, `kubernetes_usage_read`, and `helm_diff_read` take no `operation` argument.
-- `kubernetes_show` accepts `view=resource`, `list`, or `logs`.
-- Other show tools take no `view` argument. `helm_show` opens revision comparisons, not release lists.
-- For Helm comparisons, `revision` is the after revision and `compare_revision` is the before revision.
+Use `helm_read get` with `view` set to `status`, `metadata`, `chart`, `values`, `manifest`, or `hooks`. For comparisons, `revision` is the after revision and `compare_revision` is the before revision.
+
+`plous_view open` accepts the destination `resource`, `resource_list`, `pod_logs`, `helm_comparison`, or `evidence`.
 
 Resource and history calls include a purpose. Cluster calls use the captured connection identity. Supplying another identity does not grant access. Integration-owned schemas validate arguments before execution. See the [tool registry](../../internal/ai/tools.go) and [history implementation](../contributing/ai-assistant.md#history-tools).
 
 ### Monitor evidence
 
+`monitor_read` reads saved records for the captured Kubernetes connection. Status facts include `running`, `open_alerts`, `last_check`, `last_complete_check`, and `overdue`. A running monitor with a saved schedule also returns `next_check`, including retry backoff. `list` returns up to 100 matching alerts and reports partial coverage when more exist. Use `get` with an exact `alert_id` to read a particular alert.
+
 All integrations use the same selected cluster. Their statuses describe different things. A Helm release record or controller's Ready condition does not prove current Pod health.
 
 | Tool | Important limits |
 | --- | --- |
-| `kubernetes_usage_read` | Reads current metrics without opening a chart. Reports times, missing measurements, and completeness. Cannot recover unsaved chart history. |
-| `kubernetes_logs_read` | Requires a Pod or supported workload and an explicit container. Reads at most 16 Pods, 500 lines per Pod, and 64 KiB combined. Reports failed or skipped Pods. |
-| `helm_diff_read` | An explicit comparison needs two distinct positive stored revisions. Otherwise it compares with the predecessor. Revision 1 uses an empty baseline. |
+| `kubernetes_read usage` | Reads current metrics without opening a chart. Reports times, missing measurements, and completeness. Cannot recover unsaved chart history. |
+| `kubernetes_read logs` | Requires a Pod or supported workload and an explicit container. Reads at most 16 Pods, 500 lines per Pod, and 64 KiB combined. Reports failed or skipped Pods. |
+| `helm_read compare` | An explicit comparison needs two distinct positive stored revisions. Otherwise it compares with the predecessor. Revision 1 uses an empty baseline. |
 
 Workload logs follow controller ownership and check Pod identities before and after collection. Excerpts are not complete log history.
 
@@ -56,8 +56,8 @@ Enable these through [diagnostic setup](../mcp/active-diagnostics.md). Both requ
 
 | Tool | Required inputs | Behavior |
 | --- | --- | --- |
-| `kubernetes_exec_run` | Pod `name`, exact `uid`, `container`, and `command` argument array | One command in an existing container. No added shell, stdin, or TTY. |
-| `kubernetes_diagnostic_run` | `test` (`http`, `dns`, or `tcp`), `target`, and `port` for TCP | One built-in probe in a temporary Job using the configured image. Plous builds the command. |
+| `kubernetes_run exec` | Pod `name`, exact `uid`, `container`, and `command` argument array | One command in an existing container. No added shell, stdin, or TTY. |
+| `kubernetes_run diagnostic` | `test` (`http`, `dns`, or `tcp`), `target`, and `port` for TCP | One built-in probe in a temporary Job using the configured image. Plous builds the command. |
 
 `timeout_seconds` defaults to 30 and accepts 1–120. Output is limited to 64 KiB. Temporary cleanup can take another 10 seconds.
 
@@ -67,13 +67,13 @@ Plous records requests before running them and saves results before returning th
 
 ## Standalone target discovery
 
-A standalone server follows kubeconfig’s current context unless configured with `--context`. Call `kubernetes_context_read` with an empty argument object to get the current context, default namespace, and connection IDs.
+A standalone server follows kubeconfig’s current context by default. Call `kubernetes_context_read` with an empty object to get the current context, default namespace, kubeconfig source, and connection IDs. On explicit user request, call `kubernetes_context_select` with an optional `kubeconfig` and `context`. An empty object restores the default. The change requires user confirmation or the [local target command](../mcp/setup.md#change-targets-while-the-agent-is-running).
 
 ## Scope and delivery
 
 Each standalone call captures a single target. Reads may use any namespace allowed by those Kubernetes credentials. Diagnostic operations stay in the captured default namespace.
 
-General chat and history-only views have no live cluster tools. To change a pinned standalone target, update its arguments and reconnect. To change the panel's target, [close and reopen its session](../guides/ai-chat.md#run-claude-code-or-codex).
+General chat and history-only views have no live cluster tools. To change the panel's target, [close and reopen its session](../guides/ai-chat.md#run-claude-code-or-codex).
 
 Plous validates and serializes calls, then saves results before delivery. Fatal storage, history, or target errors disable further tool access. A native CLI remains open so you can inspect the error.
 
@@ -100,7 +100,8 @@ See [AI implementation](../contributing/ai-assistant.md#runtime-structure) for t
 | --- | --- |
 | Protocol | JSON-RPC 2.0, one request per message |
 | Authentication | Panel HTTP uses a fresh bearer token and rejects Origin headers. Stdio uses subprocess pipes. |
-| Initialization | Protocol version `2025-03-26`, tools capability |
+| Initialization | Tools capability. Standalone negotiates `2024-11-05`, `2025-03-26`, `2025-06-18`, or `2025-11-25`. The panel uses `2025-03-26`. |
+| Target confirmation | Standalone clients can confirm a target change using MCP form elicitation on `2025-06-18` or later. |
 | Requests | `initialize`, `ping`, `tools/list`, `tools/call` |
 | Notifications | `notifications/initialized`, plus cancellation of a matching active request |
 | Discovery | Tool descriptions, schemas, and read/diagnostic annotations |
@@ -110,5 +111,7 @@ See [AI implementation](../contributing/ai-assistant.md#runtime-structure) for t
 Request IDs must be strings or integers. A tool-call ID cannot be reused in the same session. Inspect tool content for errors even when transport succeeds.
 
 Unsupported methods return JSON-RPC errors. After a fatal tool failure, later calls receive a closed-session response.
+
+Cancelling a read leaves the external session usable when Plous saves the required evidence and cancellation is the only error. Interrupting a view change or active diagnostic after dispatch can require reopening the session. For standalone tool failures, check the server's stderr after disconnect for the exit diagnostic.
 
 Schemas use an object root with operation-specific constraints under `dependentSchemas`. See the [bridge](../../internal/ai/cli/bridge.go), [launch configuration](../../internal/ai/cli/terminal_config.go), and [client checks](../contributing/ai-assistant.md#verify-follow-ups-and-history) for implementation details.

@@ -44,6 +44,15 @@ export const legacyRoutes = [
     'review-activity': ['activity-and-revisions'],
   }),
   mergedGuide('guides/overview', explore, 'read-overview', {}),
+  {
+    slug: 'guides/monitor-cluster-health',
+    destination: explore + '#monitor-cluster-health',
+    anchors: {
+      'start-a-watch': 'docs/reference/configuration/#monitors',
+      'review-and-manage-watches': 'docs/reference/configuration/#manage-monitors',
+      'schedule-and-recovery': 'docs/reference/configuration/#scheduling-and-coverage',
+    },
+  },
   mergedGuide('guides/activity', explore, 'review-activity', {}),
   mergedGuide('guides/plous-mcp', assistant, 'run-claude-code-or-codex', {
     'investigate-a-workload': ['try-an-investigation', 'available-tools', 'scope-access-and-limits'],

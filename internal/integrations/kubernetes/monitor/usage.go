@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"math"
 	"slices"
-	"strings"
 	"time"
 
 	kubecommon "github.com/simjay/plous/internal/integrations/kubernetes/common"
@@ -67,10 +66,10 @@ func UsageKey(object unstructured.Unstructured) string {
 	return object.GetNamespace() + "/" + object.GetName()
 }
 
-func HasUsage(r kubecommon.Resource) bool { return r.Key() == "nodes" || HasPodTargets(r) }
+func HasUsage(r kubecommon.Resource) bool { return hasUsageResource(r.Key()) }
+
 func hasUsageResource(key string) bool {
-	name, group, _ := strings.Cut(key, ".")
-	return HasUsage(kubecommon.Resource{Name: name, Group: group})
+	return key == "nodes" || slices.Contains(podTargetResources, key)
 }
 
 func UsageResource(r kubecommon.Resource, resources []kubecommon.Resource) (kubecommon.Resource, bool) {

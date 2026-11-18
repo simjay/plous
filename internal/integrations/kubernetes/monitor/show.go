@@ -6,8 +6,6 @@ import (
 	"slices"
 )
 
-const ShowHelp = "Open Kubernetes resource details, a filtered resource list or Pod logs. Use an API-qualified resource. Objects need a concrete namespace; logs need resource=pods and an explicit container. list filter is a case-insensitive text filter; labels is a label selector."
-
 type showDefinition struct {
 	view                string
 	arguments, required []string
@@ -21,32 +19,25 @@ var showDefinitions = []showDefinition{
 
 var showTabs = []string{"describe", "yaml", "events", "related"}
 
-func ShowSchema() map[string]any {
-	properties := map[string]any{}
-	var views []string
-	var variants []any
+func ShowSchema(view string) map[string]any {
 	for _, d := range showDefinitions {
-		views = append(views, d.view)
+		if d.view != view {
+			continue
+		}
+		properties := map[string]any{}
 		for _, name := range d.arguments {
 			properties[name] = map[string]any{"type": "string", "maxLength": 1024}
 		}
-	}
-	properties["previous"] = map[string]any{"type": "boolean"}
-	properties["tab"].(map[string]any)["enum"] = slices.Clone(showTabs)
-	for _, d := range showDefinitions {
-		branch := map[string]any{"view": map[string]any{"enum": []string{d.view}}}
-		for name := range properties {
-			if !slices.Contains(d.arguments, name) {
-				branch[name] = false
-			}
+		if view == "resource" {
+			properties["tab"] = map[string]any{"type": "string", "enum": slices.Clone(showTabs)}
 		}
-		if d.view == "logs" {
-			branch["resource"] = map[string]any{"enum": []string{"pods"}}
+		if view == "logs" {
+			properties["resource"] = map[string]any{"type": "string", "const": "pods"}
+			properties["previous"] = map[string]any{"type": "boolean"}
 		}
-		variants = append(variants, map[string]any{"properties": branch, "required": d.required})
+		return map[string]any{"type": "object", "properties": properties, "required": slices.Clone(d.required), "additionalProperties": false}
 	}
-	properties["view"] = map[string]any{"type": "string", "enum": views}
-	return map[string]any{"type": "object", "properties": properties, "required": []string{"view"}, "additionalProperties": false, "dependentSchemas": map[string]any{"view": map[string]any{"anyOf": variants}}}
+	panic("unknown Kubernetes view: " + view)
 }
 
 // ValidateShow receives domain arguments after the host removes connection_id.

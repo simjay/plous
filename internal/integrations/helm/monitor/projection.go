@@ -38,12 +38,16 @@ func releaseRow(r Release) observation.Row {
 	}}
 }
 func (e *Projector) Execute(ctx context.Context, c Command) (r observation.Result, err error) {
-	r = observation.New("helm.release.v1", c.Operation, time.Now().UTC())
+	operation := c.Operation
+	if operation == "get" {
+		operation = c.View
+	}
+	r = observation.New("helm.release.v1", operation, time.Now().UTC())
 	r.Connection, r.Namespace = e.config.ConnectionID, e.config.Namespace
 	r.Selection = map[string]string{"release": c.Name}
 	defer func() {
 		r.Coverage.Observed = len(r.Rows)
-		if ctx.Err() != nil {
+		if err == nil && ctx.Err() != nil {
 			err = ctx.Err()
 		}
 		err = r.FinishRead(projectedReadError(err))
@@ -56,7 +60,7 @@ func (e *Projector) Execute(ctx context.Context, c Command) (r observation.Resul
 	if err := ValidateRead(c, e.config); err != nil {
 		return r, err
 	}
-	switch c.Operation {
+	switch operation {
 	case "list":
 		releases, readErr := e.client.List(ctx, r.Namespace)
 		for _, release := range releases {
@@ -111,7 +115,7 @@ func (e *Projector) Execute(ctx context.Context, c Command) (r observation.Resul
 			revision = v.Revision
 		}
 		read := e.client.RecordedSnapshot
-		if c.Operation == "values" {
+		if operation == "values" {
 			read = e.client.Snapshot
 		}
 		s, err := read(ctx, c.Name, r.Namespace, revision)
@@ -120,7 +124,7 @@ func (e *Projector) Execute(ctx context.Context, c Command) (r observation.Resul
 		}
 		r.Facts["release"] = observation.Text(c.Name)
 		r.Facts["revision"] = observation.Number(int64(revision))
-		switch c.Operation {
+		switch operation {
 		case "compare":
 			var before *Snapshot
 			beforeRevision := revision - 1
@@ -147,7 +151,7 @@ func (e *Projector) Execute(ctx context.Context, c Command) (r observation.Resul
 			r.Coverage.Limitations = append(r.Coverage.Limitations, "recorded revisions only; does not compare live resources")
 		case "manifest", "hooks":
 			manifests := []string{s.Manifest}
-			if c.Operation == "hooks" {
+			if operation == "hooks" {
 				manifests = nil
 				for _, h := range s.Hooks {
 					manifests = append(manifests, h.Manifest)
@@ -176,7 +180,7 @@ func (e *Projector) Execute(ctx context.Context, c Command) (r observation.Resul
 			r.Facts["detail"] = observation.Text("rendered resource identities and masked scalar fields")
 		case "values", "chart":
 			var value any = s.Effective
-			if c.Operation == "chart" {
+			if operation == "chart" {
 				value = s.Chart.Metadata
 			}
 			projectConfiguration(&r, value)

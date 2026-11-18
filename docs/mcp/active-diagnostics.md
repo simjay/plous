@@ -2,21 +2,17 @@
 
 [Coding agent setup](../agent-skills/plous-debug.md) · [Tools and permissions](../reference/mcp.md#active-diagnostics)
 
-Agent tools read cluster data by default. Enable commands or temporary tests only for the cluster and namespace you intend to investigate. The examples pin a context. If you omit `--context`, these capabilities follow the current kubeconfig context.
+Agent tools read cluster data by default. Commands and temporary tests use the current Plous target. [Confirm the context and namespace](setup.md#check-the-connection) before running a diagnostic.
 
 ## Run commands in a container
 
 Add `--allow-exec` to your client's server arguments:
 
 ```sh
-plous mcp serve \
-  --agent codex \
-  --context staging \
-  --namespace shop \
-  --allow-exec
+plous setup codex --allow-exec
 ```
 
-`kubernetes_exec_run` runs one noninteractive command in an existing container. It uses an argument array and a Pod UID from a previous read. Plous does not add a shell, stdin, or a TTY.
+`kubernetes_run exec` runs one noninteractive command in an existing container. It uses an argument array and a Pod UID from a previous read. Plous does not add a shell, stdin, or a TTY.
 
 The executable must exist in the container. Commands can change application state. A timeout does not guarantee that the remote command stopped.
 
@@ -25,14 +21,10 @@ The executable must exist in the container. Commands can change application stat
 Choose an image containing `curl`, `nslookup`, and `nc`. It must run as UID 65532 with a read-only filesystem.
 
 ```sh
-plous mcp serve \
-  --agent codex \
-  --context staging \
-  --namespace shop \
-  --diagnostic-image registry.example.com/team/diagnostics@sha256:YOUR_IMAGE_DIGEST
+plous setup codex --diagnostic-image registry.example.com/team/diagnostics@sha256:YOUR_IMAGE_DIGEST
 ```
 
-`kubernetes_diagnostic_run` performs one HTTP GET, DNS lookup, or TCP connection check in a temporary Job. It accepts the probe type and target. Plous builds the command and Job from the probe and the configured image.
+`kubernetes_run diagnostic` performs one HTTP GET, DNS lookup, or TCP connection check in a temporary Job. It accepts the probe type and target. Plous builds the command and Job from the probe and the configured image.
 
 HTTP tests do not follow redirects or retry. Choose an endpoint that is safe to call. Even a GET can change data if the application implements it that way.
 

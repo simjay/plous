@@ -14,6 +14,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 	"github.com/simjay/plous/internal/ai/agent"
 	kubernetes "github.com/simjay/plous/internal/integrations/kubernetes/monitor"
+	"github.com/simjay/plous/skills"
 	"github.com/tailscale/hujson"
 	"golang.org/x/sys/unix"
 )
@@ -124,7 +125,7 @@ func TestSetupPreservesClientSettingsOnRerun(t *testing.T) {
 	} {
 		t.Run(tc.client, func(t *testing.T) {
 			client, _ := findSetupClient(tc.client)
-			args := client.launchArgs(configuration{dataDir: "/tmp/evidence", context: "old-context"})
+			args := append(client.launchArgs(configuration{dataDir: "/tmp/evidence"}), "--context", "old-context")
 			encoded, err := json.Marshal(args)
 			if err != nil {
 				t.Fatal(err)
@@ -133,9 +134,9 @@ func TestSetupPreservesClientSettingsOnRerun(t *testing.T) {
 				encoded = encoded[1 : len(encoded)-1]
 			}
 			old := []byte(fmt.Sprintf(tc.document, encoded))
-			next := client.launchArgs(configuration{dataDir: "/tmp/evidence", context: "new-context"})
+			next := client.launchArgs(configuration{dataDir: "/tmp/evidence", policy: kubernetes.DebugPolicy{Image: "fixture-image"}})
 			config, err := client.mergeConfig(old, "/new/bin/plous", next)
-			if err != nil || !bytes.Contains(config, []byte(tc.retained)) || !bytes.Contains(config, []byte("new-context")) ||
+			if err != nil || !bytes.Contains(config, []byte(tc.retained)) || !bytes.Contains(config, []byte("fixture-image")) ||
 				bytes.Contains(config, []byte("old-context")) || bytes.Contains(config, []byte("/old/bin/plous")) {
 				t.Fatalf("unexpected merge result %s, err %v", config, err)
 			}
@@ -184,6 +185,7 @@ func TestTOMLSetupEditsParsedRegistration(t *testing.T) {
 func TestSetupInstallsWithoutKubeconfigOrPinnedContext(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("KUBECONFIG", filepath.Join(root, "not-configured"))
+	wantSkill := strings.Replace(skills.DebugSkill, "\n---\n", "\n---\n\n"+skillMarker, 1)
 	for _, tc := range []struct{ name, identity, config, skills string }{
 		{"codex", "codex", ".codex/config.toml", ".agents/skills"},
 		{"claude", "claude-code", ".claude.json", ".claude/skills"},
@@ -204,10 +206,19 @@ func TestSetupInstallsWithoutKubeconfigOrPinnedContext(t *testing.T) {
 		skillPath := filepath.Join(home, tc.skills, "plous-debug", "SKILL.md")
 		configPath := filepath.Join(home, tc.config)
 		data, err := os.ReadFile(skillPath)
-		if err != nil || !bytes.HasPrefix(data, []byte("---\nname: plous-debug")) || !bytes.Contains(data, []byte("## Reproduce")) {
-			t.Fatalf("missing portable skill: %s %v", data, err)
+		if err != nil {
+			t.Fatal(err)
 		}
-		for _, path := range []string{skillPath, configPath} {
+		if string(data) != wantSkill {
+			t.Fatalf("%s installed a different skill from the shared source", tc.name)
+		}
+		monitorPath := filepath.Join(home, tc.skills, "plous-monitor", "SKILL.md")
+		monitorSkill, err := os.ReadFile(monitorPath)
+		wantMonitor := strings.Replace(skills.MonitorSkill, "\n---\n", "\n---\n\n"+skillMarker, 1)
+		if err != nil || string(monitorSkill) != wantMonitor {
+			t.Fatalf("%s monitor skill installation: %v", tc.name, err)
+		}
+		for _, path := range []string{skillPath, monitorPath, configPath} {
 			info, err := os.Stat(path)
 			if err != nil || info.Mode().Perm() != 0600 {
 				t.Fatalf("%s is not private: %v", path, err)
@@ -314,13 +325,13 @@ func TestOpenCodeSetupUpdatesTheExistingLayer(t *testing.T) {
 	if err := os.WriteFile(overlay, []byte(`{"model":"my-model"}`), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := client.openCodeConfigFile(primary, "/bin/plous"); err != nil || got != primary {
+	if got, err := client.configFile(primary, "/bin/plous"); err != nil || got != primary {
 		t.Fatalf("selected %q: %v", got, err)
 	}
 	if err := os.WriteFile(overlay, managed, 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := client.openCodeConfigFile(primary, "/bin/plous"); err == nil {
+	if _, err := client.configFile(primary, "/bin/plous"); err == nil {
 		t.Fatal("accepted a duplicate OpenCode registration")
 	}
 }

@@ -1,6 +1,6 @@
 # Plous
 
-Explore and troubleshoot Kubernetes from your terminal or coding agent.
+Explore, monitor, and troubleshoot Kubernetes from your terminal or coding agent.
 
 ## Install Plous
 
@@ -12,8 +12,17 @@ Explore and troubleshoot Kubernetes from your terminal or coding agent.
 
 ## Choose your workflow
 
-- [Explore Kubernetes in Plous](getting-started/README.md). Pick a cluster and inspect a workload.
-- [Let your agent debug on Kubernetes](agent-skills/plous-debug.md). Connect your coding agent and verify which cluster it can read.
+### Terminal UI
+
+- [Terminal quickstart](getting-started/README.md). Select a cluster, open a Pod, and read its logs.
+- [Monitor cluster health](guides/navigation.md#monitor-cluster-health). Schedule checks and review alerts in Plous.
+- [Set up the assistant panel](guides/ai-chat.md#choose-an-agent). Choose Plous, Claude Code, or Codex.
+
+### Coding agents
+
+- [Debug a workload with plous-debug](agent-skills/plous-debug.md). Trace a cluster symptom to its source.
+- [Review alerts with plous-monitor](agent-skills/plous-monitor.md). Ask what changed in a saved monitor.
+- [Configure or troubleshoot MCP](mcp/setup.md). Check the target or find saved evidence.
 
 <a name="get-started"></a>
 <a name="keep-these-nearby"></a>

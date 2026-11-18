@@ -65,7 +65,7 @@ func (m *model) clearStaleSearches() {
 		m.activityListSearch = nil
 	}
 	for panel, s := range m.searches {
-		if panel == 1 && (m.settingsOverlay != nil || m.helpVisible() || m.chatSourcesVisible()) {
+		if panel == 1 && (m.settingsOverlay != nil || m.helpVisible() || m.chatSourcesVisible() || m.page == monitorsPage) {
 			continue
 		}
 		if s != nil && s.scope != m.searchScope(panel) {

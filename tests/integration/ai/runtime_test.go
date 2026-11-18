@@ -13,7 +13,7 @@ func TestNativeFollowupSourcesResolveRetainedOriginal(t *testing.T) {
 	nativeOptions(t, &o)
 	connection, requests := scopedKubernetesFixture(t)
 	o.Connections = []agent.Connection{*connection}
-	o.Model = &scriptedModel{steps: []*schema.Message{call("kubernetes_resources_read", `{"purpose":"Read the saved phase","connection_id":"captured","operation":"get","resource":"pods","name":"checkout","namespace":"payments"}`), answer("First observation")}}
+	o.Model = &scriptedModel{steps: []*schema.Message{call("kubernetes_read", `{"purpose":"Read the saved phase","connection_id":"captured","operation":"get","resource":"pods","name":"checkout","namespace":"payments"}`), answer("First observation")}}
 	first, err := agent.Run(t.Context(), o)
 	if err != nil {
 		t.Fatal(err)
@@ -58,7 +58,7 @@ func TestNativeMainReadsDirectlyWithPurposeAndCapturedScope(t *testing.T) {
 	connection.Namespace = "viewed-namespace"
 	o.ScopeContext = `{"viewing":{"namespace":"viewed-namespace"}}`
 	o.Connections = []agent.Connection{*connection}
-	fake := &scriptedModel{steps: []*schema.Message{call("kubernetes_resources_read", `{"purpose":"Read checkout's phase","connection_id":"captured","operation":"get","resource":"pods","name":"checkout","namespace":"payments"}`), answer("The checkout Pod is running.")}}
+	fake := &scriptedModel{steps: []*schema.Message{call("kubernetes_read", `{"purpose":"Read checkout's phase","connection_id":"captured","operation":"get","resource":"pods","name":"checkout","namespace":"payments"}`), answer("The checkout Pod is running.")}}
 	o.Model = fake
 	r, err := agent.Run(t.Context(), o)
 	if err != nil {
@@ -92,7 +92,7 @@ func TestNativeMainMissingPurposeCannotRead(t *testing.T) {
 	nativeOptions(t, &o)
 	connection, requests := scopedKubernetesFixture(t)
 	o.Connections = []agent.Connection{*connection}
-	fake := &scriptedModel{steps: []*schema.Message{call("kubernetes_resources_read", `{"connection_id":"captured","operation":"get","resource":"pods","name":"checkout"}`), answer("I need to provide the read purpose.")}}
+	fake := &scriptedModel{steps: []*schema.Message{call("kubernetes_read", `{"connection_id":"captured","operation":"get","resource":"pods","name":"checkout"}`), answer("I need to provide the read purpose.")}}
 	o.Model = fake
 	if _, err := agent.Run(t.Context(), o); err != nil {
 		t.Fatal(err)

@@ -199,6 +199,20 @@ func integer(object map[string]any, fields ...string) int {
 	v, _, _ := unstructured.NestedInt64(object, fields...)
 	return int(v)
 }
+func reportedInteger(value any) *int64 {
+	switch n := value.(type) {
+	case int64:
+		return new(n)
+	case int:
+		return new(int64(n))
+	case float64:
+		if n == float64(int64(n)) {
+			return new(int64(n))
+		}
+	}
+	return nil
+}
+
 func Age(created, now time.Time) string {
 	if created.IsZero() {
 		return "N/A"

@@ -92,7 +92,7 @@ func TestMainCommandAliasesRequireExactMatches(t *testing.T) {
 	m, _ := testModel(t)
 	createWorkspace(t, m, "Payments")
 	mainCommand(t, m, "1")
-	for _, text := range []string{"qu", "over", "resource", "set", "ne", "he", "q extra", "config", "ch", "st", "o", "overview", "res", "resources", "e", "explore", "activity", "4", "44", "left", "right", "side", "ai", "bb", "ii", "ss", "cc", "z", "zoom", "zz", "ff"} {
+	for _, text := range []string{"qu", "over", "resource", "set", "ne", "he", "q extra", "config", "ch", "st", "o", "overview", "res", "resources", "e", "explore", "activity", "5", "44", "4 extra", "left", "right", "side", "ai", "bb", "ii", "ss", "cc", "z", "zoom", "zz", "ff"} {
 		if cmd := mainCommand(t, m, text); cmd != nil {
 			t.Fatalf("partial or extended command %q must not quit", text)
 		}

@@ -20,7 +20,7 @@ func TestActiveDiagnosticsRequireDurableIntentBeforeAcquisition(t *testing.T) {
 			listed[tool.Name] = true
 		}
 	}
-	if !listed["kubernetes_exec_run"] || !listed["kubernetes_diagnostic_run"] {
+	if !listed["kubernetes_run"] {
 		t.Fatal("shared capability catalog omits enabled diagnostics", listed)
 	}
 	session := newToolSession(t.Context(), op)
@@ -28,7 +28,7 @@ func TestActiveDiagnosticsRequireDurableIntentBeforeAcquisition(t *testing.T) {
 	if err := op.o.History.Close(); err != nil {
 		t.Fatal(err)
 	}
-	_, err := session.Call(t.Context(), agent.ToolCall{ID: "active", Name: "kubernetes_exec_run", Args: json.RawMessage(`{"purpose":"test durability","connection_id":"east","namespace":"payments","name":"app","uid":"uid","container":"app","command":["true"]}`)}, 65536)
+	_, err := session.Call(t.Context(), agent.ToolCall{ID: "active", Name: "kubernetes_run", Args: json.RawMessage(`{"purpose":"test durability","connection_id":"east","namespace":"payments","name":"app","uid":"uid","container":"app","command":["true"],"operation":"exec"}`)}, 65536)
 	if err == nil || requests.Load() != 0 {
 		t.Fatal("active operation ran without a durable intent", err, requests.Load())
 	}

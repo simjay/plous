@@ -15,7 +15,7 @@ test('moved website routes target current guides and preserve controller heading
       assert.ok(pages.has(url), `Missing redirect target: ${destination}`);
       if (anchor) {
         const source = await readFile(path.join(docs, pages.get(url)), 'utf8');
-        const headings = [...source.matchAll(/^## (.+)$/gm)].map((match) => match[1].toLowerCase().replace(/[^\w\- ]/g, '').replaceAll(' ', '-'));
+        const headings = [...source.matchAll(/^#{2,6} (.+)$/gm)].map((match) => match[1].toLowerCase().replace(/[^\w\- ]/g, '').replaceAll(' ', '-'));
         assert.ok(headings.includes(anchor), `Missing redirect heading: ${destination}`);
       }
     }
